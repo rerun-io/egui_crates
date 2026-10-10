@@ -322,7 +322,7 @@ impl<Pane> Tree<Pane> {
             enabled: true,
             dragged_tile_id: self.dragged_id(ui),
             mouse_pos: ui.input(|i| i.pointer.interact_pos()),
-            best_dist_sq: f32::INFINITY,
+            candidates: Vec::new(),
             best_insertion: None,
             preview_rect: None,
         };
@@ -341,6 +341,7 @@ impl<Pane> Tree<Pane> {
         if let Some(root) = self.root {
             self.tile_ui(behavior, &mut drop_context, ui, root);
         }
+        drop_context.pick_best(behavior, &self.tiles);
 
         self.preview_dragged_tile(behavior, &drop_context, ui);
         self.handle_tab_cycle_shortcuts(behavior, ui);

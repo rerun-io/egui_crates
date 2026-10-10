@@ -3,7 +3,7 @@ use egui::{
     WidgetInfo, WidgetText, vec2,
 };
 
-use super::{ResizeState, SimplificationOptions, Tile, TileId, Tiles, UiResponse};
+use super::{DropTarget, ResizeState, SimplificationOptions, Tile, TileId, Tiles, UiResponse};
 
 /// The kind of edit that triggered the call to [`Behavior::on_edit`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -549,6 +549,26 @@ pub trait Behavior<Pane> {
     ///
     /// Default: `true` (all tiles are draggable).
     fn is_tile_draggable(&self, _tiles: &Tiles<Pane>, _tile_id: TileId) -> bool {
+        true
+    }
+
+    /// Can the tile being dragged be dropped at the given target?
+    ///
+    /// Called every frame while a tile is being dragged, for each drop target near the pointer,
+    /// closest first, until one is accepted. A rejected target is neither highlighted nor
+    /// accepts the drop. The tree is fully laid out by then, so `tiles` can be used to look at
+    /// the target, its ancestors and their rects.
+    ///
+    /// For instance, only accepting [`crate::ContainerKind::Vertical`] targets limits
+    /// the dragged tile to being dropped above or below other tiles.
+    ///
+    /// Default: `true` (a tile can be dropped anywhere).
+    fn allows_drop(
+        &self,
+        _tiles: &Tiles<Pane>,
+        _dragged_tile_id: TileId,
+        _target: &DropTarget,
+    ) -> bool {
         true
     }
 

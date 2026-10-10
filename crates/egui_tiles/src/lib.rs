@@ -263,6 +263,22 @@ impl ContainerInsertion {
     }
 }
 
+/// A place a dragged tile could be dropped, as offered to [`Behavior::allows_drop`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DropTarget {
+    /// The tile the dragged tile would be inserted next to, or into.
+    ///
+    /// A pane, or a container of another kind than `kind`, gets wrapped in a new
+    /// container of that kind. A container of the same kind gets the dragged tile as a child.
+    pub parent_id: TileId,
+
+    /// The kind of container the dragged tile would end up in.
+    pub kind: ContainerKind,
+
+    /// Where the dragged tile would be previewed if this target is picked.
+    pub preview_rect: Rect,
+}
+
 /// Where in the tree to insert a tile.
 #[derive(Clone, Copy, Debug)]
 struct InsertionPoint {
@@ -325,9 +341,20 @@ struct DropContext {
     dragged_tile_id: Option<TileId>,
     mouse_pos: Option<Pos2>,
 
+    /// Every drop target offered during the `ui` pass.
+    ///
+    /// Resolved into `best_insertion` by [`Self::pick_best`] once the whole tree has been shown.
+    candidates: Vec<DropCandidate>,
+
     best_insertion: Option<InsertionPoint>,
-    best_dist_sq: f32,
     preview_rect: Option<Rect>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DropCandidate {
+    insertion: InsertionPoint,
+    preview_rect: Rect,
+    dist_sq: f32,
 }
 
 impl DropContext {
@@ -373,17 +400,37 @@ impl DropContext {
     }
 
     fn suggest_rect(&mut self, insertion: InsertionPoint, preview_rect: Rect) {
-        if !self.enabled {
+        if !self.enabled || self.dragged_tile_id.is_none() {
             return;
         }
-        let target_point = preview_rect.center();
         if let Some(mouse_pos) = self.mouse_pos {
-            let dist_sq = mouse_pos.distance_sq(target_point);
-            if dist_sq < self.best_dist_sq {
-                self.best_dist_sq = dist_sq;
-                self.best_insertion = Some(insertion);
-                self.preview_rect = Some(preview_rect);
-            }
+            self.candidates.push(DropCandidate {
+                insertion,
+                preview_rect,
+                dist_sq: mouse_pos.distance_sq(preview_rect.center()),
+            });
         }
+    }
+
+    /// Pick the closest target that the behavior accepts.
+    ///
+    /// Must run after the whole tree has been shown: while a tile is being shown it is taken
+    /// out of `tiles`, so only now can the behavior look at the target and its ancestors.
+    fn pick_best<Pane>(&mut self, behavior: &dyn Behavior<Pane>, tiles: &Tiles<Pane>) {
+        let Some(dragged_tile_id) = self.dragged_tile_id else {
+            return;
+        };
+        self.candidates
+            .sort_by(|a, b| a.dist_sq.total_cmp(&b.dist_sq));
+        let best = self.candidates.iter().find(|candidate| {
+            let target = DropTarget {
+                parent_id: candidate.insertion.parent_id,
+                kind: candidate.insertion.insertion.kind(),
+                preview_rect: candidate.preview_rect,
+            };
+            behavior.allows_drop(tiles, dragged_tile_id, &target)
+        });
+        self.best_insertion = best.map(|candidate| candidate.insertion);
+        self.preview_rect = best.map(|candidate| candidate.preview_rect);
     }
 }
