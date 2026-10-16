@@ -31,7 +31,7 @@ Replace `CRATE` with the package name and `0.x.0` with the new version.
 * [ ] `cargo publish --quiet -p CRATE`
 * [ ] `git tag -a CRATE-v0.x.0 -m 'Release CRATE 0.x.0 - summary'`
 * [ ] `git push --tags`
-* [ ] Do a GitHub release: <https://github.com/rerun-io/egui_tiles/releases/new>
+* [ ] Do a GitHub release: <https://github.com/rerun-io/egui_crates/releases/new>
 
 ## History
 

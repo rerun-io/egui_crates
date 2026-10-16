@@ -6,14 +6,14 @@ authors = [
 categories = ["gui"]
 description = "Table viewer for egui"
 edition.workspace = true
-homepage = "https://github.com/rerun-io/egui_tiles"
+homepage = "https://github.com/rerun-io/egui_crates"
 include = ["**/*.rs", "Cargo.toml", "README.md"]
 keywords = ["table", "egui", "gui", "dataframe"]
 license.workspace = true
 name = "egui_table"
 publish = true
 readme = "README.md"
-repository = "https://github.com/rerun-io/egui_tiles"
+repository = "https://github.com/rerun-io/egui_crates"
 rust-version.workspace = true
 version = "0.10.0"
 

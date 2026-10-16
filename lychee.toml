@@ -86,15 +86,15 @@ exclude = [
 
   # Avoid rate limiting.
   'https://crates.io/crates/.*',                       # Avoid crates.io rate-limiting
-  'https://github.com/rerun-io/egui_tiles/commit/\.*', # Ignore links to our own commits (typically in changelog).
-  'https://github.com/rerun-io/egui_tiles/pull/\.*',   # Ignore links to our own pull requests (typically in changelog).
+  'https://github.com/rerun-io/egui_crates/commit/\.*', # Ignore links to our own commits (typically in changelog).
+  'https://github.com/rerun-io/egui_crates/pull/\.*',   # Ignore links to our own pull requests (typically in changelog).
   'https://github.com/rerun-io/egui_table/commit/\.*', # The egui_table changelog predates the monorepo.
   'https://github.com/rerun-io/egui_table/pull/\.*',   # The egui_table changelog predates the monorepo.
   'https://www.unicode.org/.*',                        # Avoid unicode.org rate-limiting
 
   # The demo is deployed by `.github/workflows/pages.yml`, which only runs on `main`,
   # so this 404s until the monorepo lands.
-  'https://rerun-io.github.io/egui_tiles/',
+  'https://rerun-io.github.io/egui_crates/',
 
   # Badge images are generated on demand and time out under load; a 408 says nothing
   # about link rot. The pages they link *to* are still checked.

@@ -1,6 +1,6 @@
 name: Github Pages
 
-# Deploys the egui_table demo to https://rerun-io.github.io/egui_tiles/ on every
+# Deploys the egui_table demo to https://rerun-io.github.io/egui_crates/ on every
 # push to main.
 #
 # This uploads the built site as an artifact and deploys it, which needs the
@@ -53,7 +53,7 @@ jobs:
         # If using a user/organization page, remove the `${{ github.event.repository.name }}` part.
         # using --public-url something will allow trunk to modify all the href paths like from favicon.ico to repo_name/favicon.ico .
         # this is necessary for github pages where the site is deployed to username.github.io/repo_name and all files must be requested
-        # relatively as egui_tiles/favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
+        # relatively as egui_crates/favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
         # will obviously return error 404 not found.
         run: (cd crates/egui_table_demo && ../../trunk build --release --public-url $public_url)
         env:

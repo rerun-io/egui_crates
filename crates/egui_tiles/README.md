@@ -1,12 +1,12 @@
 # `egui_tiles`
 
-[<img alt="github" src="https://img.shields.io/badge/github-rerun_io/egui_tiles-8da0cb?logo=github" height="20">](https://github.com/rerun-io/egui_tiles)
+[<img alt="github" src="https://img.shields.io/badge/github-rerun_io/egui_crates-8da0cb?logo=github" height="20">](https://github.com/rerun-io/egui_crates)
 [![Latest version](https://img.shields.io/crates/v/egui_tiles.svg)](https://crates.io/crates/egui_tiles)
 [![Documentation](https://docs.rs/egui_tiles/badge.svg)](https://docs.rs/egui_tiles)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
-[![Build Status](https://github.com/rerun-io/egui_tiles/workflows/Rust/badge.svg)](https://github.com/rerun-io/egui_tiles/actions?workflow=Rust)
-[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/rerun-io/egui_tiles/blob/master/LICENSE-MIT)
-[![Apache](https://img.shields.io/badge/license-Apache-blue.svg)](https://github.com/rerun-io/egui_tiles/blob/master/LICENSE-APACHE)
+[![Build Status](https://github.com/rerun-io/egui_crates/workflows/Rust/badge.svg)](https://github.com/rerun-io/egui_crates/actions?workflow=Rust)
+[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/rerun-io/egui_crates/blob/main/LICENSE-MIT)
+[![Apache](https://img.shields.io/badge/license-Apache-blue.svg)](https://github.com/rerun-io/egui_crates/blob/main/LICENSE-APACHE)
 
 Layouting and docking for [egui](https://github.com/rerun-io/egui).
 
@@ -16,7 +16,7 @@ Supports:
 * Tabs
 * Drag-and-drop docking
 
-![egui_tiles](https://github.com/rerun-io/egui_tiles/assets/1148717/f86bee40-2506-4484-8a82-37ffdc805b81)
+![egui_tiles](https://github.com/rerun-io/egui_crates/assets/1148717/f86bee40-2506-4484-8a82-37ffdc805b81)
 
 ### Trying it
 `cargo r --example simple`

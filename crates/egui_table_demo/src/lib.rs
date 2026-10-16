@@ -1,4 +1,4 @@
-//! Demo code for the [`egui_table`], hosted at <https://rerun-io.github.io/egui_table/>.
+//! Demo code for the [`egui_table`], hosted at <https://rerun-io.github.io/egui_crates/>.
 //!
 //! Each push to `main` re-deploys the demo.
 
