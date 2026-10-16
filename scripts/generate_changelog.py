@@ -33,7 +33,7 @@ from git import Repo  # pip install GitPython
 from tqdm import tqdm
 
 OWNER = "rerun-io"
-REPO = "egui_tiles"
+REPO = "egui_crates"
 INCLUDE_LABELS = False  # It adds quite a bit of visual noise
 
 

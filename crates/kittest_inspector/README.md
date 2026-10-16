@@ -19,7 +19,7 @@ Up-to-date screenshot of the ui:
 ## Install
 
 ```sh
-cargo install --git https://github.com/rerun-io/egui_tiles kittest_inspector
+cargo install --git https://github.com/rerun-io/egui_crates kittest_inspector
 ```
 
 This puts `kittest_inspector` on your `PATH`. The harness launches it as a child

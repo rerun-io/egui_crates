@@ -28,7 +28,7 @@ including how to expose it across the network.
 ## 2. Install the mcp
 
 ```sh
-cargo install --git https://github.com/rerun-io/egui_tiles egui_mcp
+cargo install --git https://github.com/rerun-io/egui_crates egui_mcp
 ```
 
 This installs the `egui-mcp` binary onto your `PATH`.
