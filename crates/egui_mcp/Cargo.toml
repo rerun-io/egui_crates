@@ -37,17 +37,17 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 # `default_fonts` so a test can lay out a real frame; the lib itself needs no fonts.
-egui = { version = "0.36.0", features = ["default_fonts"] }
+egui = { version = "0.37.0", features = ["default_fonts"] }
 # Renders the demo app to a PNG snapshot, so the tree snapshots can be read against a picture
 # of the frame they describe.
-egui_kittest = { version = "0.36.2", default-features = false, features = [
+egui_kittest = { version = "0.37.0", default-features = false, features = [
     "snapshot",
     "wgpu",
 ] }
 # The demo app shows egui's own widget gallery, so the tests cover every widget kind egui
 # reports to AccessKit rather than the handful we'd think to write out.
-egui_demo_lib = "0.36.2"
-egui_extras = { version = "0.36.2", features = ["image", "svg"] }
+egui_demo_lib = "0.37.0"
+egui_extras = { version = "0.37.0", features = ["image", "svg"] }
 insta.workspace = true
 
 [lints]

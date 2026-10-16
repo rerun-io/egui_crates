@@ -30,7 +30,7 @@ ahash = { version = "0.8.12", default-features = false, features = [
   "no-rng", # we don't need DOS-protection for what we use ahash for
   "std",
 ] }
-egui = { version = "0.36.0", default-features = false }
+egui = { version = "0.37.0", default-features = false }
 itertools = "0.15.0"
 log = { version = "0.4.28", features = ["std"] }
 serde = { version = "1.0", features = ["derive"], optional = true }
@@ -38,7 +38,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
 # For the example:
-eframe = { version = "0.36.0", default-features = false, features = [
+eframe = { version = "0.37.0", default-features = false, features = [
   "default_fonts", # Embed the default egui fonts.
   "glow",          # Use the glow rendering backend. Alternative: "wgpu".
   "persistence",   # Enable restoring app state when restarting the app.
@@ -50,7 +50,7 @@ env_logger = { version = "0.11.8", default-features = false, features = [
 ] }
 
 # For tests:
-egui_kittest = "0.36.0"
+egui_kittest = "0.37.0"
 ron = "0.12.2"
 serde_json = "1.0.149"
 

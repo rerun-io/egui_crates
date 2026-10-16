@@ -20,13 +20,13 @@ egui_table = { version = "0.10.0", path = "crates/egui_table", default-features 
 
 # NOTE: egui itself is deliberately not in here. `kittest_inspector` rides the
 # `lucas/kittest-inspect` branch of egui (old `inspector_api` protocol) while every other
-# crate uses the released egui 0.36 (new `egui_inspection` protocol), so those two cannot
+# crate uses the released egui 0.37 (new `egui_inspection` protocol), so those two cannot
 # share one entry. The `egui`/`eframe`/`egui_kittest` entries below are the released ones;
 # `crates/kittest_inspector` names its git dependencies itself.
-eframe = { version = "0.36.0", default-features = false }
-egui = { version = "0.36.0", default-features = false }
-egui_inspection = { version = "0.36.0", default-features = false }
-egui_kittest = { version = "0.36.0" }
+eframe = { version = "0.37.0", default-features = false }
+egui = { version = "0.37.0", default-features = false }
+egui_inspection = { version = "0.37.0", default-features = false }
+egui_kittest = { version = "0.37.0" }
 
 # `enumn` gives `Role::n`, used to validate a role string against the full AccessKit role set.
 accesskit = { version = "0.25.0", features = ["enumn"] } # Must match the accesskit version egui uses
@@ -74,12 +74,12 @@ opt-level = 2
 
 # While this is uncommented every egui crate the workspace uses must be listed here, or
 # cargo builds it from crates.io against a different egui and the compile fails.
-eframe = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# eframe = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# egui = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "main" }
 
 # eframe = { path = "../egui/crates/eframe" }
 # egui = { path = "../egui/crates/egui" }
