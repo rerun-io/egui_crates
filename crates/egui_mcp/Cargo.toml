@@ -1,6 +1,6 @@
 [package]
 name = "egui_mcp"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Lucas Meurer <hi@lucasmerlin.me>"]
 description = "MCP server that drives live egui apps over the egui_inspection protocol"
 edition.workspace = true

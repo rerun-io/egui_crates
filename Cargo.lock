@@ -1508,7 +1508,7 @@ dependencies = [
 
 [[package]]
 name = "egui_mcp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "accesskit 0.25.1",
  "accesskit_consumer 0.39.1",
@@ -1544,7 +1544,7 @@ dependencies = [
 
 [[package]]
 name = "egui_table"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "egui 0.37.0",
  "serde",
@@ -1553,7 +1553,7 @@ dependencies = [
 
 [[package]]
 name = "egui_tiles"
-version = "0.17.1"
+version = "0.18.0"
 dependencies = [
  "ahash",
  "eframe 0.37.0",

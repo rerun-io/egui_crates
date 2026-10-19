@@ -1,5 +1,15 @@
 # `egui_tiles` Changelog
 
+## 0.18.0 - 2026-10-19
+Full diff at https://github.com/rerun-io/egui_crates/compare/0.17.0..egui_tiles-v0.18.0
+
+* Ctrl+Tab cycles the active tab of the hovered tab container [#159](https://github.com/rerun-io/egui_crates/pull/159) by [@emilk](https://github.com/emilk)
+* Paint the tab arrows as a shape instead of using a glyph [#161](https://github.com/rerun-io/egui_crates/pull/161) by [@lucasmerlin](https://github.com/lucasmerlin)
+* Fix tile accessibility parent hierarchy [#163](https://github.com/rerun-io/egui_crates/pull/163) by [@emilk](https://github.com/emilk)
+* Allow tab containers to optionally hide their title [#165](https://github.com/rerun-io/egui_crates/pull/165) by [@IsseW](https://github.com/IsseW)
+* Update egui to 0.37 [#170](https://github.com/rerun-io/egui_crates/pull/170) by [@lucasmerlin](https://github.com/lucasmerlin)
+
+
 ## 0.17.1 - 2026-08-18
 Full diff at https://github.com/rerun-io/egui_crates/compare/0.17.0..HEAD
 
