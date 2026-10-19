@@ -1,6 +1,6 @@
 [package]
 name = "kittest_inspector"
-version = "0.2.0"
+version.workspace = true
 authors = ["Lucas Meurer <hi@lucasmerlin.me>", "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 description = "Live inspector eframe app for egui_kittest tests (frame + accesskit tree + step controls)"
 edition.workspace = true
