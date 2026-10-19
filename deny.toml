@@ -40,6 +40,12 @@ ignore = [
   # development after a harassment incident; there is no functional security risk, the crate
   # is only unmaintained.
   "RUSTSEC-2025-0141",
+
+  # zvariant, zbus_names and zvariant_derive are unmaintained (merged into zbus 6).
+  # Brought in via accesskit_unix/atspi.
+  "RUSTSEC-2026-0370",
+  "RUSTSEC-2026-0371",
+  "RUSTSEC-2026-0372",
 ]
 
 
