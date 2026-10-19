@@ -2,8 +2,6 @@
 
 ## 0.3.0 - 2026-10-19
 
-Full diff at https://github.com/rerun-io/egui_crates/compare/kittest_inspector-0.2.0..egui_mcp-v0.3.0
-
 * Make query_tree's output compact and hierarchical [#13](https://github.com/rerun-io/kittest_inspector/pull/13) by [@emilk](https://github.com/emilk)
 * Snapshot query_tree against a real egui GUI [#18](https://github.com/rerun-io/kittest_inspector/pull/18) by [@emilk](https://github.com/emilk)
 * Rename commands, and more compact widget tree [#20](https://github.com/rerun-io/kittest_inspector/pull/20) by [@emilk](https://github.com/emilk)

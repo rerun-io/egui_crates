@@ -1,7 +1,6 @@
 # Changelog
 
 ## 0.11.0 - 2026-10-19
-Full diff at https://github.com/rerun-io/egui_crates/compare/egui_table-0.10.0..egui_table-v0.11.0
 
 * Pass the scroll offset to SplitScrollDelegate instead of inferring it [#64](https://github.com/rerun-io/egui_table/pull/64) by [@jccampagne](https://github.com/jccampagne)
 * Improve split table behavior with eguis new scroll bounce [#66](https://github.com/rerun-io/egui_table/pull/66) by [@lucasmerlin](https://github.com/lucasmerlin)
