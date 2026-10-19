@@ -25,7 +25,7 @@ set `publish = false`.
 
 Replace `CRATE` with the package name and `0.x.0` with the new version.
 
-* [ ] Update `crates/CRATE/CHANGELOG.md` using `uv run scripts/generate_changelog.py --version 0.x.0`
+* [ ] Update `crates/CRATE/CHANGELOG.md` using `uv run scripts/generate_changelog.py --crate CRATE --version 0.x.0`
 * [ ] Bump `version` in `crates/CRATE/Cargo.toml` and run `cargo check`
 * [ ] Open a PR titled `Release CRATE 0.x.0 - summary`, and merge it
 * [ ] `cargo publish --quiet -p CRATE`
