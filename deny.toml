@@ -31,11 +31,6 @@ all-features = true
 [advisories]
 version = 2
 ignore = [
-  # quick-xml 0.37 is pulled in transitively by wayland-scanner (via `eframe`, a dev-dependency, on Linux).
-  # wayland-scanner 0.31 pins quick-xml 0.37, so we can't upgrade to the fixed >=0.41 until that moves.
-  "RUSTSEC-2026-0194",
-  "RUSTSEC-2026-0195",
-
   # bincode is an indirect dependency of `egui_mcp` through rmcp. The bincode team ceased
   # development after a harassment incident; there is no functional security risk, the crate
   # is only unmaintained.
