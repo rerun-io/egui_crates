@@ -10,13 +10,14 @@ resolver = "3"
 
 
 [workspace.package]
+version = "0.18.0" # All crates share one version and are released together. See RELEASES.md
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95.0" # The highest MSRV of the crates in this repo
 
 
 [workspace.dependencies]
-egui_table = { version = "0.10.0", path = "crates/egui_table", default-features = false }
+egui_table = { version = "0.18.0", path = "crates/egui_table", default-features = false }
 
 # NOTE: egui itself is deliberately not in here. `kittest_inspector` rides the
 # `lucas/kittest-inspect` branch of egui (old `inspector_api` protocol) while every other

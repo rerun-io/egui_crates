@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-# Copied from https://github.com/rerun-io/rerun_template
+# Based on https://github.com/rerun-io/rerun_template, changed for this monorepo:
+# all published crates share one version, and we sort each PR into crates by its labels, like egui.
 
 """
-Summarizes recent PRs based on their GitHub labels.
+Summarizes the PRs since the last release, one section per published crate.
 
-The result can be copy-pasted into CHANGELOG.md,
-though it often needs some manual editing too.
+A PR goes into the changelog of every crate it has a label for.
+CI requires each PR to have a crate label or `exclude from changelog`.
+
+With `--write`, the sections go into each `crates/CRATE/CHANGELOG.md`.
+PRs already in a changelog (e.g. from a patch release) are skipped.
+You will often want to edit the result by hand.
 """
 
 # /// script
@@ -26,6 +31,7 @@ import re
 import sys
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Any, Optional
 
 import requests
@@ -35,6 +41,12 @@ from tqdm import tqdm
 OWNER = "rerun-io"
 REPO = "egui_crates"
 INCLUDE_LABELS = False  # It adds quite a bit of visual noise
+
+# The published crates. Each lives in `crates/<name>`, and has a PR label with the same name.
+# Keep in sync with `.github/workflows/labels.yml`.
+CRATES = ["egui_tiles", "egui_table", "egui_mcp"]
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @dataclass
@@ -113,21 +125,7 @@ def get_commit_info(commit: Any) -> CommitInfo:
         return CommitInfo(hexsha=commit.hexsha, title=commit.summary, pr_number=None)
 
 
-def remove_prefix(text: str, prefix: str) -> str:
-    if text.startswith(prefix):
-        return text[len(prefix) :]
-    return text  # or whatever
-
-
-def print_section(crate: str, items: list[str]) -> None:
-    if 0 < len(items):
-        print(f"#### {crate}")
-        for line in items:
-            print(f"* {line}")
-    print()
-
-
-def calc_commit_range(new_version: str) -> str:
+def calc_since_version(new_version: str) -> str:
     parts = new_version.split(".")
     assert len(parts) == 3, "Expected version to be on the format X.Y.Z"
     major = int(parts[0])
@@ -138,32 +136,60 @@ def calc_commit_range(new_version: str) -> str:
         # A patch release.
         # Include changes since last patch release.
         # This assumes we've cherry-picked stuff for this release.
-        diff_since_version = f"0.{minor}.{patch - 1}"
+        return f"{major}.{minor}.{patch - 1}"
     elif 0 < minor:
-        # A minor release
-        # The diff should span everything since the last minor release.
-        # The script later excludes duplicated automatically, so we don't include stuff that
-        # was part of intervening patch releases.
-        diff_since_version = f"{major}.{minor - 1}.0"
+        # A minor release.
+        # The diff spans everything since the last minor release.
+        # PRs from intervening patch releases are already in the changelogs, so we skip them.
+        return f"{major}.{minor - 1}.0"
     else:
-        # A major release
-        # The diff should span everything since the last major release.
-        # The script later excludes duplicated automatically, so we don't include stuff that
-        # was part of intervening minor/patch releases.
-        diff_since_version = f"{major - 1}.{minor}.0"
+        # A major release.
+        # The diff spans everything since the last major release.
+        # PRs from intervening minor/patch releases are already in the changelogs, so we skip them.
+        return f"{major - 1}.{minor}.0"
 
-    return f"{diff_since_version}..HEAD"
+
+def changelog_path(crate: str) -> Path:
+    return REPO_ROOT / "crates" / crate / "CHANGELOG.md"
+
+
+def pr_link(pr_number: int) -> str:
+    return f"https://github.com/{OWNER}/{REPO}/pull/{pr_number}"
+
+
+def changelog_section(version: str, since: str, items: list[str]) -> str:
+    result = f"## {version} - {date.today()}\n"
+    result += f"Full diff at https://github.com/{OWNER}/{REPO}/compare/{since}..{version}\n\n"
+    if items:
+        for line in items:
+            result += f"* {line}\n"
+    else:
+        result += "Nothing new\n"
+    return result
+
+
+def add_to_changelog_file(crate: str, section: str) -> None:
+    """Insert the section above the newest version in the changelog."""
+    path = changelog_path(crate)
+    content = path.read_text(encoding="utf8")
+    match = re.search(r"^## ", content, flags=re.MULTILINE)
+    position = match.start() if match else len(content)
+    content = content[:position] + section + "\n\n" + content[position:]
+    path.write_text(content, encoding="utf8")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a changelog.")
+    parser = argparse.ArgumentParser(description="Generate the changelogs of all published crates.")
     parser.add_argument("--version", required=True, help="The version of the new release, e.g. 0.42.0")
+    parser.add_argument("--since", help="The tag or commit to diff from. Default: calculated from --version")
+    parser.add_argument("--write", help="Write into the CHANGELOG.md of each crate", action="store_true")
     args = parser.parse_args()
 
-    commit_range = calc_commit_range(args.version)
+    since = args.since or calc_since_version(args.version)
 
-    repo = Repo(".")
-    commits = list(repo.iter_commits(commit_range))
+    repo = Repo(REPO_ROOT)
+    # `--first-parent` skips the history of the repos we imported.
+    commits = list(repo.iter_commits(f"{since}..HEAD", first_parent=True))
     commits.reverse()  # Most recent last
     commit_infos = list(map(get_commit_info, commits))
 
@@ -176,7 +202,11 @@ def main() -> None:
         )
     )
 
-    prs = []
+    # PRs from an earlier patch release are already in a changelog, so we skip them.
+    all_changelogs = "".join(changelog_path(crate).read_text(encoding="utf8") for crate in CRATES)
+
+    crate_items: dict[str, list[str]] = {crate: [] for crate in CRATES}
+    unsorted_prs = []
     unsorted_commits = []
 
     for commit_info, pr_info in zip(commit_infos, pr_infos):
@@ -186,43 +216,61 @@ def main() -> None:
         pr_number = commit_info.pr_number
 
         if pr_number is None:
-            # Someone committed straight to main:
+            # Someone committed straight to main. We never write these into a changelog.
             summary = f"{title} [{hexsha[:7]}](https://github.com/{OWNER}/{REPO}/commit/{hexsha})"
             unsorted_commits.append(summary)
-        else:
-            # We prefer the PR title if available
-            title = pr_info.pr_title if pr_info else title
-            labels = pr_info.labels if pr_info else []
+            continue
 
-            if "exclude from changelog" in labels:
-                continue
-            if "typo" in labels:
-                # We get so many typo PRs. Let's not flood the changelog with them.
-                continue
+        if f"({pr_link(pr_number)})" in all_changelogs:
+            continue  # Already released, e.g. in a patch release
 
-            summary = f"{title} [#{pr_number}](https://github.com/{OWNER}/{REPO}/pull/{pr_number})"
+        # We prefer the PR title if available
+        title = pr_info.pr_title if pr_info else title
+        labels = pr_info.labels if pr_info else []
 
-            if INCLUDE_LABELS and 0 < len(labels):
-                summary += f" ({', '.join(labels)})"
+        if "exclude from changelog" in labels:
+            continue
+        if "typo" in labels:
+            # We get so many typo PRs. Let's not flood the changelog with them.
+            continue
 
-            if pr_info is not None:
-                gh_user_name = pr_info.gh_user_name
-                summary += f" by [@{gh_user_name}](https://github.com/{gh_user_name})"
+        summary = f"{title} [#{pr_number}]({pr_link(pr_number)})"
 
-            prs.append(summary)
+        if INCLUDE_LABELS and 0 < len(labels):
+            summary += f" ({', '.join(labels)})"
 
-    # Clean up:
-    for i in range(len(prs)):
-        line = prs[i]
-        line = line[0].upper() + line[1:]  # Upper-case first letter
-        prs[i] = line
+        if pr_info is not None:
+            gh_user_name = pr_info.gh_user_name
+            summary += f" by [@{gh_user_name}](https://github.com/{gh_user_name})"
 
-    print(f"## {args.version} - {date.today()}")
-    print()
-    print(f"Full diff at https://github.com/{OWNER}/{REPO}/compare/{commit_range}")
-    print()
-    print_section("PRs", prs)
-    print_section("Unsorted commits", unsorted_commits)
+        summary = summary[0].upper() + summary[1:]  # Upper-case first letter
+
+        crates = [crate for crate in CRATES if crate in labels]
+        if not crates:
+            unsorted_prs.append(summary)
+        for crate in crates:
+            crate_items[crate].append(summary)
+
+    for crate in CRATES:
+        print(f"# {crate}")
+        print(changelog_section(args.version, since, crate_items[crate]))
+
+    if unsorted_prs:
+        print("# PRs without a crate label (not written)")
+        for line in unsorted_prs:
+            print(f"* {line}")
+        print()
+
+    if unsorted_commits:
+        print("# Commits without a PR (not written)")
+        for line in unsorted_commits:
+            print(f"* {line}")
+        print()
+
+    if args.write:
+        for crate in CRATES:
+            add_to_changelog_file(crate, changelog_section(args.version, since, crate_items[crate]))
+        print("Wrote the changelogs. Check them by hand before you commit.")
 
 
 if __name__ == "__main__":
