@@ -41,7 +41,7 @@ use rmcp::{
     model::{
         CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock,
         Implementation, JsonObject, ListToolsResult, PaginatedRequestParams, ServerCapabilities,
-        ServerInfo, Tool,
+        ServerConfig, Tool,
     },
     schemars,
     service::{RequestContext, RoleServer},
@@ -1253,8 +1253,8 @@ fn tool_list(tools: Vec<Tool>) -> ListToolsResult {
 }
 
 impl ServerHandler for Server {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("egui-mcp", env!("CARGO_PKG_VERSION")))
             .with_instructions(INSTRUCTIONS)
     }

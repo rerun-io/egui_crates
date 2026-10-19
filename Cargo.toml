@@ -40,7 +40,7 @@ env_logger = { version = "0.11.8", default-features = false, features = [
 image = { version = "0.25.6", default-features = false, features = ["gif"] }
 insta = "1.48"
 log = { version = "0.4.29", features = ["std"] }
-rmcp = { version = "3.2", features = ["server", "macros", "transport-io", "schemars"] }
+rmcp = { version = "3.5", features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
