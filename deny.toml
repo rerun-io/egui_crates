@@ -105,6 +105,8 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# The wgpu fork with `Dx12SwapchainKind::DxgiFromTopmostVisual`, until that is in a wgpu release.
+allow-git = ["https://github.com/lucasmerlin/wgpu.git"]
 
 [sources.allow-org]
 github = ["emilk", "rerun-io"]

@@ -31,7 +31,8 @@ fn main() -> eframe::Result {
         std::process::exit(code);
     }
 
-    let options = eframe::NativeOptions {
+    #[cfg_attr(not(target_os = "windows"), expect(unused_mut))]
+    let mut options = eframe::NativeOptions {
         // A native page shows through egui's surface, which needs a transparent window.
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
@@ -39,6 +40,8 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
+    #[cfg(target_os = "windows")]
+    egui_webview::wgpu_configuration(&mut options.wgpu_options);
 
     eframe::run_native(
         "egui_webview minimal",

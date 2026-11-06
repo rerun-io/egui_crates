@@ -8,8 +8,8 @@
 //!
 //! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
 //!   paints like any other image, and the widget forwards egui's input to the page.
-//! - A native view (`WKWebView` on macOS, an `<iframe>` on the web): the page lies below egui's
-//!   surface. Its rect is an [`egui::NativeView`], which clears the rect to
+//! - A native view (`WKWebView` on macOS, `WebView2` on Windows, an `<iframe>` on the web): the
+//!   page lies below egui's surface. Its rect is an [`egui::NativeView`], which clears the rect to
 //!   transparent so the page shows through. After every pass of the root viewport,
 //!   [`WebViewInstance::place`] moves the page to its [`Placement`]. egui layers above the page
 //!   (windows, popups, …) paint over it, and the [`Placement`] tells the backend where egui takes
@@ -27,7 +27,9 @@ mod placement;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod webview;
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "windows")]
+mod win32;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod wry_page;
 
 pub use backend::Backend;
@@ -35,6 +37,8 @@ pub use backend::Backend;
 pub use chromium::run_subprocess as run_cef_subprocess;
 pub use placement::Placement;
 pub use webview::{WebViewInstance, WebViewResponse};
+#[cfg(target_os = "windows")]
+pub use win32::wgpu_configuration;
 
 /// What should the webview load?
 #[derive(Clone, Debug, PartialEq, Eq)]

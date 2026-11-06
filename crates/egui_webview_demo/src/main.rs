@@ -403,7 +403,8 @@ fn main() -> eframe::Result {
 
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    let options = eframe::NativeOptions {
+    #[cfg_attr(not(target_os = "windows"), expect(unused_mut))]
+    let mut options = eframe::NativeOptions {
         // Native pages show through egui's surface where egui clears it, which needs a
         // transparent window.
         viewport: egui::ViewportBuilder::default()
@@ -412,6 +413,9 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
+    #[cfg(target_os = "windows")]
+    egui_webview::wgpu_configuration(&mut options.wgpu_options);
+
     eframe::run_native(
         "egui_webview demo",
         options,
