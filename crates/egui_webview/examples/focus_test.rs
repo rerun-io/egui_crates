@@ -1,12 +1,15 @@
 //! Moves the keyboard focus between egui widgets and a page with Tab, Shift-Tab and clicks, and
 //! checks after each step which egui widget and which page element have the focus.
 //!
-//! Every event is injected into egui's input, as in `cef_input_test`, because a CEF page receives
-//! its input through egui.
+//! Keys meant for egui are injected into egui's input, as in `cef_input_test`. A page in a native
+//! view (`WKWebView`) receives its keys and clicks from the OS rather than from egui. For those,
+//! the test brings the window to the front and sends OS events: `NSEvent`s through
+//! `NSWindow::sendEvent`. With CEF, every event is injected into egui's input.
 //!
 //! Prints `PASS` and exits with code 0 if the focus is as expected after every step.
 //!
 //! ```sh
+//! cargo run -p egui_webview --example focus_test
 //! EGUI_WEBVIEW_BACKEND=cef cargo run -p egui_webview --features cef --example focus_test
 //! ```
 
@@ -236,6 +239,76 @@ fn main() -> eframe::Result {
     )
 }
 
+/// Key presses and clicks sent through `AppKit`, for a page in a native view.
+#[cfg(target_os = "macos")]
+mod native {
+    #![expect(unsafe_code)]
+
+    use objc2_app_kit::{NSEvent, NSEventModifierFlags, NSEventType, NSView};
+    use objc2_foundation::{NSPoint, NSString};
+    use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+
+    fn window(frame: &eframe::Frame) -> objc2::rc::Retained<objc2_app_kit::NSWindow> {
+        let RawWindowHandle::AppKit(handle) = frame.window_handle().unwrap().as_raw() else {
+            panic!("Not an AppKit window");
+        };
+        // SAFETY: the handle points to winit's `NSView`, which lives as long as the window.
+        let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+        let window = view.window().unwrap();
+        window.makeKeyAndOrderFront(None);
+        window
+    }
+
+    pub fn press_tab(frame: &eframe::Frame, shift: bool) {
+        let window = window(frame);
+        let (flags, characters) = if shift {
+            (NSEventModifierFlags::Shift, "\u{19}")
+        } else {
+            (NSEventModifierFlags::empty(), "\t")
+        };
+        let characters = NSString::from_str(characters);
+        for kind in [NSEventType::KeyDown, NSEventType::KeyUp] {
+            let event = NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                kind,
+                NSPoint::ZERO,
+                flags,
+                0.0,
+                window.windowNumber(),
+                None,
+                &characters,
+                &characters,
+                false,
+                48, // `kVK_Tab`
+            )
+            .unwrap();
+            window.sendEvent(&event);
+        }
+    }
+
+    pub fn click(frame: &eframe::Frame, _ctx: &egui::Context, pos: egui::Pos2) {
+        let window = window(frame);
+        // `AppKit` window coordinates have their origin at the bottom left, egui's at the top left.
+        let height = window.contentLayoutRect().size.height;
+        let location = NSPoint::new(f64::from(pos.x), height - f64::from(pos.y));
+        for kind in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
+            let event = NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                kind,
+                location,
+                NSEventModifierFlags::empty(),
+                0.0,
+                window.windowNumber(),
+                None,
+                0,
+                1,
+                1.0,
+            )
+            .unwrap();
+            window.sendEvent(&event);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
 mod native {
     pub fn press_tab(_frame: &eframe::Frame, _shift: bool) {
         unreachable!("Only CEF here");

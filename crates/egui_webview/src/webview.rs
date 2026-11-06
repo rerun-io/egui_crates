@@ -93,6 +93,8 @@ impl WebViewInstance {
     /// `native_views` belongs to.
     ///
     /// - On the web: an `<iframe>` below egui's canvas.
+    /// - On macOS: a `WKWebView` below egui's surface. It needs eframe's wgpu renderer and a
+    ///   transparent window.
     /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
     ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
@@ -121,7 +123,12 @@ impl WebViewInstance {
             let backend = crate::web::IframeBackend::new(ctx, source, native_views)?;
             Ok(Self::with_backend(id, backend))
         }
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(target_os = "macos")]
+        {
+            let backend = crate::macos::WryBackend::new(ctx, source, native_views)?;
+            Ok(Self::with_backend(id, backend))
+        }
+        #[cfg(not(any(target_arch = "wasm32", target_os = "macos")))]
         {
             _ = (ctx, id, source, native_views);
             Err(Error::Unsupported)
@@ -242,7 +249,7 @@ impl WebViewInstance {
     /// On the web, the app can't focus an element of a cross-origin page. For such a page, the
     /// focus enters the page with the user's next Tab or Shift-Tab, which the browser handles.
     ///
-    /// A native view (web) lives in the root window. In any other viewport, this
+    /// A native view (web, macOS) lives in the root window. In any other viewport, this
     /// only allocates the space and doesn't show the page.
     pub fn ui(&mut self, ui: &mut Ui, size: Vec2) -> WebViewResponse {
         let id = self.id;

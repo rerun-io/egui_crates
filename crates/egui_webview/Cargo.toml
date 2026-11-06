@@ -60,9 +60,38 @@ web-sys = { workspace = true, features = [
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cef = { version = "156.3.0", default-features = false, optional = true }
+raw-window-handle = "0.6.2"
 # Converts egui keys to the platform scancodes that CEF expects, which egui's key events don't
 # carry. Keep it at egui-winit's version, so the dependency tree has a single winit.
 winit = { version = "0.30.13", default-features = false, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# The objc2 crates must be the versions wry uses, so that the `WKWebView` wry returns has the
+# same Rust type as ours.
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "objc2-quartz-core",
+  "NSResponder",
+  "NSView",
+  "NSWindow",
+] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "CFCGTypes",
+] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "NSString",
+  "NSURL",
+] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "objc2-core-foundation",
+  "CALayer",
+  "CAMetalLayer",
+] }
+wry = { version = "0.57.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend
@@ -71,6 +100,17 @@ winit = { version = "0.30.13", default-features = false, features = ["x11"], opt
 
 [dev-dependencies]
 eframe = { workspace = true, default-features = false, features = ["default_fonts", "wgpu"] }
+
+# `focus_test` sends real OS key and mouse events to pages in native views.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "NSEvent",
+  "NSGraphicsContext",
+  "NSResponder",
+  "NSView",
+  "NSWindow",
+] }
 
 [[example]]
 name = "cef_input_test"

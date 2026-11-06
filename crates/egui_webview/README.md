@@ -25,11 +25,13 @@ Tab and Shift-Tab move the keyboard focus between egui widgets and the page's el
 ## Backends
 
 * Web: an `<iframe>` below egui's canvas.
+* macOS: a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
+  It needs eframe's wgpu renderer and a transparent window.
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
   `WebViewInstance::new` uses it on platforms without a native webview, such as Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
 
-The `<iframe>` lies below egui's canvas, and egui clears its rect to transparent so the page shows through.
+The native views (web, macOS) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
 egui windows and popups above a page paint over it and receive the pointer input there.
 
 ## CEF
