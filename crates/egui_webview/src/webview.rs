@@ -93,6 +93,8 @@ impl WebViewInstance {
     /// `native_views` belongs to.
     ///
     /// - On the web: an `<iframe>` below egui's canvas.
+    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
+    ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
     /// A native view lives in the root window, so only calls to [`Self::ui`] in the root viewport
     /// show it, and the app must call [`Self::place`] from [`eframe::App::output_hook`].
@@ -108,6 +110,12 @@ impl WebViewInstance {
         source: &WebViewSource,
         native_views: &NativeViews,
     ) -> Result<Self, Error> {
+        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        if crate::chromium::is_default() {
+            _ = native_views;
+            return Self::new_cef(ctx, id, source);
+        }
+
         #[cfg(target_arch = "wasm32")]
         {
             let backend = crate::web::IframeBackend::new(ctx, source, native_views)?;
@@ -118,6 +126,27 @@ impl WebViewInstance {
             _ = (ctx, id, source, native_views);
             Err(Error::Unsupported)
         }
+    }
+
+    /// Creates a webview that CEF (Chromium) renders off screen into an egui texture.
+    ///
+    /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
+    /// native platform. [`Self::new`] uses it on platforms without a native webview, such as
+    /// Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`. It requires the
+    /// `cef` feature, and a call to [`crate::run_cef_subprocess`] at the start of `main`.
+    ///
+    /// `id` must be unique in `ctx`.
+    ///
+    /// # Errors
+    /// [`Error::Backend`] if CEF fails to initialize or to create the browser.
+    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    pub fn new_cef(
+        ctx: &Context,
+        id: impl Into<Id>,
+        source: &WebViewSource,
+    ) -> Result<Self, Error> {
+        let backend = crate::chromium::CefBackend::new(ctx, source)?;
+        Ok(Self::with_backend(id, backend))
     }
 
     /// Creates a webview that shows its page through `backend`.
