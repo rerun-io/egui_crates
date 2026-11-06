@@ -81,6 +81,8 @@ impl WebViewInstance {
     /// `embedded_views` belongs to.
     ///
     /// - On the web: an `<iframe>` below egui's canvas.
+    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
+    ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].
@@ -96,6 +98,12 @@ impl WebViewInstance {
         source: &WebViewSource,
         embedded_views: &EmbeddedViews,
     ) -> Result<Self, Error> {
+        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        if crate::chromium::is_default() {
+            _ = embedded_views;
+            return Self::new_cef(ctx, id, source);
+        }
+
         #[cfg(target_arch = "wasm32")]
         {
             let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
@@ -110,14 +118,44 @@ impl WebViewInstance {
 
     /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
     ///
-    /// On the web every page is an embedded view. It needs nothing from the page to reserve
-    /// its rect, so this is known before the page exists.
+    /// A page in an embedded view (web, macOS, Windows) needs nothing from the page to reserve
+    /// its rect, so this is known before the page exists. A CEF page has nothing to paint
+    /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
-        if cfg!(target_arch = "wasm32") {
+        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        if crate::chromium::is_default() {
+            return None;
+        }
+        if cfg!(any(
+            target_arch = "wasm32",
+            target_os = "macos",
+            target_os = "windows"
+        )) {
             Some(Arc::new(crate::EmbeddedWidget))
         } else {
             None
         }
+    }
+
+    /// Creates a webview that CEF (Chromium) renders off screen into an egui texture.
+    ///
+    /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
+    /// native platform. [`Self::new`] uses it on platforms without a system webview, such as
+    /// Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`. It requires the
+    /// `cef` feature, and a call to [`crate::run_cef_subprocess`] at the start of `main`.
+    ///
+    /// `id` must be unique in `ctx`.
+    ///
+    /// # Errors
+    /// [`Error::Backend`] if CEF fails to initialize or to create the browser.
+    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    pub fn new_cef(
+        ctx: &Context,
+        id: impl Into<Id>,
+        source: &WebViewSource,
+    ) -> Result<Self, Error> {
+        let backend = crate::chromium::CefBackend::new(ctx, source)?;
+        Ok(Self::with_backend(id, backend))
     }
 
     /// Creates a webview that shows its page through `backend`.

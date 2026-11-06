@@ -4,7 +4,7 @@
 //! places it in [`eframe::App::output_hook`].
 //!
 //! ```sh
-//! cd crates/egui_webview && trunk serve --example minimal_instance
+//! cargo run -p egui_webview --example minimal_instance
 //! ```
 
 mod common;

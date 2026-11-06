@@ -4,7 +4,7 @@
 //! [`eframe::App::output_hook`]. The code that shows the page only needs a [`egui::Ui`].
 //!
 //! ```sh
-//! cd crates/egui_webview && trunk serve --example minimal
+//! cargo run -p egui_webview --example minimal
 //! ```
 
 mod common;

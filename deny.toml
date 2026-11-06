@@ -84,7 +84,12 @@ allow = [
   "Unicode-DFS-2016",               # https://spdx.org/licenses/Unicode-DFS-2016.html
   "Zlib",                           # https://tldrlegal.com/license/zlib-libpng-license-(zlib)
 ]
-exceptions = []
+exceptions = [
+  # Dependencies of `download-cef`, which `cef-dll-sys` runs at build time to download CEF:
+  # bzip2 unpacks the archive, and webpki-roots provides the TLS root certificates.
+  { allow = ["bzip2-1.0.6"], crate = "libbz2-rs-sys" },          # https://spdx.org/licenses/bzip2-1.0.6.html
+  { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots" },   # https://spdx.org/licenses/CDLA-Permissive-2.0.html
+]
 
 [[licenses.clarify]]
 name = "webpki"
