@@ -1,10 +1,12 @@
 //! Moves the keyboard focus between egui widgets and a page with Tab, Shift-Tab and clicks, and
 //! checks after each step which egui widget and which page element have the focus.
 //!
-//! Keys meant for egui are injected into egui's input, as in `cef_input_test`. A page in a native
-//! view (`WKWebView`) receives its keys and clicks from the OS rather than from egui. For those,
-//! the test brings the window to the front and sends OS events: `NSEvent`s through
-//! `NSWindow::sendEvent`. With CEF, every event is injected into egui's input.
+//! Keys meant for egui are injected into egui's input, as in `cef_input_test`. A page in an
+//! embedded view (`WKWebView`, `WebView2`) receives its keys and clicks from the OS rather than
+//! from egui.
+//! For those, the test brings the window to the front and sends OS events: `NSEvent`s through
+//! `NSWindow::sendEvent` on macOS, and `SendInput` on Windows, which moves the mouse cursor.
+//! With CEF, every event is injected into egui's input.
 //!
 //! Prints `PASS` and exits with code 0 if the focus is as expected after every step.
 //!
@@ -201,9 +203,20 @@ fn main() -> eframe::Result {
         && (cfg!(target_os = "linux")
             || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
 
+    let viewport = egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]);
+    // On Windows, a page only shows through egui's surface in a transparent window.
+    #[cfg(target_os = "windows")]
+    let viewport = viewport.with_transparent(true);
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]),
+        viewport,
         renderer: eframe::Renderer::Wgpu,
+        #[cfg(target_os = "windows")]
+        wgpu_options: {
+            let mut options = egui_wgpu::WgpuConfiguration::default();
+            egui_webview::wgpu_configuration(&mut options);
+            options
+        },
         ..Default::default()
     };
     eframe::run_native(
@@ -300,7 +313,83 @@ mod native {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Key presses and clicks sent through the OS input queue, for a page in an embedded view.
+#[cfg(target_os = "windows")]
+mod native {
+    #![expect(unsafe_code)]
+    #![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)] // Win32 takes `i32` coordinates and sizes.
+
+    use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT,
+        KEYEVENTF_KEYUP, MOUSE_EVENT_FLAGS, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT,
+        SendInput, VIRTUAL_KEY, VK_SHIFT, VK_TAB,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{SetCursorPos, SetForegroundWindow};
+
+    fn to_front(frame: &eframe::Frame) {
+        let RawWindowHandle::Win32(handle) = frame.window_handle().unwrap().as_raw() else {
+            panic!("Not a Win32 window");
+        };
+        // SAFETY: the handle is eframe's live window.
+        unsafe { SetForegroundWindow(HWND(handle.hwnd.get() as _)) }
+            .ok()
+            .ok();
+    }
+
+    fn key(key: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: key,
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        }
+    }
+
+    fn mouse(flags: MOUSE_EVENT_FLAGS) -> INPUT {
+        INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
+        }
+    }
+
+    fn send(inputs: &[INPUT]) {
+        // SAFETY: `inputs` is a valid slice, and the size passed is that of `INPUT`.
+        unsafe { SendInput(inputs, size_of::<INPUT>() as i32) };
+    }
+
+    pub fn press_tab(frame: &eframe::Frame, shift: bool) {
+        to_front(frame);
+        let none = KEYBD_EVENT_FLAGS(0);
+        let mut inputs = vec![key(VK_TAB, none), key(VK_TAB, KEYEVENTF_KEYUP)];
+        if shift {
+            inputs.insert(0, key(VK_SHIFT, none));
+            inputs.push(key(VK_SHIFT, KEYEVENTF_KEYUP));
+        }
+        send(&inputs);
+    }
+
+    pub fn click(frame: &eframe::Frame, ctx: &egui::Context, pos: egui::Pos2) {
+        to_front(frame);
+        let (inner, ppp) = ctx.input(|i| (i.viewport().inner_rect, i.pixels_per_point));
+        let screen = (inner.unwrap().min + pos.to_vec2()) * ppp;
+        // SAFETY: `SetCursorPos` only takes screen coordinates.
+        unsafe { SetCursorPos(screen.x as i32, screen.y as i32) }.unwrap();
+        send(&[mouse(MOUSEEVENTF_LEFTDOWN), mouse(MOUSEEVENTF_LEFTUP)]);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod native {
     pub fn press_tab(_frame: &eframe::Frame, _shift: bool) {
         unreachable!("Only CEF here");

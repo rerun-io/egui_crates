@@ -96,6 +96,8 @@ opt-level = 2
 #   surface show through it.
 # - `egui::EmbeddedView`, `eframe::EmbeddedViews` and `eframe::App::output_hook`, which place
 #   embedded views after each pass.
+# - egui-wgpu dropping a lost surface before it creates a new one, which a surface presenting
+#   through a DirectComposition visual requires.
 # - `Response::focused_via`, which tells a webview whether Tab or Shift-Tab moved the focus to it.
 # - eframe keeping its wgpu surface's alpha when a view below egui is shown, so the window
 #   doesn't have to be transparent.
@@ -113,6 +115,15 @@ egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch 
 emath = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
 epaint = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
 epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+
+# wgpu 30.0.1 plus `Dx12SwapchainKind::DxgiFromTopmostVisual`, which presents into a
+# DirectComposition visual above the window's child windows. egui_webview's Windows backend needs
+# it to draw egui over the `WebView2` child windows.
+naga = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-core = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-hal = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-types = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
 
 
 # ----------------------------------------------------------------------------------------
