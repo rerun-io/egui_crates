@@ -7,6 +7,12 @@ use egui::{
 
 use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
 
+// The platform's embedded backend, which `WebViewInstance::new` uses unless CEF is the default.
+#[cfg(target_os = "macos")]
+use crate::macos::WryBackend as PlatformBackend;
+#[cfg(target_arch = "wasm32")]
+use crate::web::IframeBackend as PlatformBackend;
+
 /// A web page shown as an egui widget.
 ///
 /// The instance owns the page, including its history and state, so create it once and keep it.
@@ -137,10 +143,9 @@ impl WebViewInstance {
     ///
     /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - Natively: CEF, as with `Self::new_cef`. This requires the `cef` feature.
-    ///
-    /// Setting the `EGUI_WEBVIEW_BACKEND` environment variable to `cef` overrides that choice
-    /// at run time.
+    /// - On macOS: a `WKWebView` below egui's surface. It needs eframe's wgpu renderer.
+    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
+    ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].

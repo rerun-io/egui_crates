@@ -85,12 +85,14 @@ trunk serve --example minimal_instance
 ## Backends
 
 * Web: an `<iframe>` below egui's canvas.
-    * egui clears its rect to transparent so the page shows through.
-    * egui windows and popups above a page paint over it and receive the pointer input there.
+* macOS: a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
+  It needs eframe's wgpu renderer.
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
   `WebViewInstance::new` and `WebViewInstance::new_cef` use it on every native platform.
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
 
+The embedded views (web, macOS) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
+egui windows and popups above a page paint over it and receive the pointer input there.
 
 When a page asks for a new window (`window.open`, or a link with `target="_blank"`), the CEF backend opens nothing and sends `WebViewEvent::NewWindowRequested` instead. The app decides what to do with the URL, for example load it with `load_url` or open it in the system browser. On the web, the browser handles new windows itself.
 
