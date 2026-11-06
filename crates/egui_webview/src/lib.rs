@@ -6,8 +6,8 @@
 //!
 //! A [`WebViewInstance`] shows its page through a [`Backend`], in one of two ways:
 //!
-//! - Off-screen rendering: the page renders into a texture that egui paints like any other
-//!   image, and the widget forwards egui's input to the page.
+//! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
+//!   paints like any other image, and the widget forwards egui's input to the page.
 //! - An embedded view (an `<iframe>` on the web): the page lies below egui's surface. Its rect is an [`egui::EmbeddedView`], which clears the rect to
 //!   transparent so the page shows through. After every pass of the root viewport,
 //!   [`WebViewInstance::place`] moves the page to where egui put that rect, which egui reports
@@ -22,6 +22,8 @@
 //! owns.
 
 mod backend;
+#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+mod chromium;
 mod instance;
 mod mailbox;
 #[cfg(target_arch = "wasm32")]
@@ -29,6 +31,8 @@ mod web;
 mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
+#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+pub use chromium::run_subprocess as run_cef_subprocess;
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
 

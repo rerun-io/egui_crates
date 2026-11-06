@@ -5,7 +5,14 @@
 
 /// Runs the app that `create` makes.
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(feature = "cef", expect(clippy::exit))] // A CEF helper process ends here.
 pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
+    // CEF runs its helper processes from this executable.
+    #[cfg(feature = "cef")]
+    if let Some(code) = egui_webview::run_cef_subprocess() {
+        std::process::exit(code);
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         renderer: eframe::Renderer::Wgpu,

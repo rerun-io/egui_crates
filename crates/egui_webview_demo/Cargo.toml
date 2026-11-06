@@ -11,6 +11,11 @@ version = "0.1.0"
 [lints]
 workspace = true
 
+[features]
+## Enable the CEF (Chromium) backend, which the demo uses on Linux, and on other platforms when
+## `EGUI_WEBVIEW_BACKEND=cef` is set.
+cef = ["egui_webview/cef"]
+
 [dependencies]
 egui_webview = { path = "../egui_webview" }
 
