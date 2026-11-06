@@ -23,6 +23,15 @@ all-features = true
 [lib]
 
 
+[features]
+default = []
+
+## Render pages off screen with CEF (Chromium) into egui textures. `WebViewInstance::new` uses it
+## on platforms without a system webview, such as Linux, and when `EGUI_WEBVIEW_BACKEND=cef`.
+## The build downloads CEF (about 1 GB) and requires CMake and Ninja.
+cef = ["dep:cef", "dep:winit"]
+
+
 [dependencies]
 eframe = { workspace = true, default-features = false }
 egui = { workspace = true, default-features = false }
@@ -49,3 +58,20 @@ web-sys = { workspace = true, features = [
   "Window",
 ] }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cef = { version = "156.3.0", default-features = false, optional = true }
+# Converts egui keys to the platform scancodes that CEF expects, which egui's key events don't
+# carry. Keep it at egui-winit's version, so the dependency tree has a single winit.
+winit = { version = "0.30.13", default-features = false, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend
+# feature such as `x11`.
+winit = { version = "0.30.13", default-features = false, features = ["x11"], optional = true }
+
+[dev-dependencies]
+eframe = { workspace = true, default-features = false, features = ["default_fonts", "wgpu"] }
+
+[[example]]
+name = "cef_input_test"
+required-features = ["cef"]
