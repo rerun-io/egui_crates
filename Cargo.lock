@@ -1893,6 +1893,7 @@ dependencies = [
  "document-features",
  "eframe 0.37.0",
  "egui 0.37.0",
+ "egui-wgpu 0.37.0",
  "js-sys",
  "log",
  "objc2 0.6.5",
@@ -1906,6 +1907,9 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "webview2-com",
+ "wgpu 30.0.2",
+ "windows",
  "winit",
  "wry",
 ]

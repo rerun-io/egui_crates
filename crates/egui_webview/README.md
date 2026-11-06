@@ -84,13 +84,15 @@ trunk serve --example minimal_instance
 * Web: an `<iframe>` below egui's canvas.
 * macOS, with the `wry` feature (on by default): a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
   It needs eframe's wgpu renderer.
+* Windows: a WebView2, created through wry, below egui's surface.
+  It needs a transparent window, and eframe's wgpu renderer on DX12, configured with `wgpu_configuration`.
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
   `WebViewInstance::new` uses it on platforms without another backend, such as Linux and Windows, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
   With both `wry` and `cef` enabled, `wry` wins on macOS unless that variable is set.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
 
-The embedded views (web, macOS) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
+The embedded views (web, macOS, Windows) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
 egui windows and popups above a page paint over it and receive the pointer input there.
 
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
