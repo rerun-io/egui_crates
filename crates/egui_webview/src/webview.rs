@@ -1,0 +1,281 @@
+use eframe::EmbeddedViews;
+use egui::{
+    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Sense, Ui, Vec2,
+    ViewportId,
+};
+
+use crate::{Backend, Error, WebViewEvent, WebViewSource};
+
+/// A web page shown as an egui widget.
+///
+/// The instance owns the page, including its history and state, so create it once and keep it.
+/// Call [`Self::ui`] in every pass in which the page should be shown, and [`Self::place`] from
+/// [`eframe::App::output_hook`], which places the page after the pass, or hides it if
+/// [`Self::ui`] wasn't called in that pass.
+///
+/// Pages live on the thread that runs egui, so this type isn't `Send`.
+pub struct WebViewInstance {
+    id: Id,
+    backend: Box<dyn Backend>,
+
+    /// Whether the page has the keyboard focus, as far as this instance knows.
+    ///
+    /// Set when egui's focus moves to the webview, or when the backend reports that the page
+    /// took the focus itself. Cleared when the focus leaves the page or the webview.
+    page_focused: bool,
+}
+
+/// A keyboard focus change that the page made itself, rather than egui.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PageFocus {
+    /// The page took the focus, for example because it was clicked.
+    Took,
+
+    /// Tab or Shift-Tab moved the focus out of the page, toward the next or previous widget.
+    Left(FocusDirection),
+}
+
+impl std::fmt::Debug for WebViewInstance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebViewInstance")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The result of [`WebViewInstance::ui`].
+#[derive(Debug)]
+pub struct WebViewResponse {
+    /// The events from the page since the previous call to [`WebViewInstance::ui`].
+    pub events: Vec<WebViewEvent>,
+
+    /// The response for the page's rect. [`Response::has_focus`] is `true` while the page has
+    /// the keyboard focus.
+    pub response: Response,
+}
+
+impl WebViewInstance {
+    /// Creates a webview with the platform's default backend, in the root window that
+    /// `embedded_views` belongs to.
+    ///
+    /// - On the web: an `<iframe>` below egui's canvas.
+    ///
+    /// An embedded view lives in the root window, so only calls to [`Self::ui`] in the root
+    /// viewport show it, and the app must call [`Self::place`] from [`eframe::App::output_hook`].
+    ///
+    /// `id` must be unique in `ctx`: it is the id of both the widget and its embedded view.
+    ///
+    /// # Errors
+    /// [`Error::Unsupported`] if no backend supports this platform or the window of
+    /// `embedded_views`, and [`Error::Backend`] if the backend fails to create the page.
+    pub fn new(
+        ctx: &Context,
+        id: impl Into<Id>,
+        source: &WebViewSource,
+        embedded_views: &EmbeddedViews,
+    ) -> Result<Self, Error> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
+            Ok(Self::with_backend(id, backend))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            _ = (ctx, id, source, embedded_views);
+            Err(Error::Unsupported)
+        }
+    }
+
+    /// Creates a webview that shows its page through `backend`.
+    ///
+    /// `id` must be unique in the [`Context`].
+    pub fn with_backend(id: impl Into<Id>, backend: impl Backend + 'static) -> Self {
+        Self {
+            id: id.into(),
+            backend: Box::new(backend),
+            page_focused: false,
+        }
+    }
+
+    /// Places the page where the pass that produced `outputs` put its embedded view, or hides it
+    /// if the view isn't in `outputs`.
+    ///
+    /// Call this from [`eframe::App::output_hook`] with
+    /// [`egui::PlatformOutput::embedded_views`], for every webview the app owns.
+    ///
+    /// Call it for a backend that renders into a texture too. It has no view to place, but it
+    /// uses the call to stop rendering a page that isn't shown.
+    pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
+        let output = outputs.iter().find(|output| output.id == self.id);
+        self.backend.place(ctx, output);
+    }
+
+    /// The id that this webview was created with.
+    pub fn id(&self) -> Id {
+        self.id
+    }
+
+    /// Loads `source`, replacing the current page.
+    ///
+    /// # Errors
+    /// If the page can't start loading, for example because the engine can't parse the URL.
+    /// Errors that occur while the page loads aren't reported.
+    pub fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
+        self.backend.load(source)
+    }
+
+    /// Loads the page at `url`.
+    ///
+    /// # Errors
+    /// See [`Self::load`].
+    pub fn load_url(&mut self, url: impl Into<String>) -> Result<(), Error> {
+        self.load(&WebViewSource::Url(url.into()))
+    }
+
+    /// Runs `script` in the page.
+    ///
+    /// # Errors
+    /// If the script can't be passed to the page, for example on the web for a cross-origin
+    /// page. Most engines run the script asynchronously, so exceptions it throws aren't reported.
+    pub fn evaluate_script(&mut self, script: &str) -> Result<(), Error> {
+        self.backend.evaluate_script(script)
+    }
+
+    /// Reloads the current page.
+    ///
+    /// A page given as [`WebViewSource::Html`] is loaded again from that HTML.
+    ///
+    /// On the web, this loads the last [`WebViewSource`] again and so discards any navigation
+    /// since then, because only a same-origin page lets the app call `location.reload()`.
+    pub fn reload(&mut self) {
+        self.backend.reload();
+    }
+
+    /// Navigates back in the webview's session history.
+    ///
+    /// On the web, the `<iframe>` shares the joint session history of the browser tab, so when
+    /// the page has nothing to go back to, this navigates the app's own document back instead.
+    /// For a cross-origin page it does nothing, because the app can't run scripts in it.
+    pub fn back(&mut self) {
+        self.backend.back();
+    }
+
+    /// Navigates forward in the webview's session history. See [`Self::back`] for the web.
+    pub fn forward(&mut self) {
+        self.backend.forward();
+    }
+
+    /// Shows the page in a rect of `size`, and returns the page's events since the last call.
+    ///
+    /// The page takes part in egui's keyboard focus like a widget. Tab moves the focus to the
+    /// first element in the page's tab order, and Shift-Tab to the last. Tab from the page's last
+    /// element moves the focus on to the next egui widget, and Shift-Tab from its first element to
+    /// the previous one. The [`Response`] has egui's focus while the page has the keyboard focus.
+    ///
+    /// On the web, the app can't focus an element of a cross-origin page. For such a page, the
+    /// focus enters the page with the user's next Tab or Shift-Tab, which the browser handles.
+    ///
+    /// An embedded view (web) lives in the root window. In any other viewport, this
+    /// only allocates the space and doesn't show the page.
+    pub fn ui(&mut self, ui: &mut Ui, size: Vec2) -> WebViewResponse {
+        let id = self.id;
+        let backend = &mut *self.backend;
+        let embedded = backend.is_embedded_view();
+        if embedded && ui.ctx().viewport_id() != ViewportId::ROOT {
+            let (_, rect) = ui.allocate_space(size);
+            let response = ui.interact(rect, id, Sense::hover());
+            return WebViewResponse {
+                events: Vec::new(),
+                response,
+            };
+        }
+
+        // egui clears the focus of a widget that wasn't shown in a pass without ever reporting
+        // `lost_focus` for it.
+        if self.page_focused && !ui.memory(|mem| mem.has_focus(id)) {
+            backend.blur();
+            self.page_focused = false;
+        }
+
+        // Poll before the widget is created: `Memory::move_focus` only moves the focus away from
+        // a widget when that widget registers for focus in `Ui::interact` later in the pass.
+        let page_focus = poll_page_focus(&mut self.page_focused, backend);
+        if let Some(PageFocus::Left(direction)) = page_focus {
+            // Blur now rather than on `lost_focus`. For Shift-Tab, egui only moves its focus in
+            // the next pass, and until then a page that keeps the focus after Tab left it
+            // (`WebView2`) would be polled as having taken the focus back.
+            backend.blur();
+            if ui.memory(|mem| mem.has_focus(id)) {
+                ui.memory_mut(|mem| mem.move_focus(direction));
+            }
+        }
+        // Whether Tab was pressed in this pass, matched the way egui matches it for focus
+        // navigation.
+        let tab = ui.input(|input| {
+            input.events.iter().any(|event| {
+                matches!(
+                    event,
+                    egui::Event::Key {
+                        key: Key::Tab,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } if !modifiers.any()
+                )
+            })
+        });
+
+        let response = if embedded {
+            ui.add(egui::EmbeddedView::new(id).size(size))
+        } else {
+            let (_, rect) = ui.allocate_space(size);
+            ui.interact(rect, id, Sense::click_and_drag())
+        };
+        if page_focus == Some(PageFocus::Took) {
+            response.request_focus();
+        }
+        if response.clicked_elsewhere() && ui.memory(|mem| mem.has_focus(id)) {
+            response.surrender_focus();
+        }
+        if tab && response.gained_focus() {
+            // egui used this Tab to move its focus to the page. A backend that forwards egui's
+            // key events to the page (CEF) must not deliver it, or the page moves its own focus
+            // a second time.
+            ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Tab));
+        }
+        backend.ui(ui, &response);
+
+        if response.gained_focus() && page_focus != Some(PageFocus::Took) {
+            // Tab enters the page at its first element, and Shift-Tab at its last.
+            let direction = response.focused_via();
+            // Without a direction, such as after `Response::request_focus`, a page that already
+            // has the focus keeps its focused element.
+            if direction != FocusDirection::None || !backend.has_focus() {
+                backend.focus(direction);
+            }
+            self.page_focused = true;
+        } else if response.lost_focus() {
+            backend.blur();
+            self.page_focused = false;
+        }
+
+        let events = backend.take_events();
+        WebViewResponse { events, response }
+    }
+}
+
+/// Polls `backend` for a focus change that the page made itself since the last call, and updates
+/// `page_focused` to match.
+fn poll_page_focus(page_focused: &mut bool, backend: &mut dyn Backend) -> Option<PageFocus> {
+    if let Some(direction) = backend.poll_focus_left() {
+        // Ignore it if the page didn't have the focus. On the web, for example, the browser's Tab
+        // through the document around egui's canvas also passes the focus edges of the
+        // `<iframe>`, without entering the page.
+        std::mem::take(page_focused).then_some(PageFocus::Left(direction))
+    } else if !*page_focused && backend.has_focus() {
+        *page_focused = true;
+        Some(PageFocus::Took)
+    } else {
+        None
+    }
+}

@@ -4,6 +4,8 @@ members = [
   "crates/egui_table",
   "crates/egui_table_demo",
   "crates/egui_tiles",
+  "crates/egui_webview",
+  "crates/egui_webview_demo",
   "crates/kittest_inspector",
 ]
 resolver = "3"
@@ -39,6 +41,7 @@ env_logger = { version = "0.11.8", default-features = false, features = [
 ] }
 image = { version = "0.25.6", default-features = false, features = ["gif"] }
 insta = "1.48"
+js-sys = "0.3.107"
 log = { version = "0.4.29", features = ["std"] }
 rmcp = { version = "3.5", features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2"
@@ -56,6 +59,7 @@ tokio = { version = "1.53", features = [
 ] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 vec1 = { version = "1.12.1", default-features = false }
+wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.64"
 web-sys = "0.3.91"
 
@@ -84,6 +88,28 @@ opt-level = 2
 # eframe = { path = "../egui/crates/eframe" }
 # egui = { path = "../egui/crates/egui" }
 # egui_kittest = { path = "../egui/crates/egui_kittest" }
+
+# egui's `lucas/focused-via` branch: 0.37.0 plus unreleased changes that `egui_webview` needs.
+# Everything but the last one is on `main`. Switch back to `main` once that one is merged.
+# - `Shape::Clear`, and a premultiplied-alpha WebGPU canvas in eframe, so pages below egui's
+#   surface show through it.
+# - `egui::EmbeddedView`, `eframe::EmbeddedViews` and `eframe::App::output_hook`, which place
+#   embedded views after each pass.
+# - `Response::focused_via`, which tells a webview whether Tab or Shift-Tab moved the focus to it.
+ecolor = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+eframe = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui-winit = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui_extras = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui_glow = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+emath = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+epaint = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
 
 
 # ----------------------------------------------------------------------------------------
