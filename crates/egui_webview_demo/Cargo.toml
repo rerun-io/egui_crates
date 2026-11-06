@@ -1,0 +1,33 @@
+[package]
+authors = ["rerun.io <opensource@rerun.io>"]
+edition.workspace = true
+include = ["../../LICENSE-APACHE", "../../LICENSE-MIT", "**/*.rs", "Cargo.toml"]
+license.workspace = true
+name = "egui_webview_demo"
+publish = false
+rust-version.workspace = true
+version = "0.1.0"
+
+[lints]
+workspace = true
+
+[dependencies]
+egui_webview = { path = "../egui_webview" }
+
+egui.workspace = true
+eframe = { workspace = true, default-features = false, features = [
+    "default_fonts", # Embed the default egui fonts.
+    "glow",          # The default renderer on the web.
+    "wgpu",          # The renderer natively, and on the web with `?renderer=wgpu`.
+    "wayland",       # Required for Linux and CI.
+] }
+log.workspace = true
+
+# native:
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger.workspace = true
+
+# web:
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures.workspace = true
+web-sys.workspace = true
