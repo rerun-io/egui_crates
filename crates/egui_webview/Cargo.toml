@@ -103,6 +103,18 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
 ] }
 wry = { version = "0.57.1", default-features = false }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+egui-wgpu = { version = "0.37.0", default-features = false }
+# Must be the version wry uses, so that the `WebView2` controller wry returns has the same Rust
+# type as ours.
+webview2-com = "0.39.1"
+wgpu = { version = "30.0.0", default-features = false, features = ["dx12"] }
+windows = { version = "0.62.2", features = [
+  "Win32_Graphics_Gdi",
+  "Win32_UI_Input_KeyboardAndMouse",
+] }
+wry = { version = "0.57.1", default-features = false }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend
 # feature such as `x11`.
@@ -117,6 +129,12 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "NSResponder",
   "NSView",
   "NSWindow",
+] }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows = { version = "0.62.2", features = [
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [[example]]
