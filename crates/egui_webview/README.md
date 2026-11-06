@@ -71,11 +71,13 @@ trunk serve --example minimal_instance
 ## Backends
 
 * Web: an `<iframe>` below egui's canvas.
+* macOS: a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
+  It needs eframe's wgpu renderer.
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
   `WebViewInstance::new` uses it on platforms without a system webview, such as Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
 
-The `<iframe>` lies below egui's canvas, and egui clears its rect to transparent so the page shows through.
+The embedded views (web, macOS) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
 egui windows and popups above a page paint over it and receive the pointer input there.
 
 ## CEF
