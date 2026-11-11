@@ -2,7 +2,6 @@
 //! collapsible sections for frame metadata, the hovered/selected widget, and the full
 //! `AccessKit` tree.
 
-use eframe::egui;
 use egui::accesskit::{self, Node, NodeId};
 
 use crate::state::{AppStateRef, Command};
