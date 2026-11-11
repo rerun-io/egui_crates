@@ -1,7 +1,6 @@
 //! Test-source code viewer: renders the relevant `.rs` file with the call-site line + any
 //! event lines highlighted, and scrolls to the focused line once per new frame.
 
-use eframe::egui;
 use egui_kittest::inspector_api::Frame;
 
 pub fn source_section(ui: &mut egui::Ui, frame: &Frame, scroll_pending: bool) {

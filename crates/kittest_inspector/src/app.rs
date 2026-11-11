@@ -12,7 +12,6 @@
 
 use std::sync::mpsc;
 
-use eframe::egui;
 use egui::accesskit::NodeId;
 use egui_kittest::inspector_api::Frame;
 

@@ -36,6 +36,7 @@ eframe = { git = "https://github.com/emilk/egui", branch = "lucas/kittest-inspec
     "x11",
     "wayland",
 ] }
+egui = { git = "https://github.com/emilk/egui", branch = "lucas/kittest-inspect", default-features = false }
 egui_kittest = { git = "https://github.com/emilk/egui", branch = "lucas/kittest-inspect", default-features = false, features = [
     "inspector_api",
 ] }

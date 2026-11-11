@@ -1,7 +1,6 @@
 //! Central panel: renders the harness frame and either highlights widgets under hover
 //! (inspection mode) or forwards pointer/keyboard events to the harness (Control mode).
 
-use eframe::egui;
 use egui::accesskit::{NodeId, Rect as AkRect};
 
 use crate::state::{AppStateRef, Command};

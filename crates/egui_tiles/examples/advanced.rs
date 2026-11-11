@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(clippy::allow_attributes, unused_mut, clippy::useless_let_if_seq)]
 
-use eframe::egui;
 use egui_tiles::{Tile, TileId, Tiles};
 
 fn main() -> Result<(), eframe::Error> {

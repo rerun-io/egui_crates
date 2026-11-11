@@ -10,7 +10,6 @@ use std::io::{self, BufReader, BufWriter};
 use std::sync::mpsc;
 use std::thread;
 
-use eframe::egui;
 use egui_kittest::inspector_api::{HarnessMessage, InspectorReply, read_message, write_message};
 use kittest_inspector::{InspectorApp, ReleaseRx, WorkerEvent, log_diag};
 

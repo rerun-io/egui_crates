@@ -11,7 +11,6 @@
 //!   has a request/response channel to the app (e.g. `re_mcp` over a gRPC unary RPC) can drive
 //!   the same tools without re-implementing the byte framing.
 
-use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
