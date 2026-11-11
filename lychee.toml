@@ -92,6 +92,10 @@ exclude = [
   'https://github.com/rerun-io/egui_table/pull/\.*',   # The egui_table changelog predates the monorepo.
   'https://www.unicode.org/.*',                        # Avoid unicode.org rate-limiting
 
+  # License pages in `deny.toml` that are often down (500/503).
+  'https://tldrlegal.com/license/',
+  'https://ubuntu.com/legal/font-licence',
+
   # The demo is deployed by `.github/workflows/pages.yml`, which only runs on `main`,
   # so this 404s until the monorepo lands.
   'https://rerun-io.github.io/egui_crates/',
