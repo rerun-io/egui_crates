@@ -541,9 +541,13 @@ Conventions:
         "required": [
           "id",
           "role",
+          "label",
+          "value",
+          "bounds",
           "focused",
           "disabled",
-          "hidden"
+          "hidden",
+          "parent_id"
         ],
         "type": "object"
       }
@@ -561,6 +565,9 @@ Conventions:
         ]
       }
     },
+    "required": [
+      "node"
+    ],
     "type": "object"
   },
   "annotations": {
