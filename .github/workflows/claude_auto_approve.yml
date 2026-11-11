@@ -1,0 +1,114 @@
+name: "Auto-approve"
+
+on:
+  issue_comment:
+    types: [created]
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+permissions:
+  contents: "read"
+  pull-requests: "write"
+
+concurrency:
+  group: auto-approve-${{ github.event.issue.number }}
+
+jobs:
+  auto-approve:
+    if: |
+      contains(github.event.comment.html_url, '/pull/') &&
+      github.event.comment.user.login == 'claude[bot]' &&
+      github.event.comment.user.type == 'Bot' &&
+      contains(github.event.comment.body, '<!-- rerun-bot-auto-approve sha=')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Acknowledge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST \
+            /repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=eyes
+
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Check
+        id: gates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG_MEMBERS_TOKEN: ${{ secrets.RERUN_BOT_TOKEN }}
+          GITHUB_COMMENT_BODY: "${{ github.event.comment.body }}"
+        run: |
+          python ./scripts/claude_auto_approve.py \
+            --pr-number ${{ github.event.issue.number }} \
+            --report "$RUNNER_TEMP/refusal.md"
+
+      - name: Approve
+        id: approve
+        env:
+          GH_TOKEN: ${{ secrets.RERUN_BOT_TOKEN }}
+          SHA: ${{ steps.gates.outputs.sha }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+        run: |
+          gh api -X POST /repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews \
+            -f event=APPROVE \
+            -f commit_id="$SHA" \
+            -f body="Auto-approved: $COMMENT_URL"
+
+      - name: Merge
+        id: merge
+        env:
+          GH_TOKEN: ${{ secrets.RERUN_BOT_TOKEN }}
+          SHA: ${{ steps.gates.outputs.sha }}
+        run: |
+          pr_id=$(gh pr view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json id --jq .id)
+          mutate() { gh api graphql -f query="mutation(\$id: ID!, \$sha: GitObjectID!) { $1(input: {pullRequestId: \$id, expectedHeadOid: \$sha, mergeMethod: SQUASH}) { clientMutationId } }" -f id="$pr_id" -f sha="$SHA"; }
+          if mutate enablePullRequestAutoMerge; then
+            echo "when=merge-later" >> "$GITHUB_OUTPUT"
+          elif gh pr checks ${{ github.event.issue.number }} --repo ${{ github.repository }}; then
+            mutate mergePullRequest
+            echo "when=merged" >> "$GITHUB_OUTPUT"
+          else
+            echo "when=not-merged" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: React
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST \
+            /repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=+1
+
+      - name: Reply
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GATES: ${{ steps.gates.outcome }}
+          APPROVE: ${{ steps.approve.outcome }}
+          WHEN: ${{ steps.merge.outputs.when }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          reply="$RUNNER_TEMP/reply.md"
+          if [ "$JOB_STATUS" == "success" ] && [ "$WHEN" == "merge-later" ]; then
+            echo "Approved; auto-merge enabled." > "$reply"
+          elif [ "$JOB_STATUS" == "success" ] && [ "$WHEN" == "merged" ]; then
+            echo "Approved and merged." > "$reply"
+          elif [ "$JOB_STATUS" == "success" ]; then
+            echo "Approved." > "$reply"
+          elif [ "$APPROVE" == "success" ]; then
+            echo "Approved; [merge failed]($RUN_URL)." > "$reply"
+          elif [ "$GATES" == "failure" ] && [ -s "$RUNNER_TEMP/refusal.md" ]; then
+            printf 'Not approved:\n\n%s\n' "$(cat "$RUNNER_TEMP/refusal.md")" > "$reply"
+          else
+            echo "[Failed]($RUN_URL)." > "$reply"
+          fi
+          gh pr comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file "$reply"
