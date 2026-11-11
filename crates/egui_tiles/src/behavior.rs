@@ -6,7 +6,7 @@ use egui::{
 use super::{ResizeState, SimplificationOptions, Tile, TileId, Tiles, UiResponse};
 
 /// The kind of edit that triggered the call to [`Behavior::on_edit`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditAction {
     /// A tile was resized by dragging or double-clicking a boundary.
     TileResized,
@@ -23,7 +23,7 @@ pub enum EditAction {
 }
 
 /// The state of a tab, used to inform the rendering of the tab.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TabState {
     /// Is the tab currently selected?
     pub active: bool,

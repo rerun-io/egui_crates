@@ -26,6 +26,7 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
+#[derive(Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Pane {
     nr: usize,
