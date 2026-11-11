@@ -99,6 +99,7 @@ future_incompatible = { level = "warn", priority = -1 }
 impl_trait_redundant_captures = "warn"
 macro_use_extern_crate = "warn"
 meta_variable_misuse = "warn"
+missing_copy_implementations = "warn"
 nonstandard_style = { level = "warn", priority = -1 }
 redundant_imports = "warn"
 redundant_lifetimes = "warn"

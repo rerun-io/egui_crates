@@ -369,7 +369,7 @@ fn default_port() -> u16 {
     5719
 }
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema)]
 pub struct EmptyArgs {}
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -389,13 +389,13 @@ fn default_pixels_per_point() -> f32 {
     1.0
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema)]
 pub struct GetWidgetArgs {
     /// Widget id, as returned by `widget_tree`.
     pub id: Id,
 }
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema)]
 pub struct PressKeyModifiers {
     #[serde(default)]
     pub ctrl: bool,
@@ -412,7 +412,7 @@ pub struct PressKeyModifiers {
 }
 
 impl PressKeyModifiers {
-    fn to_egui(&self) -> egui::Modifiers {
+    fn to_egui(self) -> egui::Modifiers {
         egui::Modifiers {
             alt: self.alt,
             ctrl: self.ctrl,
@@ -524,7 +524,7 @@ fn default_drag_steps() -> u32 {
     8
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema)]
 pub struct ResizeArgs {
     pub width: u32,
     pub height: u32,
