@@ -10,6 +10,8 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use crate::macos::WryBackend as PlatformBackend;
 #[cfg(target_arch = "wasm32")]
 use crate::web::IframeBackend as PlatformBackend;
+#[cfg(target_os = "windows")]
+use crate::win32::WryBackend as PlatformBackend;
 
 /// A web page shown as an egui widget.
 ///
@@ -88,6 +90,8 @@ impl WebViewInstance {
     ///
     /// - On the web: an `<iframe>` below egui's canvas.
     /// - On macOS: a `WKWebView` below egui's surface. It needs eframe's wgpu renderer.
+    /// - On Windows: a `WebView2` below egui's surface. It needs a transparent window, and eframe's
+    ///   wgpu renderer configured with `wgpu_configuration`.
     /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
     ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
@@ -111,12 +115,12 @@ impl WebViewInstance {
             return Self::new_cef(ctx, id, source);
         }
 
-        #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
+        #[cfg(any(target_arch = "wasm32", target_os = "macos", target_os = "windows"))]
         {
             let backend = PlatformBackend::new(ctx, source, embedded_views)?;
             Ok(Self::with_backend(id, backend))
         }
-        #[cfg(not(any(target_arch = "wasm32", target_os = "macos")))]
+        #[cfg(not(any(target_arch = "wasm32", target_os = "macos", target_os = "windows")))]
         {
             _ = (ctx, id, source, embedded_views);
             Err(Error::Unsupported)
