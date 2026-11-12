@@ -116,7 +116,7 @@ pub trait Backend {
 ///
 /// [`FocusDirection::Next`]: egui::FocusDirection::Next
 /// [`FocusDirection::Previous`]: egui::FocusDirection::Previous
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", feature = "cef"))]
 pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     let index = match direction {
         egui::FocusDirection::Next => 0,

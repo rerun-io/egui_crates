@@ -394,6 +394,13 @@ fn report(log: &mut Vec<String>, result: Result<(), egui_webview::Error>) {
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    // CEF runs its helper processes from this executable. In a helper process, this runs CEF
+    // and returns its exit code.
+    #[cfg(feature = "cef")]
+    if let Some(code) = egui_webview::run_cef_subprocess() {
+        std::process::exit(code);
+    }
+
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let options = eframe::NativeOptions {
