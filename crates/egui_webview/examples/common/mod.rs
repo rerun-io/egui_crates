@@ -7,11 +7,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
     let options = eframe::NativeOptions {
-        // A page in an embedded view shows through egui's surface, which needs a transparent
-        // window.
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0])
-            .with_transparent(true),
+        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };

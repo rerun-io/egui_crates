@@ -425,11 +425,7 @@ fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let options = eframe::NativeOptions {
-        // Pages in embedded views show through egui's surface where egui clears it, which needs
-        // a transparent window.
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1000.0, 700.0])
-            .with_transparent(true),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };

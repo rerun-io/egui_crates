@@ -89,27 +89,30 @@ opt-level = 2
 # egui = { path = "../egui/crates/egui" }
 # egui_kittest = { path = "../egui/crates/egui_kittest" }
 
-# egui's `lucas/focused-via` branch: 0.37.0 plus unreleased changes that `egui_webview` needs.
-# Everything but the last one is on `main`. Switch back to `main` once that one is merged.
+# egui's `lucas/embedded-view-surface-alpha` branch: 0.37.0 plus unreleased changes that
+# `egui_webview` needs. Everything but the last two is on `main`. Switch back to `main` once
+# those are merged.
 # - `Shape::Clear`, and a premultiplied-alpha WebGPU canvas in eframe, so pages below egui's
 #   surface show through it.
 # - `egui::EmbeddedView`, `eframe::EmbeddedViews` and `eframe::App::output_hook`, which place
 #   embedded views after each pass.
 # - `Response::focused_via`, which tells a webview whether Tab or Shift-Tab moved the focus to it.
-ecolor = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-eframe = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui-winit = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui_extras = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui_glow = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-emath = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-epaint = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
-epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "lucas/focused-via" }
+# - eframe keeping its wgpu surface's alpha when a view below egui is shown, so the window
+#   doesn't have to be transparent.
+ecolor = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+eframe = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui-winit = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui_extras = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui_glow = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+emath = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+epaint = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
+epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "lucas/embedded-view-surface-alpha" }
 
 
 # ----------------------------------------------------------------------------------------
