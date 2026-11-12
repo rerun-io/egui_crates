@@ -324,8 +324,10 @@ pub(crate) fn show_widget(
     widget.show(ui, &response);
 
     let focus_change = if response.gained_focus() && page_focus != Some(PageFocus::Took) {
-        // Tab enters the page at its first element, and Shift-Tab at its last.
-        Some(FocusChange::Gained(response.focused_via()))
+        // Tab enters the page at its first element, and Shift-Tab at its last. The widget has
+        // the focus here, so there is a direction. For a click it is `FocusDirection::None`.
+        let direction = response.focused_via().unwrap_or(FocusDirection::None);
+        Some(FocusChange::Gained(direction))
     } else if response.lost_focus() {
         Some(FocusChange::Lost)
     } else {
