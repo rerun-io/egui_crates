@@ -16,14 +16,21 @@
 //!
 //! Tab and Shift-Tab move the keyboard focus between egui widgets and the page's elements; see
 //! [`WebViewInstance::ui`].
+//!
+//! A [`WebViewInstance`] isn't `Send`. If the code that shows the page can't keep one, use
+//! [`WebView`]. It shows a page with one call, and the pages live in a [`WebViews`] that the app
+//! owns.
 
 mod backend;
+mod instance;
+mod mailbox;
 #[cfg(target_arch = "wasm32")]
 mod web;
-mod webview;
+mod webviews;
 
-pub use backend::Backend;
-pub use webview::{WebViewInstance, WebViewResponse};
+pub use backend::{Backend, EmbeddedWidget, PageWidget};
+pub use instance::{WebViewInstance, WebViewResponse};
+pub use webviews::{WebView, WebViews};
 
 /// What should the webview load?
 #[derive(Clone, Debug, PartialEq, Eq)]

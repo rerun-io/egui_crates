@@ -8,6 +8,7 @@ target_wasm
 
 # trunk output folder
 crates/egui_table_demo/dist
+crates/egui_webview/dist
 crates/egui_webview_demo/dist
 
 # https://github.com/lycheeverse/lychee

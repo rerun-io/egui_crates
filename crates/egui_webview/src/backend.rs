@@ -1,12 +1,53 @@
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Response, Ui};
+use std::sync::Arc;
+
+use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Response, Ui, Vec2};
 
 use crate::{Error, WebViewEvent, WebViewSource};
 
+/// The half of a page that runs in egui's pass.
+///
+/// A [`Backend`] hands it out with [`Backend::widget`]. It is `Send + Sync`, so widget code can
+/// hold it even though the page itself isn't `Send`.
+///
+/// The webview calls [`Self::allocate`] first, then moves egui's keyboard focus, then calls
+/// [`Self::show`].
+#[expect(unused_variables)] // The default implementations ignore their arguments.
+pub trait PageWidget: Send + Sync {
+    /// Allocates the page's rect in `ui`.
+    ///
+    /// `id` is the webview's id. Use it for the widget, so that egui's keyboard focus works.
+    fn allocate(&self, ui: &mut Ui, id: Id, size: Vec2) -> Response;
+
+    /// Shows the page in `response.rect`.
+    ///
+    /// An embedded view needs nothing here. A page that egui paints itself paints the texture
+    /// here and reads egui's input.
+    fn show(&self, ui: &mut Ui, response: &Response) {}
+}
+
+/// The [`PageWidget`] of a page in an embedded view (an `<iframe>` on the web).
+///
+/// It reserves the page's rect with [`egui::EmbeddedView`]. [`Backend::place`] then moves the
+/// view there.
+///
+/// The view lives in the root window, so only show it in the root viewport.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EmbeddedWidget;
+
+impl PageWidget for EmbeddedWidget {
+    fn allocate(&self, ui: &mut Ui, id: Id, size: Vec2) -> Response {
+        ui.add(egui::EmbeddedView::new(id).size(size))
+    }
+}
+
 /// Trait implemented by all web view implementations.
 ///
-/// A backend either renders the page into a texture that it paints in [`Self::ui`], or shows
-/// the page in an embedded view (an `<iframe>` on the web) that egui doesn't draw and that
-/// [`Self::place`] positions.
+/// A backend has two halves. The page itself lives in the backend. What egui shows of it is
+/// the [`PageWidget`] from [`Self::widget`].
+///
+/// A backend either shows the page in an embedded view (an `<iframe>` on the web) that egui
+/// doesn't draw and that [`Self::place`] positions, or renders the page into a texture that
+/// its [`PageWidget`] paints.
 ///
 /// All methods are called on the thread that runs egui, so a backend doesn't need to be `Send`.
 #[expect(unused_variables)] // The default implementations ignore their arguments.
@@ -35,21 +76,12 @@ pub trait Backend {
     /// Navigates forward in the webview's history. See [`crate::WebViewInstance::forward`].
     fn forward(&mut self);
 
-    /// Whether the page is shown in an embedded view (or an `<iframe>`) that egui doesn't draw.
+    /// The half of this page that runs in egui's pass.
     ///
-    /// For such a backend, the webview reserves its rect with [`egui::EmbeddedView`], and
-    /// [`Self::place`] positions the embedded view. A backend that renders into a texture keeps
-    /// the default `false`.
-    fn is_embedded_view(&self) -> bool {
-        false
-    }
-
-    /// Called from [`crate::WebViewInstance::ui`] after the webview has allocated its rect,
-    /// `response.rect`.
-    ///
-    /// A backend that renders into a texture paints the texture here and forwards egui's input
-    /// to the page.
-    fn ui(&mut self, ui: &mut Ui, response: &Response) {}
+    /// A backend with an embedded view returns [`EmbeddedWidget`], and [`Self::place`] positions
+    /// the view. A backend that renders into a texture returns a widget that paints the texture
+    /// and passes egui's input on to the page.
+    fn widget(&self) -> Arc<dyn PageWidget>;
 
     /// Called by [`crate::WebViewInstance::place`] after a pass of the root viewport.
     ///

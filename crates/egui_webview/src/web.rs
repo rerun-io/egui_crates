@@ -17,6 +17,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection};
 use wasm_bindgen::JsCast as _;
@@ -24,7 +25,7 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlCanvasElement, HtmlElement, HtmlIFrameElement, KeyboardEvent, MessageEvent};
 
-use crate::{Backend, Error, WebViewEvent, WebViewSource};
+use crate::{Backend, EmbeddedWidget, Error, PageWidget, WebViewEvent, WebViewSource};
 
 /// A script inserted at the start of every [`WebViewSource::Html`] page.
 ///
@@ -412,8 +413,8 @@ impl Backend for IframeBackend {
         }
     }
 
-    fn is_embedded_view(&self) -> bool {
-        true
+    fn widget(&self) -> Arc<dyn PageWidget> {
+        Arc::new(EmbeddedWidget)
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {

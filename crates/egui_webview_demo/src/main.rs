@@ -4,7 +4,7 @@
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use egui_webview::{WebViewEvent, WebViewInstance, WebViewSource};
+use egui_webview::{WebView, WebViewEvent, WebViewInstance, WebViewSource, WebViews};
 
 /// The page the demo starts with. Its grid of tiles makes scrolling under egui visible.
 const PAGE: &str = r#"<!DOCTYPE html>
@@ -200,6 +200,10 @@ struct DemoApp {
     main: Result<Browser, String>,
     windows: Vec<(egui::Id, Browser)>,
     opened: usize,
+
+    /// Owns the page of the builder window, which is shown with [`WebView`].
+    webviews: WebViews,
+    show_builder: bool,
     show_modal: bool,
     show_log: bool,
     log: Vec<String>,
@@ -218,6 +222,8 @@ impl DemoApp {
             main,
             windows: Vec::new(),
             opened: 0,
+            webviews: WebViews::new(&cc.egui_ctx, cc.embedded_views()),
+            show_builder: false,
             show_modal: false,
             show_log: true,
             log: Vec::new(),
@@ -247,6 +253,7 @@ impl eframe::App for DemoApp {
         let Self {
             main,
             windows,
+            show_builder,
             show_modal,
             show_log,
             log,
@@ -275,6 +282,7 @@ impl eframe::App for DemoApp {
                         let new_window = egui::Button::new("New browser window")
                             .shortcut_text(ui.ctx().format_shortcut(&NEW_WINDOW));
                         open_window |= ui.add(new_window).clicked();
+                        ui.checkbox(show_builder, "Builder window");
                         ui.separator();
                         if ui.button("Close all windows").clicked() {
                             windows.clear();
@@ -335,6 +343,25 @@ impl eframe::App for DemoApp {
             open
         });
 
+        // This window holds no page. `WebView` only needs the `Ui`, and the page lives in
+        // `self.webviews`. Closing or collapsing the window closes the page.
+        egui::Window::new("Builder window")
+            .open(show_builder)
+            .default_size([480.0, 360.0])
+            .show(ui.ctx(), |ui| {
+                let id = egui::Id::unique("builder page");
+                ui.horizontal(|ui| {
+                    if ui.button("⟳").on_hover_text("Reload").clicked() {
+                        WebView::reload(ui.ctx(), id);
+                    }
+                    ui.label("Shown with `WebView`");
+                });
+                let response = WebView::new(id).html(PAGE).show(ui);
+                for event in response.events {
+                    log.push(format!("Builder window: {event:?}"));
+                }
+            });
+
         if *show_modal {
             let modal = egui::Modal::new(egui::Id::unique("modal")).show(ui.ctx(), |ui| {
                 ui.heading("Close the other windows?");
@@ -372,6 +399,7 @@ impl eframe::App for DemoApp {
         for (_, browser) in &mut self.windows {
             browser.webview.place(ctx, views);
         }
+        self.webviews.update(ctx, output);
     }
 }
 
