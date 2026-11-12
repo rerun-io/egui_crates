@@ -277,34 +277,32 @@ impl eframe::App for DemoApp {
             // The menu bar takes the whole row, so the browser controls go inside it.
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.strong("🌐 egui_webview");
-                {
-                    ui.menu_button("Windows", |ui| {
-                        let new_window = egui::Button::new("New browser window")
-                            .shortcut_text(ui.ctx().format_shortcut(&NEW_WINDOW));
-                        open_window |= ui.add(new_window).clicked();
-                        ui.checkbox(show_builder, "Builder window");
-                        ui.separator();
-                        if ui.button("Close all windows").clicked() {
-                            windows.clear();
+                ui.menu_button("Windows", |ui| {
+                    let new_window = egui::Button::new("New browser window")
+                        .shortcut_text(ui.ctx().format_shortcut(&NEW_WINDOW));
+                    open_window |= ui.add(new_window).clicked();
+                    ui.checkbox(show_builder, "Builder window");
+                    ui.separator();
+                    if ui.button("Close all windows").clicked() {
+                        windows.clear();
+                    }
+                });
+                ui.menu_button("Page", |ui| main.page_menu(ui, log));
+                ui.menu_button("Demo", |ui| {
+                    if ui.button("Show modal…").clicked() {
+                        *show_modal = true;
+                    }
+                    ui.checkbox(show_log, "Show log");
+                    ui.menu_button("Theme", |ui| {
+                        let current = ui.ctx().theme();
+                        let mut theme = current;
+                        ui.radio_value(&mut theme, egui::Theme::Dark, "Dark");
+                        ui.radio_value(&mut theme, egui::Theme::Light, "Light");
+                        if theme != current {
+                            ui.ctx().set_theme(theme);
                         }
                     });
-                    ui.menu_button("Page", |ui| main.page_menu(ui, log));
-                    ui.menu_button("Demo", |ui| {
-                        if ui.button("Show modal…").clicked() {
-                            *show_modal = true;
-                        }
-                        ui.checkbox(show_log, "Show log");
-                        ui.menu_button("Theme", |ui| {
-                            let current = ui.ctx().theme();
-                            let mut theme = current;
-                            ui.radio_value(&mut theme, egui::Theme::Dark, "Dark");
-                            ui.radio_value(&mut theme, egui::Theme::Light, "Light");
-                            if theme != current {
-                                ui.ctx().set_theme(theme);
-                            }
-                        });
-                    });
-                }
+                });
                 // The menu bar restyles its buttons; the browser controls look as they do in
                 // the windows instead.
                 ui.scope(|ui| {

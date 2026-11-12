@@ -150,17 +150,15 @@ pub(crate) enum Command {
 /// The registry writes this after the pass. The widget reads it in the next pass.
 #[derive(Default)]
 pub(crate) struct ToWidget {
-    /// `None` until the page exists.
-    pub widget: Option<Arc<dyn PageWidget>>,
+    /// The page's widget, or why the page couldn't be created. The widget shows that text in
+    /// place of the page. `None` until the registry has tried to create the page.
+    pub page: Option<Result<Arc<dyn PageWidget>, String>>,
 
     /// What happened in the page. The widget takes them.
     pub events: Vec<WebViewEvent>,
 
     /// The page took the focus, or Tab left it. The widget takes it.
     pub focus: Option<PageFocus>,
-
-    /// Why the page couldn't be created. The widget shows this text in place of the page.
-    pub failed: Option<String>,
 }
 
 impl ToWidget {
@@ -170,22 +168,19 @@ impl ToWidget {
     /// Adds what the registry has to tell the widget after this frame. Returns whether the
     /// widget has something new to read.
     ///
-    /// In `news`, `widget` and `focus` are only set when they changed. `failed` is the state
-    /// as it is now. `shown` is whether the widget was shown in the latest pass.
+    /// In `news`, `page` and `focus` are only set when they changed. `shown` is whether the
+    /// widget was shown in the latest pass.
     pub fn merge(&mut self, news: Self, shown: bool) -> bool {
-        let mut changed = !news.events.is_empty();
+        // The events of a hidden page wait. Nobody reads them before the page is shown again.
+        let mut changed = shown && !news.events.is_empty();
         self.events.extend(news.events);
         let waiting = self.events.len();
         if Self::MAX_WAITING_EVENTS < waiting {
             self.events.drain(..waiting - Self::MAX_WAITING_EVENTS);
         }
 
-        if let Some(widget) = news.widget {
-            self.widget = Some(widget);
-            changed = true;
-        }
-        if self.failed != news.failed {
-            self.failed = news.failed;
+        if news.page.is_some() {
+            self.page = news.page;
             changed = true;
         }
 

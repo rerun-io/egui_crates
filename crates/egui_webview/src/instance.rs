@@ -17,6 +17,9 @@ pub struct WebViewInstance {
     id: Id,
     backend: Box<dyn Backend>,
 
+    /// The backend's [`Backend::widget`].
+    widget: Arc<dyn PageWidget>,
+
     /// Whether the page has the keyboard focus, as far as this instance knows.
     ///
     /// Set when egui's focus moves to the webview, or when the backend reports that the page
@@ -49,9 +52,6 @@ pub(crate) enum FocusChange {
 /// What [`show_widget`] did in a pass.
 pub(crate) struct Shown {
     pub response: Response,
-
-    /// Whether the widget has egui's focus at the end of the call.
-    pub focused: bool,
 
     /// Tell the page about this with [`WebViewInstance::apply_focus`].
     pub focus_change: Option<FocusChange>,
@@ -108,12 +108,25 @@ impl WebViewInstance {
         }
     }
 
+    /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
+    ///
+    /// On the web every page is an embedded view. It needs nothing from the page to reserve
+    /// its rect, so this is known before the page exists.
+    pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
+        if cfg!(target_arch = "wasm32") {
+            Some(Arc::new(crate::EmbeddedWidget))
+        } else {
+            None
+        }
+    }
+
     /// Creates a webview that shows its page through `backend`.
     ///
     /// `id` must be unique in the [`Context`].
     pub fn with_backend(id: impl Into<Id>, backend: impl Backend + 'static) -> Self {
         Self {
             id: id.into(),
+            widget: backend.widget(),
             backend: Box::new(backend),
             page_focused: false,
         }
@@ -128,7 +141,10 @@ impl WebViewInstance {
     /// Call it for a backend that renders into a texture too. It has no view to place, but it
     /// uses the call to stop rendering a page that isn't shown.
     pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
-        let output = outputs.iter().find(|output| output.id == self.id);
+        // egui also reports a view that only touches the clip rect, with nothing to see.
+        let output = outputs
+            .iter()
+            .find(|output| output.id == self.id && output.visible.is_positive());
         self.backend.place(ctx, output);
     }
 
@@ -200,12 +216,11 @@ impl WebViewInstance {
     /// Only call this in the root viewport. Other viewports aren't supported yet.
     pub fn ui(&mut self, ui: &mut Ui, size: Vec2) -> WebViewResponse {
         let id = self.id;
-        let widget = self.backend.widget();
 
         self.blur_unless(ui.memory(|mem| mem.has_focus(id)));
         let page_focus = self.poll_focus();
 
-        let shown = show_widget(ui, id, size, &*widget, page_focus);
+        let shown = show_widget(ui, id, size, &*self.widget, page_focus);
         if let Some(change) = shown.focus_change {
             self.apply_focus(change);
         }
@@ -218,7 +233,7 @@ impl WebViewInstance {
 
     /// The half of the page that runs in egui's pass.
     pub(crate) fn widget(&self) -> Arc<dyn PageWidget> {
-        self.backend.widget()
+        Arc::clone(&self.widget)
     }
 
     /// Blurs the page if it thinks it has the focus while its widget doesn't.
@@ -237,14 +252,24 @@ impl WebViewInstance {
     ///
     /// Pass the result to [`show_widget`] in the next pass.
     pub(crate) fn poll_focus(&mut self) -> Option<PageFocus> {
-        let page_focus = poll_page_focus(&mut self.page_focused, &mut *self.backend);
-        if matches!(page_focus, Some(PageFocus::Left(_))) {
+        if let Some(direction) = self.backend.poll_focus_left() {
+            // Ignore it if the page didn't have the focus. On the web, for example, the
+            // browser's Tab through the document around egui's canvas also passes the focus
+            // edges of the `<iframe>`, without entering the page.
+            if !std::mem::take(&mut self.page_focused) {
+                return None;
+            }
             // Blur now rather than on `lost_focus`. For Shift-Tab, egui only moves its focus in
             // the next pass, and until then a page that keeps the focus after Tab left it
             // (`WebView2`) would be polled as having taken the focus back.
             self.backend.blur();
+            Some(PageFocus::Left(direction))
+        } else if !self.page_focused && self.backend.has_focus() {
+            self.page_focused = true;
+            Some(PageFocus::Took)
+        } else {
+            None
         }
-        page_focus
     }
 
     /// Tells the page that egui's focus moved to the webview's widget, or away from it.
@@ -290,21 +315,6 @@ pub(crate) fn show_widget(
     {
         ui.memory_mut(|mem| mem.move_focus(direction));
     }
-    // Whether Tab was pressed in this pass, matched the way egui matches it for focus
-    // navigation.
-    let tab = ui.input(|input| {
-        input.events.iter().any(|event| {
-            matches!(
-                event,
-                egui::Event::Key {
-                    key: Key::Tab,
-                    pressed: true,
-                    modifiers,
-                    ..
-                } if !modifiers.any()
-            )
-        })
-    });
 
     let response = widget.allocate(ui, id, size);
 
@@ -313,10 +323,7 @@ pub(crate) fn show_widget(
     if page_focus == Some(PageFocus::Took) {
         response.request_focus();
     }
-    if response.clicked_elsewhere() && ui.memory(|mem| mem.has_focus(id)) {
-        response.surrender_focus();
-    }
-    if tab && response.gained_focus() {
+    if response.gained_focus() && response.focused_via() == Some(FocusDirection::Next) {
         // egui used this Tab to move its focus to the page. A page that gets egui's key events
         // must not get this one, or it moves its own focus a second time.
         ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Tab));
@@ -333,26 +340,8 @@ pub(crate) fn show_widget(
     } else {
         None
     };
-    let focused = response.has_focus();
     Shown {
         response,
-        focused,
         focus_change,
-    }
-}
-
-/// Polls `backend` for a focus change that the page made itself since the last call, and updates
-/// `page_focused` to match.
-fn poll_page_focus(page_focused: &mut bool, backend: &mut dyn Backend) -> Option<PageFocus> {
-    if let Some(direction) = backend.poll_focus_left() {
-        // Ignore it if the page didn't have the focus. On the web, for example, the browser's Tab
-        // through the document around egui's canvas also passes the focus edges of the
-        // `<iframe>`, without entering the page.
-        std::mem::take(page_focused).then_some(PageFocus::Left(direction))
-    } else if !*page_focused && backend.has_focus() {
-        *page_focused = true;
-        Some(PageFocus::Took)
-    } else {
-        None
     }
 }

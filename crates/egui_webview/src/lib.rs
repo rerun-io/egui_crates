@@ -76,6 +76,13 @@ pub enum WebViewEvent {
     Message(String),
 }
 
+/// Logs a warning for a failed call whose error isn't returned to the caller.
+pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
+    if let Err(err) = result {
+        log::warn!("egui_webview: {err}");
+    }
+}
+
 /// An error from creating or using a [`WebViewInstance`].
 #[derive(Debug)]
 #[non_exhaustive]

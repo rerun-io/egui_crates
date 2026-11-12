@@ -44,7 +44,6 @@ wasm-bindgen-futures.workspace = true
 js-sys.workspace = true
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = [
-  "CssStyleDeclaration",
   "Document",
   "DomRect",
   "Element",
@@ -55,7 +54,6 @@ web-sys = { workspace = true, features = [
   "HtmlIFrameElement",
   "KeyboardEvent",
   "Location",
-  "MediaQueryList",
   "MessageEvent",
   "Node",
   "Window",

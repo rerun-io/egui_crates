@@ -17,7 +17,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::sync::Arc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection};
 use wasm_bindgen::JsCast as _;
@@ -25,7 +24,10 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlCanvasElement, HtmlElement, HtmlIFrameElement, KeyboardEvent, MessageEvent};
 
-use crate::{Backend, EmbeddedWidget, Error, PageWidget, WebViewEvent, WebViewSource};
+use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
+
+/// The URL that the browser reports for a [`WebViewSource::Html`] page.
+const HTML_URL: &str = "about:srcdoc";
 
 /// A script inserted at the start of every [`WebViewSource::Html`] page.
 ///
@@ -62,13 +64,12 @@ impl FocusEdge {
     /// [`FocusDirection::Previous`] for the edge before the `<iframe>`, and
     /// [`FocusDirection::Next`] for the edge after it.
     ///
-    /// `left`, `backed_out` and `waiting` are shared with [`IframeBackend`].
+    /// `left` and `waiting` are shared with [`IframeBackend`].
     fn new(
         document: &web_sys::Document,
         ctx: &Context,
         direction: FocusDirection,
         left: &Rc<Cell<Option<FocusDirection>>>,
-        backed_out: &Rc<Cell<Option<FocusDirection>>>,
         waiting: &Rc<Cell<bool>>,
     ) -> Result<Self, Error> {
         let element: HtmlElement = document
@@ -90,18 +91,17 @@ impl FocusEdge {
             })
         };
         // While the edge waits for the Tab into the page, a Tab away from the page (Shift-Tab
-        // on the edge before it, Tab on the edge after it) is cancelled and reported as
-        // `backed_out`, so egui moves its own focus on. An edge that got the focus from the
-        // browser's Tab out of the page isn't waiting, and leaves the key to the browser.
+        // on the edge before it, Tab on the edge after it) is cancelled and reported like a
+        // Tab out of the page, so egui moves its own focus on. An edge that got the focus from
+        // the browser's Tab out of the page isn't waiting, and leaves the key to the browser.
         let on_keydown = {
-            let (ctx, backed_out, waiting) =
-                (ctx.clone(), Rc::clone(backed_out), Rc::clone(waiting));
+            let (ctx, left, waiting) = (ctx.clone(), Rc::clone(left), Rc::clone(waiting));
             Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {
                 let away = event.key() == "Tab"
                     && event.shift_key() == (direction == FocusDirection::Previous);
                 if away && waiting.get() {
                     event.prevent_default();
-                    backed_out.set(Some(direction));
+                    left.set(Some(direction));
                     ctx.request_repaint();
                 }
             })
@@ -145,11 +145,10 @@ pub struct IframeBackend {
     focus_edges: [FocusEdge; 2],
 
     /// The direction in which the keyboard focus left the page, set by a [`FocusEdge`].
+    ///
+    /// A Tab or Shift-Tab that moved away from a waiting edge without entering the page counts
+    /// too.
     focus_left: Rc<Cell<Option<FocusDirection>>>,
-
-    /// The direction of a Tab or Shift-Tab that moved away from a waiting edge without entering
-    /// the page.
-    focus_backed_out: Rc<Cell<Option<FocusDirection>>>,
 
     /// Whether an edge holds the focus that [`Backend::focus`] gave it, and waits for the
     /// browser's Tab into the page.
@@ -188,18 +187,9 @@ impl IframeBackend {
         container.append_child(&iframe).map_err(js_error)?;
 
         let focus_left = Rc::new(Cell::new(None));
-        let focus_backed_out = Rc::new(Cell::new(None));
         let edge_waiting = Rc::new(Cell::new(false));
-        let [before, after] = [FocusDirection::Previous, FocusDirection::Next].map(|direction| {
-            FocusEdge::new(
-                &document,
-                ctx,
-                direction,
-                &focus_left,
-                &focus_backed_out,
-                &edge_waiting,
-            )
-        });
+        let [before, after] = [FocusDirection::Previous, FocusDirection::Next]
+            .map(|direction| FocusEdge::new(&document, ctx, direction, &focus_left, &edge_waiting));
         let (before, after) = (before?, after?);
         container
             .insert_before(&before.element, Some(&iframe))
@@ -219,9 +209,7 @@ impl IframeBackend {
             Closure::<dyn FnMut()>::new(move || {
                 loaded.set(true);
                 for script in pending_scripts.take() {
-                    if let Err(err) = run_script(&iframe, &script) {
-                        log::warn!("egui_webview: script failed: {err}");
-                    }
+                    warn(run_script(&iframe, &script));
                 }
                 events
                     .borrow_mut()
@@ -274,7 +262,6 @@ impl IframeBackend {
             last_style: None,
             focus_edges: [before, after],
             focus_left,
-            focus_backed_out,
             edge_waiting,
             _on_load: on_load,
             on_message,
@@ -322,9 +309,7 @@ impl IframeBackend {
         );
         (container, iframe)
     }
-}
 
-impl IframeBackend {
     /// Whether the page has the keyboard focus.
     ///
     /// With `or_edge`, also whether one of its [`Self::focus_edges`] has it,
@@ -377,7 +362,7 @@ impl Backend for IframeBackend {
         self.source = source.clone();
         self.events.borrow_mut().push(WebViewEvent::Loading {
             url: match source {
-                WebViewSource::Html(_) => "about:srcdoc".to_owned(),
+                WebViewSource::Html(_) => HTML_URL.to_owned(),
                 WebViewSource::Url(url) => url.clone(),
             },
         });
@@ -396,32 +381,23 @@ impl Backend for IframeBackend {
     fn reload(&mut self) {
         // A cross-origin page doesn't let the app call `location.reload()`, so load the source
         // again. This discards any navigation within the page since the last `load`.
-        if let Err(err) = self.load(&self.source.clone()) {
-            log::warn!("egui_webview: reload failed: {err}");
-        }
+        warn(self.load(&self.source.clone()));
     }
 
     fn back(&mut self) {
-        if let Err(err) = self.evaluate_script("history.back()") {
-            log::warn!("egui_webview: back failed: {err}");
-        }
+        warn(self.evaluate_script("history.back()"));
     }
 
     fn forward(&mut self) {
-        if let Err(err) = self.evaluate_script("history.forward()") {
-            log::warn!("egui_webview: forward failed: {err}");
-        }
-    }
-
-    fn widget(&self) -> Arc<dyn PageWidget> {
-        Arc::new(EmbeddedWidget)
+        warn(self.evaluate_script("history.forward()"));
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
-        let scale = css_pixels_per_point(ctx, &self.canvas.get_bounding_client_rect());
-        let style = output
-            .filter(|output| output.visible.is_positive())
-            .map(|output| Self::style(output, scale));
+        // A hidden page needs no scale, so it doesn't measure the canvas.
+        let style = output.map(|output| {
+            let scale = css_pixels_per_point(ctx, &self.canvas.get_bounding_client_rect());
+            Self::style(output, scale)
+        });
         if style == self.last_style {
             return;
         }
@@ -478,9 +454,7 @@ impl Backend for IframeBackend {
     }
 
     fn poll_focus_left(&mut self) -> Option<FocusDirection> {
-        self.focus_backed_out
-            .take()
-            .or_else(|| self.focus_left.take())
+        self.focus_left.take()
     }
 
     fn take_events(&mut self) -> Vec<WebViewEvent> {
@@ -560,7 +534,7 @@ fn run_script(iframe: &HtmlIFrameElement, script: &str) -> Result<(), Error> {
 /// Falls back to the `src` attribute for a cross-origin page, whose location the app can't read.
 fn url(iframe: &HtmlIFrameElement) -> String {
     if iframe.has_attribute("srcdoc") {
-        return "about:srcdoc".to_owned();
+        return HTML_URL.to_owned();
     }
     iframe
         .content_window()

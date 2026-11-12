@@ -6,8 +6,10 @@ use eframe::EmbeddedViews;
 use egui::{Context, EmbeddedViewOutput, Id, Sense, Ui, Vec2, ViewportId};
 
 use crate::instance::show_widget;
-use crate::mailbox::{Command, Mailbox, ToPage, ToWidget, is_latest, now};
-use crate::{Error, PageWidget, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource};
+use crate::mailbox::{Command, Mailbox, Slot, ToPage, ToWidget, is_latest, now};
+use crate::{
+    Error, PageWidget, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource, warn,
+};
 
 type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInstance, Error>>;
 
@@ -79,16 +81,11 @@ impl WebViews {
     /// backend, as with [`WebViewInstance::new`].
     pub fn new(ctx: &Context, embedded_views: &EmbeddedViews) -> Self {
         let embedded_views = embedded_views.clone();
-        // On the web every page is an embedded view. The widget can reserve its rect before
-        // the page exists, so the page is placed in its first frame.
-        let fallback: Option<Arc<dyn PageWidget>> = if cfg!(target_arch = "wasm32") {
-            Some(Arc::new(crate::EmbeddedWidget))
-        } else {
-            None
-        };
+        // If the widget is known before the page exists, it reserves the page's rect in the
+        // first pass, and the page is placed in its first frame.
         Self::from_parts(
             ctx,
-            fallback,
+            WebViewInstance::default_widget(),
             Box::new(move |ctx, id, source| WebViewInstance::new(ctx, id, source, &embedded_views)),
         )
     }
@@ -147,10 +144,9 @@ impl WebViews {
             let shown = request.shown.is_some_and(|pass| is_latest(ctx, pass));
 
             let news = self.update_page(ctx, id, request, shown, views);
-            let repaint = self.mailbox.with(|inner| {
-                let slot = inner.existing_slot(id);
-                slot.is_some_and(|slot| slot.to_widget.merge(news, shown))
-            });
+            let repaint = self
+                .mailbox
+                .with(|inner| inner.slot(id).to_widget.merge(news, shown));
             if repaint {
                 // The widget reads the mailbox in its next pass, so make sure there is one.
                 ctx.request_repaint_of(ViewportId::ROOT);
@@ -189,12 +185,12 @@ impl WebViews {
         let index = pages.iter().position(|page| page.id == id);
         let page = if let Some(index) = index {
             let page = &mut pages[index];
-            if source.is_some() && source != page.source {
+            if let Some(new) = &source
+                && page.source.as_ref() != Some(new)
+            {
                 // The builder was told to show something else.
                 if let Ok(instance) = &mut page.instance {
-                    if let Some(source) = &source {
-                        warn(instance.load(source));
-                    }
+                    warn(instance.load(new));
                 } else {
                     page.instance = create_page(create, ctx, id, source.as_deref());
                     page.new = true;
@@ -212,31 +208,24 @@ impl WebViews {
             pages.last_mut().expect("just pushed")
         };
 
-        let instance = match &mut page.instance {
-            Ok(instance) => instance,
-            Err(failed) => {
-                news.failed = Some(failed.clone());
-                return news;
-            }
+        if std::mem::take(&mut page.new) {
+            news.page = Some(match &page.instance {
+                Ok(instance) => Ok(instance.widget()),
+                Err(failed) => Err(failed.clone()),
+            });
+        }
+        let Ok(instance) = &mut page.instance else {
+            return news;
         };
 
         for command in commands {
-            warn(match command {
-                Command::Load(source) => instance.load(&source),
-                Command::EvaluateScript(script) => instance.evaluate_script(&script),
-                Command::Reload => {
-                    instance.reload();
-                    Ok(())
-                }
-                Command::Back => {
-                    instance.back();
-                    Ok(())
-                }
-                Command::Forward => {
-                    instance.forward();
-                    Ok(())
-                }
-            });
+            match command {
+                Command::Load(source) => warn(instance.load(&source)),
+                Command::EvaluateScript(script) => warn(instance.evaluate_script(&script)),
+                Command::Reload => instance.reload(),
+                Command::Back => instance.back(),
+                Command::Forward => instance.forward(),
+            }
         }
 
         // The order matters here. First tell the page what the widget saw in the pass, and only
@@ -250,10 +239,6 @@ impl WebViews {
         news.events = instance.take_events();
 
         instance.place(ctx, views);
-
-        if std::mem::take(&mut page.new) {
-            news.widget = Some(instance.widget());
-        }
         news
     }
 }
@@ -270,12 +255,6 @@ fn create_page(
         log::warn!("egui_webview: failed to create the page of {id:?}: {err}");
         err.to_string()
     })
-}
-
-fn warn(result: Result<(), Error>) {
-    if let Err(err) = result {
-        log::warn!("egui_webview: {err}");
-    }
 }
 
 /// A web page, shown with one call:
@@ -393,7 +372,7 @@ impl<'a> WebView<'a> {
         };
         let at = now(ui.ctx());
 
-        let (widget, events, page_focus, failed) = mailbox.with(|inner| {
+        let (page, events, page_focus) = mailbox.with(|inner| {
             let fallback = inner.fallback.clone();
             let slot = inner.slot(id);
 
@@ -412,27 +391,28 @@ impl<'a> WebView<'a> {
 
             let to_widget = &mut slot.to_widget;
             (
-                to_widget.widget.clone().or(fallback),
+                to_widget.page.clone().or_else(|| fallback.map(Ok)),
                 std::mem::take(&mut to_widget.events),
                 to_widget.focus.take(),
-                to_widget.failed.clone(),
             )
         });
 
-        if let Some(failed) = failed {
-            return placeholder(ui, id, size, Some(&failed), events);
-        }
-        let Some(widget) = widget else {
+        let widget = match page {
+            Some(Ok(widget)) => widget,
+            Some(Err(failed)) => return placeholder(ui, id, size, Some(&failed), events),
             // The page doesn't exist yet. `WebViews::update` creates it after this pass.
-            return placeholder(ui, id, size, None, events);
+            None => return placeholder(ui, id, size, None, events),
         };
 
         let shown = show_widget(ui, id, size, &*widget, page_focus);
+        // Not `Response::has_focus`. That is also false while egui's window doesn't have the OS
+        // focus, and on Windows the page's own child window takes it.
+        let focused = ui.memory(|mem| mem.has_focus(id));
 
         mailbox.with(|inner| {
             let to_page = &mut inner.slot(id).to_page;
             to_page.shown = Some(at);
-            to_page.focused = shown.focused;
+            to_page.focused = focused;
             if let Some(change) = shown.focus_change {
                 to_page.focus = Some(change);
             }
@@ -455,13 +435,7 @@ impl WebView<'_> {
     /// in a tab that isn't selected.
     pub fn keep_alive(ctx: &Context, id: impl Into<Id>) {
         let at = now(ctx);
-        if let Some(mailbox) = Mailbox::of(ctx) {
-            mailbox.with(|inner| {
-                if let Some(slot) = inner.existing_slot(id.into()) {
-                    slot.to_page.alive = Some(at);
-                }
-            });
-        }
+        with_slot(ctx, id.into(), |slot| slot.to_page.alive = Some(at));
     }
 
     /// Loads `source` in the page of `id`, replacing the current page.
@@ -496,10 +470,16 @@ impl WebView<'_> {
 }
 
 fn command(ctx: &Context, id: Id, command: Command) {
+    with_slot(ctx, id, |slot| slot.to_page.commands.push(command));
+}
+
+/// Runs `f` on the slot of `id`. Does nothing if the app has no [`WebViews`], or if
+/// [`WebView::show`] hasn't run for `id`.
+fn with_slot(ctx: &Context, id: Id, f: impl FnOnce(&mut Slot)) {
     if let Some(mailbox) = Mailbox::of(ctx) {
         mailbox.with(|inner| {
             if let Some(slot) = inner.existing_slot(id) {
-                slot.to_page.commands.push(command);
+                f(slot);
             }
         });
     }
@@ -568,10 +548,6 @@ mod tests {
 
         fn forward(&mut self) {
             self.log.borrow_mut().push("forward".to_owned());
-        }
-
-        fn widget(&self) -> Arc<dyn PageWidget> {
-            Arc::new(EmbeddedWidget)
         }
 
         fn place(&mut self, _ctx: &Context, output: Option<&EmbeddedViewOutput>) {

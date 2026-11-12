@@ -76,18 +76,21 @@ pub trait Backend {
     /// Navigates forward in the webview's history. See [`crate::WebViewInstance::forward`].
     fn forward(&mut self);
 
-    /// The half of this page that runs in egui's pass.
+    /// The half of this page that runs in egui's pass. The webview asks for it once, when it is
+    /// created.
     ///
-    /// A backend with an embedded view returns [`EmbeddedWidget`], and [`Self::place`] positions
-    /// the view. A backend that renders into a texture returns a widget that paints the texture
-    /// and passes egui's input on to the page.
-    fn widget(&self) -> Arc<dyn PageWidget>;
+    /// The default is [`EmbeddedWidget`]. Keep it for a backend with an embedded view, which
+    /// [`Self::place`] positions. A backend that renders into a texture returns a widget that
+    /// paints the texture and passes egui's input on to the page.
+    fn widget(&self) -> Arc<dyn PageWidget> {
+        Arc::new(EmbeddedWidget)
+    }
 
     /// Called by [`crate::WebViewInstance::place`] after a pass of the root viewport.
     ///
     /// A backend with an embedded view positions it here. `output` is what egui reported for the
     /// webview's [`egui::EmbeddedView`]. It is `None` when the webview wasn't shown in the pass,
-    /// and the backend should then hide the page.
+    /// or when none of it is on screen. The backend should then hide the page.
     ///
     /// A backend that renders into a texture always gets `None`. It can use the call for work
     /// that has to happen after every pass.
