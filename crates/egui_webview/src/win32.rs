@@ -278,6 +278,7 @@ impl Backend for WryBackend {
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
+        self.page.set_zoom(ctx.zoom_factor());
         let placed = output.map(|output| Self::placed(ctx, output));
         if placed.is_some() {
             self.track_window(ctx);
