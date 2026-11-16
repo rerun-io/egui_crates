@@ -4,8 +4,8 @@ use std::{
 };
 
 use egui::{
-    Align, Context, Id, IdMap, IdSalt, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder,
-    Vec2, Vec2b,
+    Align, Context, Id, IdMap, IdSalt, IdSet, Layout, NumExt as _, Rangef, Rect, Response, Ui,
+    UiBuilder, Vec2, Vec2b,
 };
 use vec1::Vec1;
 
@@ -31,6 +31,12 @@ pub struct TableState {
     pub col_widths: IdMap<f32>,
 
     pub parent_width: Option<f32>,
+
+    /// Columns whose width was set while the table had no rows.
+    ///
+    /// They are fitted to their content once rows arrive.
+    #[serde(default)]
+    pub cols_fitted_without_rows: IdSet,
 }
 
 impl TableState {
@@ -384,15 +390,23 @@ impl Table {
         let is_new = state.is_none();
         let do_full_sizing_pass = is_new;
         let mut state = state.unwrap_or_default();
+        let has_rows = 0 < self.num_rows;
 
+        let mut had_stored_width = Vec::with_capacity(self.columns.len());
         for (i, column) in self.columns.iter_mut().enumerate() {
             let column_id = column.id_for(i);
-            if let Some(existing_width) = state.col_widths.get(&column_id) {
-                column.current = *existing_width;
+            let stored_width = state.col_widths.get(&column_id).copied();
+            had_stored_width.push(stored_width.is_some());
+            if let Some(stored_width) = stored_width {
+                column.current = stored_width;
             }
             column.current = column.range.clamp(column.current);
 
-            if do_full_sizing_pass {
+            // A column added after the table was created, or one that was sized before
+            // there were any rows, is fitted to its content once there is content to fit.
+            let needs_fit =
+                stored_width.is_none() || state.cols_fitted_without_rows.contains(&column_id);
+            if do_full_sizing_pass || (column.resizable && has_rows && needs_fit) {
                 column.auto_size_this_frame = true;
             }
         }
@@ -493,6 +507,27 @@ impl Table {
                 );
             })
             .response;
+
+        for (i, (column, had_stored_width)) in
+            std::iter::zip(&self.columns, had_stored_width).enumerate()
+        {
+            if !column.resizable {
+                continue;
+            }
+            let column_id = column.id_for(i);
+
+            // Columns that were outside the viewport were never measured.
+            // Store their width anyway, so we don't keep re-sizing them every frame.
+            state.col_widths.entry(column_id).or_insert(column.current);
+
+            if has_rows {
+                if column.auto_size_this_frame {
+                    state.cols_fitted_without_rows.remove(&column_id);
+                }
+            } else if column.auto_size_this_frame || !had_stored_width {
+                state.cols_fitted_without_rows.insert(column_id);
+            }
+        }
 
         state.store(ui, id);
         response
@@ -928,6 +963,9 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
                 let new_width = column.range.clamp(new_width);
                 x += new_width - *column_width;
                 *column_width = new_width;
+
+                // The user picked a width, so don't override it once rows arrive.
+                self.state.cols_fitted_without_rows.remove(&column_id);
             }
 
             let dragging_something_else =
