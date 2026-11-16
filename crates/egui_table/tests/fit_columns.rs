@@ -54,7 +54,7 @@ fn column_widths(harness: &Harness<'_, State>) -> Vec<f32> {
     let id = harness.state().table_id.expect("table was shown");
     let state = TableState::load(&harness.ctx, id).expect("table state is stored");
     (0..harness.state().num_columns)
-        .map(|i| state.col_widths[&Column::default().id_for(i)])
+        .map(|i| state.columns[&Column::default().id_for(i)].width)
         .collect()
 }
 

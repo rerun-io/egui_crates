@@ -4,8 +4,8 @@ use std::{
 };
 
 use egui::{
-    Align, Context, Id, IdMap, IdSalt, IdSet, Layout, NumExt as _, Rangef, Rect, Response, Ui,
-    UiBuilder, Vec2, Vec2b,
+    Align, Context, Id, IdMap, IdSalt, Layout, NumExt as _, Rangef, Rect, Response, Ui, UiBuilder,
+    Vec2, Vec2b,
 };
 use vec1::Vec1;
 
@@ -25,18 +25,32 @@ pub enum AutoSizeMode {
     OnParentResize,
 }
 
+/// The stored state of one resizable column.
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
+pub struct ColumnState {
+    /// Current width of the column.
+    pub width: f32,
+
+    /// The width was set while the table had no rows,
+    /// so fit the column to its content once rows arrive.
+    pub fit_when_rows_arrive: bool,
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct TableState {
-    // Maps columns ids to their widths.
-    pub col_widths: IdMap<f32>,
+    /// Maps column ids to their state.
+    pub columns: IdMap<ColumnState>,
 
     pub parent_width: Option<f32>,
+}
 
-    /// Columns whose width was set while the table had no rows.
-    ///
-    /// They are fitted to their content once rows arrive.
-    #[serde(default)]
-    pub cols_fitted_without_rows: IdSet,
+impl ColumnState {
+    fn new(width: f32) -> Self {
+        Self {
+            width,
+            fit_when_rows_arrive: false,
+        }
+    }
 }
 
 impl TableState {
@@ -392,20 +406,18 @@ impl Table {
         let mut state = state.unwrap_or_default();
         let has_rows = 0 < self.num_rows;
 
-        let mut had_stored_width = Vec::with_capacity(self.columns.len());
+        let mut had_stored_state = Vec::with_capacity(self.columns.len());
         for (i, column) in self.columns.iter_mut().enumerate() {
-            let column_id = column.id_for(i);
-            let stored_width = state.col_widths.get(&column_id).copied();
-            had_stored_width.push(stored_width.is_some());
-            if let Some(stored_width) = stored_width {
-                column.current = stored_width;
+            let stored = state.columns.get(&column.id_for(i)).copied();
+            had_stored_state.push(stored.is_some());
+            if let Some(stored) = stored {
+                column.current = stored.width;
             }
             column.current = column.range.clamp(column.current);
 
             // A column added after the table was created, or one that was sized before
             // there were any rows, is fitted to its content once there is content to fit.
-            let needs_fit =
-                stored_width.is_none() || state.cols_fitted_without_rows.contains(&column_id);
+            let needs_fit = stored.is_none_or(|stored| stored.fit_when_rows_arrive);
             if do_full_sizing_pass || (column.resizable && has_rows && needs_fit) {
                 column.auto_size_this_frame = true;
             }
@@ -508,24 +520,26 @@ impl Table {
             })
             .response;
 
-        for (i, (column, had_stored_width)) in
-            std::iter::zip(&self.columns, had_stored_width).enumerate()
+        for (i, (column, had_stored_state)) in
+            std::iter::zip(&self.columns, had_stored_state).enumerate()
         {
             if !column.resizable {
                 continue;
             }
-            let column_id = column.id_for(i);
 
             // Columns that were outside the viewport were never measured.
             // Store their width anyway, so we don't keep re-sizing them every frame.
-            state.col_widths.entry(column_id).or_insert(column.current);
+            let column_state = state
+                .columns
+                .entry(column.id_for(i))
+                .or_insert_with(|| ColumnState::new(column.current));
 
             if has_rows {
                 if column.auto_size_this_frame {
-                    state.cols_fitted_without_rows.remove(&column_id);
+                    column_state.fit_when_rows_arrive = false;
                 }
-            } else if column.auto_size_this_frame || !had_stored_width {
-                state.cols_fitted_without_rows.insert(column_id);
+            } else if column.auto_size_this_frame || !had_stored_state {
+                column_state.fit_when_rows_arrive = true;
             }
         }
 
@@ -926,11 +940,12 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
             let column_id = column.id_for(col_nr);
             let used_width = column.range.clamp(self.max_column_widths[col_nr]);
 
-            let column_width = self
+            let column_state = self
                 .state
-                .col_widths
+                .columns
                 .entry(column_id)
-                .or_insert(column.current);
+                .or_insert_with(|| ColumnState::new(column.current));
+            let column_width = &mut column_state.width;
 
             let layout_width = *column_width; // Width used when computing col_x
 
@@ -965,7 +980,7 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
                 *column_width = new_width;
 
                 // The user picked a width, so don't override it once rows arrive.
-                self.state.cols_fitted_without_rows.remove(&column_id);
+                column_state.fit_when_rows_arrive = false;
             }
 
             let dragging_something_else =
