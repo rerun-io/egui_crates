@@ -31,9 +31,10 @@ pub struct ColumnState {
     /// Current width of the column.
     pub width: f32,
 
-    /// The width was set while the table had no rows,
-    /// so fit the column to its content once rows arrive.
-    pub fit_when_rows_arrive: bool,
+    /// Refit the column to its content on the next frame that has rows.
+    ///
+    /// Set when the width was picked while the table had no rows.
+    pub needs_refit: bool,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
@@ -48,7 +49,7 @@ impl ColumnState {
     fn new(width: f32) -> Self {
         Self {
             width,
-            fit_when_rows_arrive: false,
+            needs_refit: false,
         }
     }
 }
@@ -417,7 +418,7 @@ impl Table {
 
             // A column added after the table was created, or one that was sized before
             // there were any rows, is fitted to its content once there is content to fit.
-            let needs_fit = stored.is_none_or(|stored| stored.fit_when_rows_arrive);
+            let needs_fit = stored.is_none_or(|stored| stored.needs_refit);
             if do_full_sizing_pass || (column.resizable && has_rows && needs_fit) {
                 column.auto_size_this_frame = true;
             }
@@ -536,10 +537,10 @@ impl Table {
 
             if has_rows {
                 if column.auto_size_this_frame {
-                    column_state.fit_when_rows_arrive = false;
+                    column_state.needs_refit = false;
                 }
             } else if column.auto_size_this_frame || !had_stored_state {
-                column_state.fit_when_rows_arrive = true;
+                column_state.needs_refit = true;
             }
         }
 
@@ -980,7 +981,7 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
                 *column_width = new_width;
 
                 // The user picked a width, so don't override it once rows arrive.
-                column_state.fit_when_rows_arrive = false;
+                column_state.needs_refit = false;
             }
 
             let dragging_something_else =
