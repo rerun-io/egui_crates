@@ -5,6 +5,9 @@ use egui_table::{Column, HeaderCellInfo, HeaderRow, Table, TableDelegate, TableS
 
 const CELL_TEXT: &str = "a fairly long cell text";
 
+/// Narrower than [`CELL_TEXT`].
+const DEFAULT_WIDTH: f32 = 100.0;
+
 struct State {
     num_rows: u64,
     num_columns: usize,
@@ -37,7 +40,7 @@ fn harness(num_rows: u64, num_columns: usize) -> Harness<'static, State> {
                 let table = Table::new()
                     .id_salt("table")
                     .num_rows(state.num_rows)
-                    .columns(vec![Column::new(100.0); state.num_columns])
+                    .columns(vec![Column::new(DEFAULT_WIDTH); state.num_columns])
                     .headers([HeaderRow::new(20.0)]);
                 state.table_id = Some(table.get_id(ui));
                 table.show(ui, &mut Delegate);
@@ -66,19 +69,17 @@ fn fitted_widths(num_columns: usize) -> Vec<f32> {
 
 #[test]
 fn columns_are_fitted_when_rows_arrive() {
+    let fitted = fitted_widths(2);
+
     let mut harness = harness(0, 2);
     harness.run();
+    for (empty, fitted) in std::iter::zip(column_widths(&harness), &fitted) {
+        assert!(empty < *fitted, "With no rows, only the header is measured");
+    }
 
     harness.state_mut().num_rows = 10;
     harness.run();
-
-    let expected = fitted_widths(2);
-    assert_ne!(
-        expected,
-        vec![100.0; 2],
-        "Column::new width must not match the fit"
-    );
-    assert_eq!(column_widths(&harness), expected);
+    assert_eq!(column_widths(&harness), fitted);
 }
 
 #[test]
@@ -86,8 +87,13 @@ fn added_column_is_fitted() {
     let mut harness = harness(10, 1);
     harness.run();
 
+    let fitted = fitted_widths(2);
+    assert!(
+        DEFAULT_WIDTH < fitted[1],
+        "The test needs a column that grows when fitted"
+    );
+
     harness.state_mut().num_columns = 2;
     harness.run();
-
-    assert_eq!(column_widths(&harness), fitted_widths(2));
+    assert_eq!(column_widths(&harness), fitted);
 }
