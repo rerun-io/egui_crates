@@ -43,7 +43,6 @@ use rmcp::{
         Implementation, JsonObject, ListToolsResult, PaginatedRequestParams, ServerCapabilities,
         ServerConfig, Tool,
     },
-    schemars,
     service::{RequestContext, RoleServer},
     tool, tool_router,
 };

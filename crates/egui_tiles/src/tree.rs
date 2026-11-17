@@ -824,7 +824,6 @@ fn smooth_preview_rect(ctx: &egui::Context, dragged_tile_id: TileId, new_rect: R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ContainerInsertion;
 
     /// Wrapping the root leaves the wrapped tile with its own id, so the _new_ container has to
     /// become the root. Only the [`Tree`] knows what the root is, so [`Tiles`] hands it back.

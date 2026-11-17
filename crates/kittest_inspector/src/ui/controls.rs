@@ -1,8 +1,6 @@
 //! Top toolbar: playback controls, history navigation, GIF copy, Control-mode toggle, and
 //! a one-line connection status label.
 
-use eframe::egui;
-
 use crate::state::{AppStateRef, Command, PlayState};
 
 pub fn controls_panel(ui: &mut egui::Ui, state: &AppStateRef<'_>) {
