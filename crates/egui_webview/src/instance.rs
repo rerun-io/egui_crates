@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use eframe::EmbeddedViews;
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Ui, Vec2};
+use egui::{
+    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
+};
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 
@@ -34,6 +36,9 @@ pub struct WebViewInstance {
     /// Set when egui's focus moves to the webview, or when the backend reports that the page
     /// took the focus itself. Cleared when the focus leaves the page or the webview.
     page_focused: bool,
+
+    /// The egui theme that the page was last given with [`Backend::set_theme`].
+    theme: Option<Theme>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -180,7 +185,7 @@ impl WebViewInstance {
                 #[cfg(any(target_arch = "wasm32", target_os = "macos", target_os = "windows"))]
                 {
                     let backend = PlatformBackend::new(ctx, source, embedded_views)?;
-                    Ok(Self::with_backend(id, backend))
+                    Ok(Self::with_backend(id, backend).with_theme_of(ctx))
                 }
                 #[cfg(not(any(
                     target_arch = "wasm32",
@@ -243,7 +248,7 @@ impl WebViewInstance {
         options: crate::CefOptions,
     ) -> Result<Self, Error> {
         let backend = crate::chromium::CefBackend::new(ctx, source, options)?;
-        Ok(Self::with_backend(id, backend))
+        Ok(Self::with_backend(id, backend).with_theme_of(ctx))
     }
 
     /// Creates a webview that shows its page through `backend`.
@@ -255,6 +260,22 @@ impl WebViewInstance {
             widget: backend.widget(),
             backend: Box::new(backend),
             page_focused: false,
+            theme: None,
+        }
+    }
+
+    /// Gives the page egui's theme right away, so that it doesn't first render in the OS theme.
+    fn with_theme_of(mut self, ctx: &Context) -> Self {
+        self.update_theme(ctx);
+        self
+    }
+
+    /// Gives the page egui's theme if it changed since the last call.
+    fn update_theme(&mut self, ctx: &Context) {
+        let theme = ctx.theme();
+        if self.theme != Some(theme) {
+            self.backend.set_theme(theme);
+            self.theme = Some(theme);
         }
     }
 
@@ -266,11 +287,14 @@ impl WebViewInstance {
     ///
     /// Call it for a backend that renders into a texture too. It has no view to place, but it
     /// uses the call to stop rendering a page that isn't shown.
+    ///
+    /// This also gives the page egui's current theme as its `prefers-color-scheme`.
     pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
         // egui also reports a view that only touches the clip rect, with nothing to see.
         let output = outputs
             .iter()
             .find(|output| output.id == self.id && output.visible.is_positive());
+        self.update_theme(ctx);
         self.backend.place(ctx, output);
     }
 

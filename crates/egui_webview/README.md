@@ -94,6 +94,9 @@ trunk serve --example minimal_instance
 The embedded views (web, macOS, Windows) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
 egui windows and popups above a page paint over it and receive the pointer input there.
 
+Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
+So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
+
 ## CEF
 
 The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built, and builds a small C++ wrapper library, which requires CMake and Ninja.
