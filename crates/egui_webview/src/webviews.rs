@@ -124,9 +124,6 @@ impl WebViews {
         // as not shown and are closed below. They are created again in the next frame.
         self.mailbox.install(ctx);
 
-        // The mailbox is only locked to move data in and out of it. Pages, the factory, and egui
-        // run outside the lock, so they can call back into the mailbox, for example with
-        // `WebView::load`.
         let pass = ctx.cumulative_pass_nr_for(ViewportId::ROOT);
         let alive = self.mailbox.with(|mail| {
             // Close the webviews that were neither shown nor kept alive in the latest pass.
@@ -220,18 +217,14 @@ impl WebViews {
             instance.place(ctx, views);
         }
 
-        let needs_repaint = mailbox.with_view_state(id, |state| {
+        mailbox.with_view_state(id, |state| {
             if let Some(widget) = new_widget {
-                state.set_page_widget(widget);
+                state.set_page_widget(ctx, widget);
+                ctx.request_repaint_of(ViewportId::ROOT);
             }
-            state.set_pending_focus_change(pending_focus_change, pass);
-            state.extend_events(events, pass);
-            std::mem::take(&mut state.needs_repaint)
+            state.set_pending_focus_change(ctx, pending_focus_change);
+            state.extend_events(ctx, events);
         });
-        if needs_repaint == Some(true) {
-            // The widget reads the mailbox in its next pass, so make sure there is one.
-            ctx.request_repaint_of(ViewportId::ROOT);
-        }
     }
 }
 

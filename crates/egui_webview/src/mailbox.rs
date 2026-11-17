@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use egui::mutex::Mutex;
-use egui::{Context, Id};
+use egui::{Context, Id, ViewportId};
 
 use crate::instance::FocusChange;
 use crate::{PageWidget, WebViewEvent, WebViewSource};
@@ -72,7 +72,8 @@ impl Mailbox {
         }
     }
 
-    /// Locks the mailbox for `f`. Don't run egui or backend code in `f`.
+    /// Locks the mailbox for `f`. Don't run backend code in `f`, nor egui code that could call
+    /// back into the mailbox.
     pub fn with<R>(&self, f: impl FnOnce(&mut Inner) -> R) -> R {
         f(&mut self.0.lock())
     }
@@ -104,8 +105,6 @@ pub(crate) struct WebViewState {
     pub events: Vec<WebViewEvent>,
 
     pub ui: UiState,
-
-    pub needs_repaint: bool,
 }
 
 #[derive(Default)]
@@ -137,28 +136,30 @@ impl WebViewState {
         self.alive_pass.is_some_and(|alive| alive + 1 == pass)
     }
 
-    /// Adds the page's new events. `pass` is the number of the root viewport's next pass.
-    pub fn extend_events(&mut self, events: Vec<WebViewEvent>, pass: u64) {
+    /// Adds the page's new events.
+    pub fn extend_events(&mut self, ctx: &Context, events: Vec<WebViewEvent>) {
         // The events of a hidden page wait. Nobody reads them before the page is shown again.
-        self.needs_repaint |= self.was_shown(pass) && !events.is_empty();
+        if !events.is_empty() && self.was_shown(ctx.cumulative_pass_nr_for(ViewportId::ROOT)) {
+            // The widget reads the mailbox in its next pass, so make sure there is one.
+            ctx.request_repaint_of(ViewportId::ROOT);
+        }
         self.events.extend(events);
     }
 
-    /// Hands a focus change that the page made itself to the widget. `pass` is the number of
-    /// the root viewport's next pass.
-    pub fn set_pending_focus_change(&mut self, change: Option<FocusChange>, pass: u64) {
-        if !self.was_shown(pass) {
+    /// Hands a focus change that the page made itself to the widget.
+    pub fn set_pending_focus_change(&mut self, ctx: &Context, change: Option<FocusChange>) {
+        if !self.was_shown(ctx.cumulative_pass_nr_for(ViewportId::ROOT)) {
             // Nobody will act on it, and it would be stale by the time the widget is back.
             self.ui.pending_focus_change = None;
         } else if let Some(change) = change {
             self.ui.pending_focus_change = Some(change);
-            self.needs_repaint = true;
+            ctx.request_repaint_of(ViewportId::ROOT);
         }
     }
 
-    pub fn set_page_widget(&mut self, page_widget: WidgetResult) {
+    pub fn set_page_widget(&mut self, ctx: &Context, page_widget: WidgetResult) {
         self.ui.widget = Some(page_widget);
-        self.needs_repaint = true;
+        ctx.request_repaint_of(ViewportId::ROOT);
     }
 
     pub fn push_command(&mut self, command: Command) {
