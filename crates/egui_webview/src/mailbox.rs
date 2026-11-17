@@ -9,22 +9,10 @@
 use std::sync::Arc;
 
 use egui::mutex::Mutex;
-use egui::{Context, Id, ViewportId};
+use egui::{Context, Id};
 
 use crate::instance::FocusChange;
 use crate::{PageWidget, WebViewEvent, WebViewSource};
-
-/// The number of the root viewport's current pass (see [`Context::cumulative_pass_nr`]).
-///
-/// Webviews are only supported in the root viewport, so its passes are the only clock.
-pub(crate) fn now(ctx: &Context) -> u64 {
-    ctx.cumulative_pass_nr_for(ViewportId::ROOT)
-}
-
-/// Whether `pass` is the root viewport's latest pass. Only call this between passes.
-pub(crate) fn is_latest(ctx: &Context, pass: u64) -> bool {
-    pass + 1 == now(ctx)
-}
 
 /// The mailbox itself. The widget and the registry each hold a clone.
 #[derive(Clone)]
@@ -129,21 +117,24 @@ pub struct UiState {
 
 type WidgetResult = Result<Arc<dyn PageWidget>, String>;
 
-/// How many events are kept for a page that is kept alive but not shown.
-const MAX_WAITING_EVENTS: usize = 1024;
-
 impl WebViewState {
     pub fn mark_shown(&mut self, pass: u64) {
-        self.mark_alive(pass);
         self.shown_pass = Some(pass);
     }
-    pub fn mark_alive(&mut self, pass: u64) {
+
+    #[must_use]
+    pub fn mark_alive(&mut self, pass: u64) -> Vec<WebViewEvent> {
         self.alive_pass = Some(pass);
+        std::mem::take(&mut self.events)
     }
 
     /// Whether the widget was shown in the pass before `pass`.
     pub fn was_shown(&self, pass: u64) -> bool {
         self.shown_pass.is_some_and(|shown| shown + 1 == pass)
+    }
+    /// Whether the widget was alive in the pass before `pass`.
+    pub fn was_alive(&self, pass: u64) -> bool {
+        self.alive_pass.is_some_and(|alive| alive + 1 == pass)
     }
 
     /// Adds the page's new events. `pass` is the number of the root viewport's next pass.
@@ -151,8 +142,6 @@ impl WebViewState {
         // The events of a hidden page wait. Nobody reads them before the page is shown again.
         self.needs_repaint |= self.was_shown(pass) && !events.is_empty();
         self.events.extend(events);
-        let excess = self.events.len().saturating_sub(MAX_WAITING_EVENTS);
-        self.events.drain(..excess);
     }
 
     /// Hands a focus change that the page made itself to the widget. `pass` is the number of

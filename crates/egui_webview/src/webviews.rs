@@ -131,7 +131,7 @@ impl WebViews {
         let alive = self.mailbox.with(|mail| {
             // Close the webviews that were neither shown nor kept alive in the latest pass.
             mail.webviews
-                .retain(|(_, state)| state.alive_pass.is_some_and(|alive| pass <= alive + 1));
+                .retain(|(_, state)| state.was_alive(pass) || state.was_shown(pass));
             mail.webviews.iter().map(|(id, _)| *id).collect::<Vec<_>>()
         });
         // Dropping a page closes it.
@@ -376,8 +376,8 @@ impl<'a> WebView<'a> {
 
             state.mark_shown(pass);
             // Only copy the text when it changed.
-            let unchanged = new_source
-                .is_some_and(|new| state.source.as_ref().is_some_and(|cur| new == cur));
+            let unchanged =
+                new_source.is_some_and(|new| state.source.as_ref().is_some_and(|cur| new == cur));
             if !unchanged {
                 state.source = new_source.map(|new| Arc::new(new.into()));
             }
@@ -421,11 +421,15 @@ impl WebView<'_> {
     ///
     /// Call this in every frame in which the page is hidden but should keep its state, such as
     /// in a tab that isn't selected.
-    pub fn keep_alive(ctx: &Context, id: impl Into<Id>) {
-        if let Some(mailbox) = Mailbox::of(ctx) {
-            mailbox.with_view_state(id.into(), |state| {
-                state.mark_alive(ctx.cumulative_pass_nr_for(ViewportId::ROOT));
-            });
+    #[must_use = "Calling this method consumes all pending events"]
+    pub fn keep_alive(ctx: &Context, id: impl Into<Id>) -> Vec<WebViewEvent> {
+        match Mailbox::of(ctx) {
+            Some(mailbox) => mailbox
+                .with_view_state(id.into(), |state| {
+                    state.mark_alive(ctx.cumulative_pass_nr_for(ViewportId::ROOT))
+                })
+                .unwrap_or_default(),
+            None => vec![],
         }
     }
 
@@ -709,6 +713,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(unused_must_use)]
     fn keep_alive_keeps_a_hidden_page() {
         let mut harness = Harness::new(false);
         harness.frame(vec![], |ui| {
@@ -716,7 +721,9 @@ mod tests {
         });
         harness.log();
 
-        harness.frame(vec![], |ui| WebView::keep_alive(ui.ctx(), id()));
+        harness.frame(vec![], |ui| {
+            WebView::keep_alive(ui.ctx(), id());
+        });
         assert_eq!(harness.log(), ["hide"]);
 
         harness.frame(vec![], |ui| {
@@ -726,16 +733,21 @@ mod tests {
     }
 
     #[test]
+    #[expect(unused_must_use)]
     fn a_hidden_page_that_takes_the_focus_does_not_take_egui_focus_when_shown_again() {
         let mut harness = Harness::new(false);
         harness.frame(vec![], |ui| {
             show(ui, "a");
         });
-        harness.frame(vec![], |ui| WebView::keep_alive(ui.ctx(), id()));
+        harness.frame(vec![], |ui| {
+            WebView::keep_alive(ui.ctx(), id());
+        });
 
         // The hidden page takes the focus by itself.
         harness.focused.set(true);
-        harness.frame(vec![], |ui| WebView::keep_alive(ui.ctx(), id()));
+        harness.frame(vec![], |ui| {
+            WebView::keep_alive(ui.ctx(), id());
+        });
 
         harness.frame(vec![], |ui| {
             show(ui, "a");
