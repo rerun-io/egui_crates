@@ -41,6 +41,7 @@ egui_kittest = { version = "0.37.0", default-features = false, features = [
 egui_demo_lib = "0.37.0"
 egui_extras = { version = "0.37.0", features = ["image", "svg"] }
 insta.workspace = true
+parking_lot = "0.12.5"
 
 [lints]
 workspace = true

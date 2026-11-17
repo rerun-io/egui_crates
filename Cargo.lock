@@ -1520,6 +1520,7 @@ dependencies = [
  "egui_inspection",
  "egui_kittest 0.37.0",
  "insta",
+ "parking_lot",
  "schemars",
  "serde",
  "serde_json",

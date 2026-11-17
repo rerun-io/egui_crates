@@ -21,6 +21,8 @@ pub mod transport;
 pub mod tree;
 
 #[cfg(test)]
+mod dispatch_tests;
+#[cfg(test)]
 mod real_app_tests;
 
 pub use args::*;
