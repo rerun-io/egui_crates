@@ -11,7 +11,7 @@ use std::sync::Arc;
 use egui::mutex::Mutex;
 use egui::{Context, Id, ViewportId};
 
-use crate::instance::{FocusChange, PageFocus};
+use crate::instance::FocusChange;
 use crate::{PageWidget, WebViewEvent, WebViewSource};
 
 /// The number of the root viewport's current pass (see [`Context::cumulative_pass_nr`]).
@@ -36,23 +36,23 @@ pub(crate) struct Inner {
     pub fallback: Option<Arc<dyn PageWidget>>,
 
     /// One slot per webview id. A `Vec`, because there are few and they are visited in order.
-    pub slots: Vec<(Id, Slot)>,
+    pub webviews: Vec<(Id, WebViewState)>,
 }
 
 impl Inner {
-    /// The slot of `id`. Creates it if it doesn't exist.
-    pub fn slot(&mut self, id: Id) -> &mut Slot {
-        let index = self.slots.iter().position(|(slot_id, _)| *slot_id == id);
+    /// The webview state of `id`. Creates it if it doesn't exist.
+    pub fn get_or_create_state(&mut self, id: Id) -> &mut WebViewState {
+        let index = self.webviews.iter().position(|(slot_id, _)| *slot_id == id);
         let index = index.unwrap_or_else(|| {
-            self.slots.push((id, Slot::default()));
-            self.slots.len() - 1
+            self.webviews.push((id, WebViewState::default()));
+            self.webviews.len() - 1
         });
-        &mut self.slots[index].1
+        &mut self.webviews[index].1
     }
 
-    /// The slot of `id`, if it exists.
-    pub fn existing_slot(&mut self, id: Id) -> Option<&mut Slot> {
-        self.slots
+    /// The webview state of `id`, if it exists.
+    pub fn get_state(&mut self, id: Id) -> Option<&mut WebViewState> {
+        self.webviews
             .iter_mut()
             .find(|(slot_id, _)| *slot_id == id)
             .map(|(_, slot)| slot)
@@ -63,7 +63,7 @@ impl Mailbox {
     pub fn new(fallback: Option<Arc<dyn PageWidget>>) -> Self {
         Self(Arc::new(Mutex::new(Inner {
             fallback,
-            slots: Vec::new(),
+            webviews: Vec::new(),
         })))
     }
 
@@ -88,54 +88,66 @@ impl Mailbox {
     pub fn with<R>(&self, f: impl FnOnce(&mut Inner) -> R) -> R {
         f(&mut self.0.lock())
     }
+
+    /// Locks the mailbox for `f`, running `f` with the webview state of `id`, if it exists.
+    pub fn with_view_state<R>(&self, id: Id, f: impl FnOnce(&mut WebViewState) -> R) -> Option<R> {
+        self.with(|inner| {
+            if let Some(state) = inner.get_state(id) {
+                return Some(f(state));
+            }
+            None
+        })
+    }
 }
 
 /// One webview's data. Only [`crate::WebView::show`] creates a slot, so every slot stands for a
 /// page that some code wants to see.
 #[derive(Default)]
-pub(crate) struct Slot {
-    pub to_page: ToPage,
-    pub to_widget: ToWidget,
-}
-
-/// The widget writes this in the pass. The registry reads it after the pass.
-#[derive(Default)]
-pub(crate) struct ToPage {
-    // These pile up until the registry takes them. A pass with nothing to say leaves them alone.
-    // A discarded pass is followed by one with no input, and that one must not erase them.
-    /// From [`crate::WebView::reload`] and friends. Oldest first.
-    pub commands: Vec<Command>,
-
-    /// What happened to the widget's egui focus. The latest change wins.
-    pub focus: Option<FocusChange>,
-
-    // These describe the latest pass. Every pass that shows the widget replaces them.
-    /// What the builder was told to show. It is shared, so a long HTML string isn't copied in
-    /// every pass.
+pub(crate) struct WebViewState {
     pub source: Option<Arc<WebViewSource>>,
 
-    /// The pass that last showed the widget.
-    pub shown: Option<u64>,
+    pub alive_pass: Option<u64>,
+    pub visible: bool,
 
-    /// Whether the widget had egui's focus at the end of that pass.
-    pub focused: bool,
+    pub page_command_queue: Vec<Command>,
+    pub events: Vec<WebViewEvent>,
 
-    /// The pass that last asked for the page to stay. [`crate::WebView::show`] sets it, and so
-    /// does [`crate::WebView::keep_alive`].
-    pub alive: Option<u64>,
+    pub ui: UiState,
+
+    pub needs_repaint: bool,
 }
 
-impl ToPage {
-    /// Takes what piled up, and copies the rest.
-    pub fn take(&mut self) -> Self {
-        Self {
-            commands: std::mem::take(&mut self.commands),
-            focus: self.focus.take(),
-            source: self.source.clone(),
-            shown: self.shown,
-            focused: self.focused,
-            alive: self.alive,
-        }
+#[derive(Default)]
+pub struct UiState {
+    pub widget: Option<WidgetResult>,
+    /// Any pending focus change the widget needs to know about next pass.
+    pub pending_focus_change: Option<FocusChange>,
+}
+
+type WidgetResult = Result<Arc<dyn PageWidget>, String>;
+
+impl WebViewState {
+    pub fn mark_shown(&mut self, pass: u64) {
+        self.mark_alive(pass);
+        self.visible = true;
+    }
+    pub fn mark_alive(&mut self, pass: u64) {
+        self.alive_pass = Some(pass);
+    }
+
+    pub fn extend_events(&mut self, events: impl IntoIterator<Item = WebViewEvent>) {
+        let len = self.events.len();
+        self.events.extend(events);
+        self.needs_repaint |= len != self.events.len();
+    }
+
+    pub fn set_page_widget(&mut self, page_widget: WidgetResult) {
+        self.ui.widget = Some(page_widget);
+        self.needs_repaint = true;
+    }
+
+    pub fn push_command(&mut self, command: Command) {
+        self.page_command_queue.push(command);
     }
 }
 
@@ -145,52 +157,5 @@ pub(crate) enum Command {
     Back,
     Forward,
     EvaluateScript(String),
-}
-
-/// The registry writes this after the pass. The widget reads it in the next pass.
-#[derive(Default)]
-pub(crate) struct ToWidget {
-    /// The page's widget, or why the page couldn't be created. The widget shows that text in
-    /// place of the page. `None` until the registry has tried to create the page.
-    pub page: Option<Result<Arc<dyn PageWidget>, String>>,
-
-    /// What happened in the page. The widget takes them.
-    pub events: Vec<WebViewEvent>,
-
-    /// The page took the focus, or Tab left it. The widget takes it.
-    pub focus: Option<PageFocus>,
-}
-
-impl ToWidget {
-    /// How many events are kept for a page that is kept alive but not shown.
-    const MAX_WAITING_EVENTS: usize = 1024;
-
-    /// Adds what the registry has to tell the widget after this frame. Returns whether the
-    /// widget has something new to read.
-    ///
-    /// In `news`, `page` and `focus` are only set when they changed. `shown` is whether the
-    /// widget was shown in the latest pass.
-    pub fn merge(&mut self, news: Self, shown: bool) -> bool {
-        // The events of a hidden page wait. Nobody reads them before the page is shown again.
-        let mut changed = shown && !news.events.is_empty();
-        self.events.extend(news.events);
-        let waiting = self.events.len();
-        if Self::MAX_WAITING_EVENTS < waiting {
-            self.events.drain(..waiting - Self::MAX_WAITING_EVENTS);
-        }
-
-        if news.page.is_some() {
-            self.page = news.page;
-            changed = true;
-        }
-
-        if !shown {
-            // Nobody will act on it, and it would be stale by the time the widget is back.
-            self.focus = None;
-        } else if news.focus.is_some() {
-            self.focus = news.focus;
-            changed = true;
-        }
-        changed
-    }
+    ChangeFocus(FocusChange),
 }

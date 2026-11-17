@@ -6,7 +6,7 @@ use eframe::EmbeddedViews;
 use egui::{Context, EmbeddedViewOutput, Id, Sense, Ui, Vec2, ViewportId};
 
 use crate::instance::show_widget;
-use crate::mailbox::{Command, Mailbox, Slot, ToPage, ToWidget, is_latest, now};
+use crate::mailbox::{Command, Mailbox, WebViewState};
 use crate::{
     Error, PageWidget, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource, warn,
 };
@@ -63,9 +63,6 @@ struct Page {
     /// The page, or why it couldn't be created. A failed page is tried again when the source
     /// changes, and not before.
     instance: Result<WebViewInstance, String>,
-
-    /// Whether the widget still has to be told about this page.
-    new: bool,
 }
 
 impl std::fmt::Debug for WebViews {
@@ -127,38 +124,31 @@ impl WebViews {
         // as not shown and are closed below. They are created again in the next frame.
         self.mailbox.install(ctx);
 
-        let requests = self.mailbox.with(|inner| {
-            inner
-                .slots
-                .iter_mut()
-                .map(|(id, slot)| (*id, slot.to_page.take()))
-                .collect::<Vec<_>>()
+        let mailbox = self.mailbox.clone();
+
+        mailbox.with(|mail| {
+            let mut closed = Vec::new();
+            for (id, state) in &mut mail.webviews {
+                if state
+                    .alive_pass
+                    .is_none_or(|pass| pass + 1 < ctx.cumulative_pass_nr_for(ViewportId::ROOT))
+                {
+                    closed.push(*id);
+                    continue;
+                }
+                self.update_page(ctx, *id, state, views);
+                if std::mem::take(&mut state.needs_repaint) {
+                    // The widget reads the mailbox in its next pass, so make sure there is one.
+                    ctx.request_repaint_of(ViewportId::ROOT);
+                }
+            }
+
+            if !closed.is_empty() {
+                // Dropping a page closes it.
+                self.pages.retain(|page| !closed.contains(&page.id));
+                mail.webviews.retain(|(id, _)| !closed.contains(id));
+            }
         });
-
-        let mut closed = Vec::new();
-        for (id, request) in requests {
-            if !request.alive.is_some_and(|pass| is_latest(ctx, pass)) {
-                closed.push(id);
-                continue;
-            }
-            let shown = request.shown.is_some_and(|pass| is_latest(ctx, pass));
-
-            let news = self.update_page(ctx, id, request, shown, views);
-            let repaint = self
-                .mailbox
-                .with(|inner| inner.slot(id).to_widget.merge(news, shown));
-            if repaint {
-                // The widget reads the mailbox in its next pass, so make sure there is one.
-                ctx.request_repaint_of(ViewportId::ROOT);
-            }
-        }
-
-        if !closed.is_empty() {
-            // Dropping a page closes it.
-            self.pages.retain(|page| !closed.contains(&page.id));
-            self.mailbox
-                .with(|inner| inner.slots.retain(|(id, _)| !closed.contains(id)));
-        }
     }
 
     /// Does one page's work for this frame. `shown` is whether its widget was shown in the
@@ -167,79 +157,84 @@ impl WebViews {
         &mut self,
         ctx: &Context,
         id: Id,
-        request: ToPage,
-        shown: bool,
+        state: &mut WebViewState,
         views: &[EmbeddedViewOutput],
-    ) -> ToWidget {
+    ) {
         let Self { create, pages, .. } = self;
-        let ToPage {
-            commands,
-            focus,
-            source,
-            focused,
-            ..
-        } = request;
-        // What this frame has to tell the widget.
-        let mut news = ToWidget::default();
 
-        let index = pages.iter().position(|page| page.id == id);
-        let page = if let Some(index) = index {
-            let page = &mut pages[index];
-            if let Some(new) = &source
+        let mut is_new_page = false;
+
+        // Whether the widget was shown in the last pass
+        let was_shown = state
+            .alive_pass
+            .is_some_and(|pass| pass + 1 == ctx.cumulative_pass_nr_for(ViewportId::ROOT))
+            && state.visible;
+
+        let page = if let Some(page) = pages.iter_mut().find(|page| page.id == id) {
+            if let Some(new) = &state.source
                 && page.source.as_ref() != Some(new)
             {
                 // The builder was told to show something else.
                 if let Ok(instance) = &mut page.instance {
                     warn(instance.load(new));
                 } else {
-                    page.instance = create_page(create, ctx, id, source.as_deref());
-                    page.new = true;
+                    is_new_page = true;
+                    page.instance = create_page(create, ctx, id, state.source.as_deref());
                 }
-                page.source = source;
+                page.source = state.source.clone();
             }
             page
         } else {
-            pages.push(Page {
+            is_new_page = true;
+            pages.push_mut(Page {
                 id,
-                instance: create_page(create, ctx, id, source.as_deref()),
-                source,
-                new: true,
-            });
-            pages.last_mut().expect("just pushed")
+                instance: create_page(create, ctx, id, state.source.as_deref()),
+                source: state.source.clone(),
+            })
         };
 
-        if std::mem::take(&mut page.new) {
-            news.page = Some(match &page.instance {
+        state.needs_repaint |= is_new_page;
+
+        if is_new_page {
+            state.set_page_widget(match &page.instance {
                 Ok(instance) => Ok(instance.widget()),
                 Err(failed) => Err(failed.clone()),
             });
         }
         let Ok(instance) = &mut page.instance else {
-            return news;
+            return;
         };
 
-        for command in commands {
+        let mut focus_change = None;
+
+        for command in state.page_command_queue.drain(..) {
             match command {
                 Command::Load(source) => warn(instance.load(&source)),
                 Command::EvaluateScript(script) => warn(instance.evaluate_script(&script)),
                 Command::Reload => instance.reload(),
                 Command::Back => instance.back(),
                 Command::Forward => instance.forward(),
+                Command::ChangeFocus(change) => focus_change = Some(change),
             }
         }
 
         // The order matters here. First tell the page what the widget saw in the pass, and only
         // then ask the page for news. Asked first, a page that just got the focus from egui
         // would look like it took the focus by itself.
-        if let Some(change) = focus {
+        if let Some(change) = focus_change.take() {
             instance.apply_focus(change);
         }
-        instance.blur_unless(shown && focused);
-        news.focus = instance.poll_focus();
-        news.events = instance.take_events();
+
+        let focused = ctx.memory(|mem| mem.has_focus(id));
+        if !was_shown || !focused {
+            instance.blur();
+        }
+        if let Some(focus_change) = instance.poll_focus() {
+            state.ui.pending_focus_change = Some(focus_change);
+        }
+        state.extend_events(instance.take_events());
 
         instance.place(ctx, views);
-        news
     }
 }
 
@@ -287,26 +282,28 @@ pub struct WebView<'a> {
 }
 
 /// A [`WebViewSource`] that borrows its text.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SourceRef<'a> {
     Url(&'a str),
     Html(&'a str),
 }
 
-impl SourceRef<'_> {
-    fn is(self, source: &WebViewSource) -> bool {
-        match (self, source) {
+impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
+    fn eq(&self, other: &S) -> bool {
+        match (self, other.as_ref()) {
             (Self::Url(a), WebViewSource::Url(b)) | (Self::Html(a), WebViewSource::Html(b)) => {
                 a == b
             }
             _ => false,
         }
     }
+}
 
-    fn to_source(self) -> WebViewSource {
-        match self {
-            Self::Url(url) => WebViewSource::Url(url.to_owned()),
-            Self::Html(html) => WebViewSource::Html(html.to_owned()),
+impl From<SourceRef<'_>> for WebViewSource {
+    fn from(val: SourceRef<'_>) -> Self {
+        match val {
+            SourceRef::Url(url) => Self::Url(url.to_owned()),
+            SourceRef::Html(html) => Self::Html(html.to_owned()),
         }
     }
 }
@@ -363,37 +360,35 @@ impl<'a> WebView<'a> {
     ///
     /// If the page can't be created, this shows the error as text in the page's rect.
     pub fn show(self, ui: &mut Ui) -> WebViewResponse {
-        let Self { id, source, size } = self;
+        let Self {
+            id,
+            source: new_source,
+            size,
+        } = self;
         let size = size.unwrap_or_else(|| ui.available_size());
 
         let Some(mailbox) = Mailbox::of(ui.ctx()) else {
             let text = "This app has no `egui_webview::WebViews`";
             return placeholder(ui, id, size, Some(text), Vec::new());
         };
-        let at = now(ui.ctx());
+        let pass = ui.ctx().cumulative_pass_nr_for(ViewportId::ROOT);
 
-        let (page, events, page_focus) = mailbox.with(|inner| {
+        let (page, events, pending_focus_change) = mailbox.with(|inner| {
             let fallback = inner.fallback.clone();
-            let slot = inner.slot(id);
+            let state = inner.get_or_create_state(id);
 
-            let to_page = &mut slot.to_page;
-            to_page.alive = Some(at);
-            match source {
-                None => to_page.source = None,
-                Some(source) => {
-                    // Only copy the text when it changed.
-                    let same = to_page.source.as_deref().is_some_and(|old| source.is(old));
-                    if !same {
-                        to_page.source = Some(Arc::new(source.to_source()));
-                    }
-                }
-            }
+            state.mark_shown(pass);
+            let cur_source = state.source.as_ref();
 
-            let to_widget = &mut slot.to_widget;
+            state.source = new_source
+                // Only copy the source if the text changed
+                .filter(|new| cur_source.is_none_or(|cur| new != cur))
+                .map(|s| Arc::new(s.into()));
+
             (
-                to_widget.page.clone().or_else(|| fallback.map(Ok)),
-                std::mem::take(&mut to_widget.events),
-                to_widget.focus.take(),
+                state.ui.widget.clone().or_else(|| fallback.map(Ok)),
+                std::mem::take(&mut state.events),
+                state.ui.pending_focus_change.take(),
             )
         });
 
@@ -404,17 +399,13 @@ impl<'a> WebView<'a> {
             None => return placeholder(ui, id, size, None, events),
         };
 
-        let shown = show_widget(ui, id, size, &*widget, page_focus);
-        // Not `Response::has_focus`. That is also false while egui's window doesn't have the OS
-        // focus, and on Windows the page's own child window takes it.
-        let focused = ui.memory(|mem| mem.has_focus(id));
+        let shown = show_widget(ui, id, size, &*widget, pending_focus_change);
 
         mailbox.with(|inner| {
-            let to_page = &mut inner.slot(id).to_page;
-            to_page.shown = Some(at);
-            to_page.focused = focused;
+            let state = inner.get_or_create_state(id);
+            // Tell the webview about any focus changes from the egui side.
             if let Some(change) = shown.focus_change {
-                to_page.focus = Some(change);
+                state.push_command(Command::ChangeFocus(change));
             }
         });
 
@@ -434,13 +425,16 @@ impl WebView<'_> {
     /// Call this in every frame in which the page is hidden but should keep its state, such as
     /// in a tab that isn't selected.
     pub fn keep_alive(ctx: &Context, id: impl Into<Id>) {
-        let at = now(ctx);
-        with_slot(ctx, id.into(), |slot| slot.to_page.alive = Some(at));
+        if let Some(mailbox) = Mailbox::of(ctx) {
+            mailbox.with_view_state(id.into(), |state| {
+                state.mark_alive(ctx.cumulative_pass_nr_for(ViewportId::ROOT));
+            });
+        }
     }
 
     /// Loads `source` in the page of `id`, replacing the current page.
     pub fn load(ctx: &Context, id: impl Into<Id>, source: WebViewSource) {
-        command(ctx, id.into(), Command::Load(source));
+        push_command(ctx, id.into(), Command::Load(source));
     }
 
     /// Loads the page at `url` in the page of `id`.
@@ -450,38 +444,28 @@ impl WebView<'_> {
 
     /// Runs `script` in the page of `id`. See [`WebViewInstance::evaluate_script`].
     pub fn evaluate_script(ctx: &Context, id: impl Into<Id>, script: impl Into<String>) {
-        command(ctx, id.into(), Command::EvaluateScript(script.into()));
+        push_command(ctx, id.into(), Command::EvaluateScript(script.into()));
     }
 
     /// Reloads the page of `id`.
     pub fn reload(ctx: &Context, id: impl Into<Id>) {
-        command(ctx, id.into(), Command::Reload);
+        push_command(ctx, id.into(), Command::Reload);
     }
 
     /// Navigates back in the history of the page of `id`. See [`WebViewInstance::back`].
     pub fn back(ctx: &Context, id: impl Into<Id>) {
-        command(ctx, id.into(), Command::Back);
+        push_command(ctx, id.into(), Command::Back);
     }
 
     /// Navigates forward in the history of the page of `id`.
     pub fn forward(ctx: &Context, id: impl Into<Id>) {
-        command(ctx, id.into(), Command::Forward);
+        push_command(ctx, id.into(), Command::Forward);
     }
 }
 
-fn command(ctx: &Context, id: Id, command: Command) {
-    with_slot(ctx, id, |slot| slot.to_page.commands.push(command));
-}
-
-/// Runs `f` on the slot of `id`. Does nothing if the app has no [`WebViews`], or if
-/// [`WebView::show`] hasn't run for `id`.
-fn with_slot(ctx: &Context, id: Id, f: impl FnOnce(&mut Slot)) {
+fn push_command(ctx: &Context, id: Id, command: Command) {
     if let Some(mailbox) = Mailbox::of(ctx) {
-        mailbox.with(|inner| {
-            if let Some(slot) = inner.existing_slot(id) {
-                f(slot);
-            }
-        });
+        mailbox.with_view_state(id, |state| state.page_command_queue.push(command));
     }
 }
 
