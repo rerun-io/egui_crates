@@ -74,12 +74,12 @@ opt-level = 2
 
 # While this is uncommented every egui crate the workspace uses must be listed here, or
 # cargo builds it from crates.io against a different egui and the compile fails.
-eframe = { git = "https://github.com/emilk/egui.git", branch = "emilk/resize-line-stroke" } # TODO(emilk): use released egui
-egui = { git = "https://github.com/emilk/egui.git", branch = "emilk/resize-line-stroke" } # TODO(emilk): use released egui
-egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "emilk/resize-line-stroke" } # TODO(emilk): use released egui
-egui_extras = { git = "https://github.com/emilk/egui.git", branch = "emilk/resize-line-stroke" } # TODO(emilk): use released egui
-egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "emilk/resize-line-stroke" } # TODO(emilk): use released egui
-egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "emilk/resize-line-stroke" } # TODO(emilk): use released egui
+eframe = { git = "https://github.com/emilk/egui.git", branch = "main" } # TODO(emilk): use released egui
+egui = { git = "https://github.com/emilk/egui.git", branch = "main" } # TODO(emilk): use released egui
+egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "main" } # TODO(emilk): use released egui
+egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main" } # TODO(emilk): use released egui
+egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "main" } # TODO(emilk): use released egui
+egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "main" } # TODO(emilk): use released egui
 
 # eframe = { path = "../egui/crates/eframe" }
 # egui = { path = "../egui/crates/egui" }
