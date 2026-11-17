@@ -1,6 +1,6 @@
 #![allow(clippy::tuple_array_conversions)]
 
-use egui::{NumExt as _, Rect, ResizeState, emath::GuiRounding as _, pos2, vec2};
+use egui::{HighlightState, NumExt as _, Rect, emath::GuiRounding as _, pos2, vec2};
 use itertools::Itertools as _;
 
 use crate::behavior::{EditAction, LayoutContext};
@@ -274,12 +274,12 @@ impl Linear {
             let x = egui::lerp(left_rect.right()..=right_rect.left(), 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui, resize_id, ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, HighlightState::Idle);
                 ui.painter().vline(x, parent_rect.y_range(), stroke);
                 continue;
             }
 
-            let mut resize_state = ResizeState::Idle;
+            let mut resize_state = HighlightState::Idle;
             let line_rect = Rect::from_center_size(
                 pos2(x, parent_rect.center().y),
                 vec2(
@@ -302,7 +302,7 @@ impl Linear {
                     |tile_id: TileId| tree.tiles.rect_or_die(tile_id).width(),
                 );
 
-                if resize_state != ResizeState::Idle {
+                if resize_state != HighlightState::Idle {
                     ui.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
                 }
             }
@@ -348,12 +348,12 @@ impl Linear {
             let y = egui::lerp(top_rect.bottom()..=bottom_rect.top(), 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui, resize_id, ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, HighlightState::Idle);
                 ui.painter().hline(parent_rect.x_range(), y, stroke);
                 continue;
             }
 
-            let mut resize_state = ResizeState::Idle;
+            let mut resize_state = HighlightState::Idle;
             let line_rect = Rect::from_center_size(
                 pos2(parent_rect.center().x, y),
                 vec2(
@@ -376,7 +376,7 @@ impl Linear {
                     |tile_id: TileId| tree.tiles.rect_or_die(tile_id).height(),
                 );
 
-                if resize_state != ResizeState::Idle {
+                if resize_state != HighlightState::Idle {
                     ui.set_cursor_icon(egui::CursorIcon::ResizeVertical);
                 }
             }
@@ -416,7 +416,7 @@ fn resize_interaction<Pane>(
     dx: f32,
     i: usize,
     tile_width: impl Fn(TileId) -> f32,
-) -> ResizeState {
+) -> HighlightState {
     if splitter_response.double_clicked() {
         behavior.on_edit(EditAction::TileResized);
 
@@ -424,7 +424,7 @@ fn resize_interaction<Pane>(
         let mean = 0.5 * (shares[left] + shares[right]);
         shares[left] = mean;
         shares[right] = mean;
-        ResizeState::Hovered
+        HighlightState::Hovered
     } else if splitter_response.dragged() {
         behavior.on_edit(EditAction::TileResized);
 
@@ -442,11 +442,11 @@ fn resize_interaction<Pane>(
             shares[left] +=
                 shrink_shares(behavior, shares, &children[i + 1..], dx.abs(), tile_width);
         }
-        ResizeState::Dragged
+        HighlightState::Active
     } else if splitter_response.hovered() {
-        ResizeState::Hovered
+        HighlightState::Hovered
     } else {
-        ResizeState::Idle
+        HighlightState::Idle
     }
 }
 
