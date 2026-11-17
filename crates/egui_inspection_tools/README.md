@@ -1,7 +1,6 @@
 # egui_inspection_tools
 
 [![Latest version](https://img.shields.io/crates/v/egui_inspection_tools.svg)](https://crates.io/crates/egui_inspection_tools)
-[![Documentation](https://docs.rs/egui_inspection_tools/badge.svg)](https://docs.rs/egui_inspection_tools)
 ![MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Apache](https://img.shields.io/badge/license-Apache-blue.svg)
 
