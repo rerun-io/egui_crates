@@ -1,5 +1,5 @@
 ---
-source: crates/egui_mcp/src/tree.rs
+source: crates/egui_inspection_tools/src/tree.rs
 expression: "pretty(&query_all(&QueryFilter::default()))"
 ---
 [

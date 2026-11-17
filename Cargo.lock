@@ -1509,6 +1509,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_inspection_tools"
+version = "0.1.0"
+dependencies = [
+ "accesskit 0.25.1",
+ "accesskit_consumer 0.39.1",
+ "egui 0.37.0",
+ "egui_demo_lib",
+ "egui_extras",
+ "egui_kittest 0.37.0",
+ "insta",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "egui_kittest"
 version = "0.34.1"
 source = "git+https://github.com/emilk/egui?branch=lucas%2Fkittest-inspect#0cefd89141a072119201b73984b6ca606ad933e6"
@@ -1558,10 +1574,8 @@ dependencies = [
  "accesskit_consumer 0.39.1",
  "base64 0.23.1",
  "egui 0.37.0",
- "egui_demo_lib",
- "egui_extras",
  "egui_inspection",
- "egui_kittest 0.37.0",
+ "egui_inspection_tools",
  "insta",
  "rmcp",
  "schemars",
