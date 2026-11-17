@@ -556,7 +556,43 @@ impl ServerHandler for Server {
 mod tests {
     use std::fmt::Write as _;
 
+    use egui_inspection::protocol::{EncodedPng, Request, Response};
+
     use super::*;
+    use crate::bridge::{PeerInfo, Transport};
+
+    /// An app that answers every screenshot with the same tiny image.
+    struct ScreenshotApp;
+
+    impl Transport for ScreenshotApp {
+        fn request(&self, _req: Request) -> BoxFuture<'_, Result<Response, String>> {
+            Box::pin(std::future::ready(Ok(Response::Screenshot(EncodedPng {
+                size: [4, 3],
+                bytes: b"png".to_vec(),
+            }))))
+        }
+    }
+
+    /// `save_path` is MCP's own, so a batch must reach MCP's `screenshot`, not the core one.
+    #[tokio::test]
+    async fn a_batched_screenshot_still_saves_to_disk() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let path = dir.path().join("screenshot.png");
+        let path_str = path.to_str().expect("utf8 path");
+        let peer_info = PeerInfo {
+            transport: "test".to_owned(),
+            protocol_version: 0,
+            label: None,
+        };
+        let ui = UiServer::new(Bridge::with_transport(ScreenshotApp, peer_info));
+        let args =
+            json!({ "actions": [{ "name": "screenshot", "args": { "save_path": path_str } }] });
+        let output = ui
+            .call("batch", args.as_object().expect("object").clone())
+            .await;
+        assert!(!output.is_error, "{output:?}");
+        assert_eq!(std::fs::read(&path).expect("saved"), b"png");
+    }
 
     /// Snapshot the entire agent-facing surface: the server `instructions` plus every tool's
     /// name, description, and input/output schemas — exactly what an MCP client is shown on
