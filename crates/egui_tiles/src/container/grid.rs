@@ -1,5 +1,5 @@
 use egui::{
-    NumExt as _, Rect,
+    NumExt as _, Rect, ResizeState,
     emath::{GuiRounding as _, Rangef},
     pos2, vec2,
 };
@@ -7,8 +7,7 @@ use itertools::Itertools as _;
 
 use crate::behavior::{EditAction, LayoutContext};
 use crate::{
-    Behavior, ContainerInsertion, DropContext, InsertionPoint, ResizeState, SimplifyAction, TileId,
-    Tiles, Tree,
+    Behavior, ContainerInsertion, DropContext, InsertionPoint, SimplifyAction, TileId, Tiles, Tree,
 };
 
 /// How to lay out the children of a grid.
@@ -302,7 +301,7 @@ impl Grid {
             let x = egui::lerp(left.max..=right.min, 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui.style(), ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, ResizeState::Idle);
                 ui.painter().vline(x, parent_rect.y_range(), stroke);
                 continue;
             }
@@ -333,7 +332,7 @@ impl Grid {
                 }
             }
 
-            let stroke = behavior.resize_stroke(ui.style(), resize_state);
+            let stroke = behavior.resize_stroke(ui, resize_id, resize_state);
             ui.painter().vline(x, parent_rect.y_range(), stroke);
         }
     }
@@ -354,7 +353,7 @@ impl Grid {
             let y = egui::lerp(top.max..=bottom.min, 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui.style(), ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, ResizeState::Idle);
                 ui.painter().hline(parent_rect.x_range(), y, stroke);
                 continue;
             }
@@ -385,7 +384,7 @@ impl Grid {
                 }
             }
 
-            let stroke = behavior.resize_stroke(ui.style(), resize_state);
+            let stroke = behavior.resize_stroke(ui, resize_id, resize_state);
             ui.painter().hline(parent_rect.x_range(), y, stroke);
         }
     }
@@ -449,7 +448,7 @@ fn resize_interaction<Pane>(
         let mean = 0.5 * (shares[left] + shares[right]);
         shares[left] = mean;
         shares[right] = mean;
-        ResizeState::Hovering
+        ResizeState::Hovered
     } else if splitter_response.dragged() {
         behavior.on_edit(EditAction::TileResized);
 
@@ -472,9 +471,9 @@ fn resize_interaction<Pane>(
                 tile_width,
             );
         }
-        ResizeState::Dragging
+        ResizeState::Dragged
     } else if splitter_response.hovered() {
-        ResizeState::Hovering
+        ResizeState::Hovered
     } else {
         ResizeState::Idle
     }
