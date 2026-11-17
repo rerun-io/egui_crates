@@ -6,7 +6,7 @@ use eframe::EmbeddedViews;
 use egui::{Context, EmbeddedViewOutput, Id, Sense, Ui, Vec2, ViewportId};
 
 use crate::instance::show_widget;
-use crate::mailbox::{Command, Mailbox, WebViewState};
+use crate::mailbox::{Command, Mailbox};
 use crate::{
     Error, PageWidget, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource, warn,
 };
@@ -124,54 +124,47 @@ impl WebViews {
         // as not shown and are closed below. They are created again in the next frame.
         self.mailbox.install(ctx);
 
-        let mailbox = self.mailbox.clone();
-
-        mailbox.with(|mail| {
-            let mut closed = Vec::new();
-            for (id, state) in &mut mail.webviews {
-                if state
-                    .alive_pass
-                    .is_none_or(|pass| pass + 1 < ctx.cumulative_pass_nr_for(ViewportId::ROOT))
-                {
-                    closed.push(*id);
-                    continue;
-                }
-                self.update_page(ctx, *id, state, views);
-                if std::mem::take(&mut state.needs_repaint) {
-                    // The widget reads the mailbox in its next pass, so make sure there is one.
-                    ctx.request_repaint_of(ViewportId::ROOT);
-                }
-            }
-
-            if !closed.is_empty() {
-                // Dropping a page closes it.
-                self.pages.retain(|page| !closed.contains(&page.id));
-                mail.webviews.retain(|(id, _)| !closed.contains(id));
-            }
+        // The mailbox is only locked to move data in and out of it. Pages, the factory, and egui
+        // run outside the lock, so they can call back into the mailbox, for example with
+        // `WebView::load`.
+        let pass = ctx.cumulative_pass_nr_for(ViewportId::ROOT);
+        let alive = self.mailbox.with(|mail| {
+            // Close the webviews that were neither shown nor kept alive in the latest pass.
+            mail.webviews
+                .retain(|(_, state)| state.alive_pass.is_some_and(|alive| pass <= alive + 1));
+            mail.webviews.iter().map(|(id, _)| *id).collect::<Vec<_>>()
         });
+        // Dropping a page closes it.
+        self.pages.retain(|page| alive.contains(&page.id));
+
+        for id in alive {
+            self.update_page(ctx, id, pass, views);
+        }
     }
 
-    /// Does one page's work for this frame. `shown` is whether its widget was shown in the
-    /// latest pass.
-    fn update_page(
-        &mut self,
-        ctx: &Context,
-        id: Id,
-        state: &mut WebViewState,
-        views: &[EmbeddedViewOutput],
-    ) {
-        let Self { create, pages, .. } = self;
+    /// Does one page's work for this frame. `pass` is the number of the root viewport's next
+    /// pass.
+    fn update_page(&mut self, ctx: &Context, id: Id, pass: u64, views: &[EmbeddedViewOutput]) {
+        let Self {
+            mailbox,
+            create,
+            pages,
+        } = self;
+
+        let Some((source, was_shown, commands)) = mailbox.with_view_state(id, |state| {
+            // Whether the widget was shown in the latest pass.
+            let was_shown =
+                state.visible && state.alive_pass.is_some_and(|alive| alive + 1 == pass);
+            let commands = std::mem::take(&mut state.page_command_queue);
+            (state.source.clone(), was_shown, commands)
+        }) else {
+            return;
+        };
 
         let mut is_new_page = false;
 
-        // Whether the widget was shown in the last pass
-        let was_shown = state
-            .alive_pass
-            .is_some_and(|pass| pass + 1 == ctx.cumulative_pass_nr_for(ViewportId::ROOT))
-            && state.visible;
-
         let page = if let Some(page) = pages.iter_mut().find(|page| page.id == id) {
-            if let Some(new) = &state.source
+            if let Some(new) = &source
                 && page.source.as_ref() != Some(new)
             {
                 // The builder was told to show something else.
@@ -179,62 +172,71 @@ impl WebViews {
                     warn(instance.load(new));
                 } else {
                     is_new_page = true;
-                    page.instance = create_page(create, ctx, id, state.source.as_deref());
+                    page.instance = create_page(create, ctx, id, source.as_deref());
                 }
-                page.source = state.source.clone();
+                page.source = source;
             }
             page
         } else {
             is_new_page = true;
             pages.push_mut(Page {
                 id,
-                instance: create_page(create, ctx, id, state.source.as_deref()),
-                source: state.source.clone(),
+                instance: create_page(create, ctx, id, source.as_deref()),
+                source,
             })
         };
 
-        state.needs_repaint |= is_new_page;
+        let new_widget = is_new_page.then(|| match &page.instance {
+            Ok(instance) => Ok(instance.widget()),
+            Err(failed) => Err(failed.clone()),
+        });
 
-        if is_new_page {
-            state.set_page_widget(match &page.instance {
-                Ok(instance) => Ok(instance.widget()),
-                Err(failed) => Err(failed.clone()),
-            });
-        }
-        let Ok(instance) = &mut page.instance else {
-            return;
-        };
-
-        let mut focus_change = None;
-
-        for command in state.page_command_queue.drain(..) {
-            match command {
-                Command::Load(source) => warn(instance.load(&source)),
-                Command::EvaluateScript(script) => warn(instance.evaluate_script(&script)),
-                Command::Reload => instance.reload(),
-                Command::Back => instance.back(),
-                Command::Forward => instance.forward(),
-                Command::ChangeFocus(change) => focus_change = Some(change),
+        let mut pending_focus_change = None;
+        let mut events = Vec::new();
+        if let Ok(instance) = &mut page.instance {
+            let mut focus_change = None;
+            for command in commands {
+                match command {
+                    Command::Load(source) => warn(instance.load(&source)),
+                    Command::EvaluateScript(script) => warn(instance.evaluate_script(&script)),
+                    Command::Reload => instance.reload(),
+                    Command::Back => instance.back(),
+                    Command::Forward => instance.forward(),
+                    Command::ChangeFocus(change) => focus_change = Some(change),
+                }
             }
+
+            // The order matters here. First tell the page what the widget saw in the pass, and
+            // only then ask the page for news. Asked first, a page that just got the focus from
+            // egui would look like it took the focus by itself.
+            if let Some(change) = focus_change {
+                instance.apply_focus(change);
+            }
+
+            let focused = ctx.memory(|mem| mem.has_focus(id));
+            if !was_shown || !focused {
+                instance.blur();
+            }
+            pending_focus_change = instance.poll_focus();
+            events = instance.take_events();
+
+            instance.place(ctx, views);
         }
 
-        // The order matters here. First tell the page what the widget saw in the pass, and only
-        // then ask the page for news. Asked first, a page that just got the focus from egui
-        // would look like it took the focus by itself.
-        if let Some(change) = focus_change.take() {
-            instance.apply_focus(change);
+        let needs_repaint = mailbox.with_view_state(id, |state| {
+            if let Some(widget) = new_widget {
+                state.set_page_widget(widget);
+            }
+            if pending_focus_change.is_some() {
+                state.ui.pending_focus_change = pending_focus_change;
+            }
+            state.extend_events(events);
+            std::mem::take(&mut state.needs_repaint)
+        });
+        if needs_repaint == Some(true) {
+            // The widget reads the mailbox in its next pass, so make sure there is one.
+            ctx.request_repaint_of(ViewportId::ROOT);
         }
-
-        let focused = ctx.memory(|mem| mem.has_focus(id));
-        if !was_shown || !focused {
-            instance.blur();
-        }
-        if let Some(focus_change) = instance.poll_focus() {
-            state.ui.pending_focus_change = Some(focus_change);
-        }
-        state.extend_events(instance.take_events());
-
-        instance.place(ctx, views);
     }
 }
 
@@ -640,6 +642,35 @@ mod tests {
             show(ui, "a");
         });
         assert_eq!(harness.log(), ["create Url(\"a\")", "place"]);
+    }
+
+    #[test]
+    fn the_factory_can_send_commands_to_the_page_it_creates() {
+        let mut harness = Harness::new(false);
+        let create: Create = {
+            let (log, events) = (Rc::clone(&harness.log), Rc::clone(&harness.events));
+            Box::new(move |ctx, id, _source| {
+                // The mailbox must not be locked while the factory runs.
+                WebView::evaluate_script(ctx, id, "init");
+                let backend = FakeBackend {
+                    log: Rc::clone(&log),
+                    events: Rc::clone(&events),
+                };
+                Ok(WebViewInstance::with_backend(id, backend))
+            })
+        };
+        harness.webviews =
+            WebViews::from_parts(&harness.ctx, Some(Arc::new(EmbeddedWidget)), create);
+
+        harness.frame(vec![], |ui| {
+            show(ui, "a");
+        });
+        harness.log();
+
+        harness.frame(vec![], |ui| {
+            show(ui, "a");
+        });
+        assert_eq!(harness.log(), ["script init", "place"]);
     }
 
     #[test]
