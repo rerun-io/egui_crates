@@ -107,7 +107,10 @@ pub(crate) struct WebViewState {
     pub source: Option<Arc<WebViewSource>>,
 
     pub alive_pass: Option<u64>,
-    pub visible: bool,
+
+    /// The pass that last showed the widget. Unlike [`Self::alive_pass`], `keep_alive` doesn't
+    /// set it.
+    pub shown_pass: Option<u64>,
 
     pub page_command_queue: Vec<Command>,
     pub events: Vec<WebViewEvent>,
@@ -126,19 +129,42 @@ pub struct UiState {
 
 type WidgetResult = Result<Arc<dyn PageWidget>, String>;
 
+/// How many events are kept for a page that is kept alive but not shown.
+const MAX_WAITING_EVENTS: usize = 1024;
+
 impl WebViewState {
     pub fn mark_shown(&mut self, pass: u64) {
         self.mark_alive(pass);
-        self.visible = true;
+        self.shown_pass = Some(pass);
     }
     pub fn mark_alive(&mut self, pass: u64) {
         self.alive_pass = Some(pass);
     }
 
-    pub fn extend_events(&mut self, events: impl IntoIterator<Item = WebViewEvent>) {
-        let len = self.events.len();
+    /// Whether the widget was shown in the pass before `pass`.
+    pub fn was_shown(&self, pass: u64) -> bool {
+        self.shown_pass.is_some_and(|shown| shown + 1 == pass)
+    }
+
+    /// Adds the page's new events. `pass` is the number of the root viewport's next pass.
+    pub fn extend_events(&mut self, events: Vec<WebViewEvent>, pass: u64) {
+        // The events of a hidden page wait. Nobody reads them before the page is shown again.
+        self.needs_repaint |= self.was_shown(pass) && !events.is_empty();
         self.events.extend(events);
-        self.needs_repaint |= len != self.events.len();
+        let excess = self.events.len().saturating_sub(MAX_WAITING_EVENTS);
+        self.events.drain(..excess);
+    }
+
+    /// Hands a focus change that the page made itself to the widget. `pass` is the number of
+    /// the root viewport's next pass.
+    pub fn set_pending_focus_change(&mut self, change: Option<FocusChange>, pass: u64) {
+        if !self.was_shown(pass) {
+            // Nobody will act on it, and it would be stale by the time the widget is back.
+            self.ui.pending_focus_change = None;
+        } else if let Some(change) = change {
+            self.ui.pending_focus_change = Some(change);
+            self.needs_repaint = true;
+        }
     }
 
     pub fn set_page_widget(&mut self, page_widget: WidgetResult) {

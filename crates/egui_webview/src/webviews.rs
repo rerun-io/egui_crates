@@ -152,11 +152,8 @@ impl WebViews {
         } = self;
 
         let Some((source, was_shown, commands)) = mailbox.with_view_state(id, |state| {
-            // Whether the widget was shown in the latest pass.
-            let was_shown =
-                state.visible && state.alive_pass.is_some_and(|alive| alive + 1 == pass);
             let commands = std::mem::take(&mut state.page_command_queue);
-            (state.source.clone(), was_shown, commands)
+            (state.source.clone(), state.was_shown(pass), commands)
         }) else {
             return;
         };
@@ -227,10 +224,8 @@ impl WebViews {
             if let Some(widget) = new_widget {
                 state.set_page_widget(widget);
             }
-            if pending_focus_change.is_some() {
-                state.ui.pending_focus_change = pending_focus_change;
-            }
-            state.extend_events(events);
+            state.set_pending_focus_change(pending_focus_change, pass);
+            state.extend_events(events, pass);
             std::mem::take(&mut state.needs_repaint)
         });
         if needs_repaint == Some(true) {
@@ -380,12 +375,12 @@ impl<'a> WebView<'a> {
             let state = inner.get_or_create_state(id);
 
             state.mark_shown(pass);
-            let cur_source = state.source.as_ref();
-
-            state.source = new_source
-                // Only copy the source if the text changed
-                .filter(|new| cur_source.is_none_or(|cur| new != cur))
-                .map(|s| Arc::new(s.into()));
+            // Only copy the text when it changed.
+            let unchanged = new_source
+                .is_some_and(|new| state.source.as_ref().is_some_and(|cur| new == cur));
+            if !unchanged {
+                state.source = new_source.map(|new| Arc::new(new.into()));
+            }
 
             (
                 state.ui.widget.clone().or_else(|| fallback.map(Ok)),
@@ -497,7 +492,7 @@ fn placeholder(
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     use egui::{EmbeddedViewOutput, FocusDirection, vec2};
@@ -511,6 +506,9 @@ mod tests {
     struct FakeBackend {
         log: Log,
         events: Rc<RefCell<Vec<WebViewEvent>>>,
+
+        /// Whether the page has the keyboard focus.
+        focused: Rc<Cell<bool>>,
     }
 
     impl Backend for FakeBackend {
@@ -543,10 +541,16 @@ mod tests {
 
         fn focus(&mut self, direction: FocusDirection) {
             self.log.borrow_mut().push(format!("focus {direction:?}"));
+            self.focused.set(true);
         }
 
         fn blur(&mut self) {
             self.log.borrow_mut().push("blur".to_owned());
+            self.focused.set(false);
+        }
+
+        fn has_focus(&self) -> bool {
+            self.focused.get()
         }
 
         fn take_events(&mut self) -> Vec<WebViewEvent> {
@@ -565,24 +569,34 @@ mod tests {
         webviews: WebViews,
         log: Log,
         events: Rc<RefCell<Vec<WebViewEvent>>>,
+
+        /// Makes every attempt to create a page fail while it is set.
+        fail: Rc<Cell<bool>>,
+
+        /// Whether the page has the keyboard focus.
+        focused: Rc<Cell<bool>>,
     }
 
     impl Harness {
-        /// `fail` makes every attempt to create a page fail.
+        /// `fail` makes every attempt to create a page fail, until [`Self::fail`] is cleared.
         fn new(fail: bool) -> Self {
             let ctx = Context::default();
             let log = Log::default();
             let events = Rc::<RefCell<Vec<WebViewEvent>>>::default();
+            let fail = Rc::new(Cell::new(fail));
+            let focused = Rc::<Cell<bool>>::default();
             let create: Create = {
                 let (log, events) = (Rc::clone(&log), Rc::clone(&events));
+                let (fail, focused) = (Rc::clone(&fail), Rc::clone(&focused));
                 Box::new(move |_ctx, id, source| {
                     log.borrow_mut().push(format!("create {source:?}"));
-                    if fail {
+                    if fail.get() {
                         return Err(Error::Unsupported);
                     }
                     let backend = FakeBackend {
                         log: Rc::clone(&log),
                         events: Rc::clone(&events),
+                        focused: Rc::clone(&focused),
                     };
                     Ok(WebViewInstance::with_backend(id, backend))
                 })
@@ -593,6 +607,8 @@ mod tests {
                 webviews,
                 log,
                 events,
+                fail,
+                focused,
             }
         }
 
@@ -655,6 +671,7 @@ mod tests {
                 let backend = FakeBackend {
                     log: Rc::clone(&log),
                     events: Rc::clone(&events),
+                    focused: Rc::default(),
                 };
                 Ok(WebViewInstance::with_backend(id, backend))
             })
@@ -706,6 +723,44 @@ mod tests {
             show(ui, "a");
         });
         assert_eq!(harness.log(), ["place"]);
+    }
+
+    #[test]
+    fn a_hidden_page_that_takes_the_focus_does_not_take_egui_focus_when_shown_again() {
+        let mut harness = Harness::new(false);
+        harness.frame(vec![], |ui| {
+            show(ui, "a");
+        });
+        harness.frame(vec![], |ui| WebView::keep_alive(ui.ctx(), id()));
+
+        // The hidden page takes the focus by itself.
+        harness.focused.set(true);
+        harness.frame(vec![], |ui| WebView::keep_alive(ui.ctx(), id()));
+
+        harness.frame(vec![], |ui| {
+            show(ui, "a");
+        });
+        assert!(!harness.ctx.memory(|mem| mem.has_focus(id())));
+    }
+
+    #[test]
+    fn a_page_that_could_not_be_created_drops_its_commands() {
+        let mut harness = Harness::new(true);
+        harness.frame(vec![], |ui| {
+            show(ui, "a");
+        });
+        harness.frame(vec![], |ui| {
+            WebView::reload(ui.ctx(), id());
+            show(ui, "a");
+        });
+        harness.log();
+
+        // The page created for the next source doesn't get the failed page's commands.
+        harness.fail.set(false);
+        harness.frame(vec![], |ui| {
+            show(ui, "b");
+        });
+        assert_eq!(harness.log(), ["create Url(\"b\")", "hide"]);
     }
 
     #[test]
