@@ -1,5 +1,5 @@
 use egui::{
-    NumExt as _, Rect,
+    HighlightState, NumExt as _, Rect,
     emath::{GuiRounding as _, Rangef},
     pos2, vec2,
 };
@@ -7,8 +7,7 @@ use itertools::Itertools as _;
 
 use crate::behavior::{EditAction, LayoutContext};
 use crate::{
-    Behavior, ContainerInsertion, DropContext, InsertionPoint, ResizeState, SimplifyAction, TileId,
-    Tiles, Tree,
+    Behavior, ContainerInsertion, DropContext, InsertionPoint, SimplifyAction, TileId, Tiles, Tree,
 };
 
 /// How to lay out the children of a grid.
@@ -302,12 +301,12 @@ impl Grid {
             let x = egui::lerp(left.max..=right.min, 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui.style(), ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, HighlightState::Idle);
                 ui.painter().vline(x, parent_rect.y_range(), stroke);
                 continue;
             }
 
-            let mut resize_state = ResizeState::Idle;
+            let mut resize_state = HighlightState::Idle;
             let line_rect = Rect::from_center_size(
                 pos2(x, parent_rect.center().y),
                 vec2(
@@ -328,12 +327,12 @@ impl Grid {
                     i,
                 );
 
-                if resize_state != ResizeState::Idle {
+                if resize_state != HighlightState::Idle {
                     ui.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
                 }
             }
 
-            let stroke = behavior.resize_stroke(ui.style(), resize_state);
+            let stroke = behavior.resize_stroke(ui, resize_id, resize_state);
             ui.painter().vline(x, parent_rect.y_range(), stroke);
         }
     }
@@ -354,12 +353,12 @@ impl Grid {
             let y = egui::lerp(top.max..=bottom.min, 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui.style(), ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, HighlightState::Idle);
                 ui.painter().hline(parent_rect.x_range(), y, stroke);
                 continue;
             }
 
-            let mut resize_state = ResizeState::Idle;
+            let mut resize_state = HighlightState::Idle;
             let line_rect = Rect::from_center_size(
                 pos2(parent_rect.center().x, y),
                 vec2(
@@ -380,12 +379,12 @@ impl Grid {
                     i,
                 );
 
-                if resize_state != ResizeState::Idle {
+                if resize_state != HighlightState::Idle {
                     ui.set_cursor_icon(egui::CursorIcon::ResizeVertical);
                 }
             }
 
-            let stroke = behavior.resize_stroke(ui.style(), resize_state);
+            let stroke = behavior.resize_stroke(ui, resize_id, resize_state);
             ui.painter().hline(parent_rect.x_range(), y, stroke);
         }
     }
@@ -434,7 +433,7 @@ fn resize_interaction<Pane>(
     splitter_response: &egui::Response,
     dx: f32,
     i: usize,
-) -> ResizeState {
+) -> HighlightState {
     assert_eq!(ranges.len(), shares.len(), "Bug in egui_tiles::Grid");
     let num = ranges.len();
     let tile_width = |i: usize| ranges[i].span();
@@ -449,7 +448,7 @@ fn resize_interaction<Pane>(
         let mean = 0.5 * (shares[left] + shares[right]);
         shares[left] = mean;
         shares[right] = mean;
-        ResizeState::Hovering
+        HighlightState::Hovered
     } else if splitter_response.dragged() {
         behavior.on_edit(EditAction::TileResized);
 
@@ -472,11 +471,11 @@ fn resize_interaction<Pane>(
                 tile_width,
             );
         }
-        ResizeState::Dragging
+        HighlightState::Active
     } else if splitter_response.hovered() {
-        ResizeState::Hovering
+        HighlightState::Hovered
     } else {
-        ResizeState::Idle
+        HighlightState::Idle
     }
 }
 
