@@ -21,6 +21,8 @@ rustdoc-args = ["--generate-link-to-definition"]
 [dependencies]
 accesskit.workspace = true
 accesskit_consumer.workspace = true
+egui.workspace = true
+egui_inspection.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

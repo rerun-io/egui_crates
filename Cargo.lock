@@ -1517,6 +1517,7 @@ dependencies = [
  "egui 0.37.0",
  "egui_demo_lib",
  "egui_extras",
+ "egui_inspection",
  "egui_kittest 0.37.0",
  "insta",
  "schemars",

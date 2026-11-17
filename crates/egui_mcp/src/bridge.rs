@@ -2,8 +2,9 @@
 //! [`egui_inspection`] protocol.
 //!
 //! Each MCP tool call turns into one or more [`Request`]s, each answered by exactly one
-//! [`Response`]. How those messages travel is abstracted behind the [`Transport`] trait, so the
-//! tools don't care whether the bytes go over a framed TCP stream or some host's own channel:
+//! [`Response`]. How those messages travel is abstracted behind the [`Transport`] trait (from
+//! [`egui_inspection_tools`]), so the tools don't care whether the bytes go over a framed TCP
+//! stream or some host's own channel:
 //!
 //! - [`Bridge::connect`] dials a TCP `host:port` (with connect-retry), reads the protocol
 //!   handshake, and drives a framed byte transport — what the standalone `egui-mcp` binary uses.
@@ -11,14 +12,13 @@
 //!   has a request/response channel to the app (e.g. `re_mcp` over a gRPC unary RPC) can drive
 //!   the same tools without re-implementing the byte framing.
 
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
 use egui_inspection::protocol::{
     EncodedPng, Request, Response, decode_frame_body, decode_frame_len, decode_handshake,
     encode_frame,
 };
+pub use egui_inspection_tools::{BoxFuture, Transport, TreeSnapshot};
 use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 use tokio::net::TcpStream;
@@ -27,25 +27,6 @@ use tokio::sync::Mutex;
 /// How long to keep retrying the initial TCP connect before giving up. Covers the case where
 /// the user launches the app and attaches in quick succession.
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// A boxed future, the return type of [`Transport::request`] (avoids an `async_trait` dep for a
-/// single-method trait).
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-/// Carries one [`Request`] to the egui peer and returns its single [`Response`], however the
-/// bytes happen to travel.
-///
-/// The [`Bridge`] and every tool built on it depend only on this one operation. The built-in
-/// implementation is [`FramedTransport`] (length-prefixed `MessagePack` over an async byte
-/// stream); a host with its own channel — e.g. `re_mcp` issuing a gRPC unary call per request —
-/// implements this instead and hands it to [`Bridge::with_transport`].
-pub trait Transport: Send + Sync {
-    /// Send `req` and resolve with the matching [`Response`].
-    ///
-    /// Implementations must guarantee one response per request even under concurrent callers
-    /// (the framed transport serializes with a mutex; a unary-RPC transport gets this for free).
-    fn request(&self, req: Request) -> BoxFuture<'_, Result<Response, String>>;
-}
 
 /// Identity of the connected peer, captured at connect time.
 #[derive(Debug, Clone, Serialize)]
@@ -172,6 +153,11 @@ impl Bridge {
         self.transport.request(req).await
     }
 
+    /// The transport this bridge drives the app through.
+    pub fn transport(&self) -> &dyn Transport {
+        self.transport.as_ref()
+    }
+
     async fn fetch_label(&self) -> Result<Option<String>, String> {
         match self.request(Request::GetInfo).await? {
             Response::Info { label, .. } => Ok(label),
@@ -185,29 +171,7 @@ impl Bridge {
     /// # Errors
     /// On I/O failure or an unexpected response.
     pub async fn fetch_tree(&self) -> Result<TreeSnapshot, String> {
-        match self.request(Request::GetTree).await? {
-            Response::Tree {
-                step,
-                pixels_per_point,
-                accesskit,
-            } => Ok(TreeSnapshot {
-                step,
-                pixels_per_point,
-                tree: accesskit.map(|update| accesskit_consumer::Tree::new(update, false)),
-            }),
-            Response::Error { message } => Err(message),
-            _ => Err("unexpected response to GetTree".to_owned()),
-        }
-    }
-
-    /// Send a request that expects a bare [`Response::Done`]. `what` names the request for
-    /// error messages.
-    async fn request_done(&self, req: Request, what: &str) -> Result<(), String> {
-        match self.request(req).await? {
-            Response::Done => Ok(()),
-            Response::Error { message } => Err(message),
-            _ => Err(format!("unexpected response to {what}")),
-        }
+        egui_inspection_tools::transport::fetch_tree(self.transport()).await
     }
 
     /// Inject input events; resolves after the events have been processed by a frame.
@@ -215,8 +179,7 @@ impl Bridge {
     /// # Errors
     /// On I/O failure or an unexpected response.
     pub async fn apply_events(&self, events: Vec<egui::Event>) -> Result<(), String> {
-        self.request_done(Request::ApplyEvents { events }, "ApplyEvents")
-            .await
+        egui_inspection_tools::transport::apply_events(self.transport(), events).await
     }
 
     /// Resize the viewport (logical points).
@@ -224,8 +187,7 @@ impl Bridge {
     /// # Errors
     /// On I/O failure or an unexpected response.
     pub async fn resize(&self, width: u32, height: u32) -> Result<(), String> {
-        self.request_done(Request::Resize { width, height }, "Resize")
-            .await
+        egui_inspection_tools::transport::resize(self.transport(), width, height).await
     }
 
     /// Capture a screenshot, downscaled to `pixels_per_point` pixels per logical point
@@ -234,24 +196,8 @@ impl Bridge {
     /// # Errors
     /// On I/O failure or an unexpected response.
     pub async fn screenshot(&self, pixels_per_point: f32) -> Result<EncodedPng, String> {
-        match self
-            .request(Request::GetScreenshot {
-                pixels_per_point: Some(pixels_per_point),
-            })
-            .await?
-        {
-            Response::Screenshot(png) => Ok(png),
-            Response::Error { message } => Err(message),
-            _ => Err("unexpected response to GetScreenshot".to_owned()),
-        }
+        egui_inspection_tools::transport::screenshot(self.transport(), pixels_per_point).await
     }
-}
-
-/// A freshly-fetched `AccessKit` tree plus the geometry needed to map it to screen pixels.
-pub struct TreeSnapshot {
-    pub step: u64,
-    pub pixels_per_point: f32,
-    pub tree: Option<accesskit_consumer::Tree>,
 }
 
 // The wire format (length-prefix + MessagePack, capped at `MAX_MESSAGE_BYTES`) is defined
