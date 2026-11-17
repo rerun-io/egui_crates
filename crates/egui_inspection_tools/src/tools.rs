@@ -1,6 +1,6 @@
 //! The tool definitions and their dispatch.
 //!
-//! [`tools`] lists every tool with its JSON Schema; [`call`] runs one by name.
+//! [`tools()`] lists every tool with its JSON Schema; [`call`] runs one by name.
 //!
 //! Locator resolution happens here, not in the app: a tool fetches a fresh `AccessKit` tree
 //! (`GetTree`), resolves the locator to a logical-point position, synthesizes the matching

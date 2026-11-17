@@ -45,7 +45,7 @@ INCLUDE_LABELS = False  # It adds quite a bit of visual noise
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # The published crates. Each lives in `crates/<name>`, and has a PR label with the same name.
-CRATES = ["egui_tiles", "egui_table", "egui_mcp"]
+CRATES = ["egui_tiles", "egui_table", "egui_inspection_tools", "egui_mcp"]
 
 
 @dataclass

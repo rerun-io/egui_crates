@@ -1572,8 +1572,6 @@ dependencies = [
 name = "egui_mcp"
 version = "0.3.0"
 dependencies = [
- "accesskit 0.25.1",
- "accesskit_consumer 0.39.1",
  "base64 0.23.1",
  "egui 0.37.0",
  "egui_inspection",

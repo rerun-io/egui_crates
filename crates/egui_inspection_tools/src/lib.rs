@@ -11,7 +11,7 @@
 //!   returns its response, and
 //! - a [`Sleep`], the host's timer, which `wait_for` polls with.
 //!
-//! [`tools`] lists every tool with its JSON Schema; [`call`] runs one by name.
+//! [`tools()`] lists every tool with its JSON Schema; [`call`] runs one by name.
 //! `egui_mcp` serves these same tools over MCP.
 
 mod args;

@@ -12,6 +12,9 @@
 //! - [`UiServer::new`] wraps that bridge as a UI server. Pair it with the router from
 //!   [`UiServer::router`]: merge `router.list_all()` into your own `list_tools`, and delegate
 //!   non-connection calls to [`UiServer::dispatch`].
+//!
+//! The tools themselves live in [`egui_inspection_tools`], which has no MCP or async runtime.
+//! Use it directly to call the tools in-process, e.g. from an agent built into the app.
 
 pub mod bridge;
 pub mod server;

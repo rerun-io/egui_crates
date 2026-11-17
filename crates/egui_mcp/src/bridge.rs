@@ -166,7 +166,7 @@ impl Bridge {
         }
     }
 
-    /// Fetch the current `AccessKit` tree, built into a queryable [`accesskit_consumer::Tree`].
+    /// Fetch the current `AccessKit` tree, built into a queryable `accesskit_consumer::Tree`.
     ///
     /// # Errors
     /// On I/O failure or an unexpected response.
