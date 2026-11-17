@@ -9,11 +9,40 @@ use std::time::Duration;
 
 use egui_inspection::protocol::{EncodedPng, Request, Response};
 
-/// A boxed future, the return type of [`Transport::request`] and [`Sleep::sleep`].
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+cfg_select! {
+    // The web is single-threaded, and its futures (timers, `fetch`, …) are not `Send`.
+    target_arch = "wasm32" => {
+        /// A boxed future, the return type of [`Transport::request`] and [`Sleep::sleep`].
+        ///
+        /// `Send` everywhere but on `wasm32`.
+        pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
+
+        /// `Send` everywhere but on `wasm32`.
+        pub trait MaybeSend {}
+        impl<T: ?Sized> MaybeSend for T {}
+
+        /// `Sync` everywhere but on `wasm32`.
+        pub trait MaybeSync {}
+        impl<T: ?Sized> MaybeSync for T {}
+    }
+    _ => {
+        /// A boxed future, the return type of [`Transport::request`] and [`Sleep::sleep`].
+        ///
+        /// `Send` everywhere but on `wasm32`.
+        pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+        /// `Send` everywhere but on `wasm32`.
+        pub trait MaybeSend: Send {}
+        impl<T: ?Sized + Send> MaybeSend for T {}
+
+        /// `Sync` everywhere but on `wasm32`.
+        pub trait MaybeSync: Sync {}
+        impl<T: ?Sized + Sync> MaybeSync for T {}
+    }
+}
 
 /// Carries one [`Request`] to the egui app and returns its single [`Response`].
-pub trait Transport: Send + Sync {
+pub trait Transport: MaybeSend + MaybeSync {
     /// Send `req` and resolve with the matching [`Response`].
     ///
     /// Implementations must guarantee one response per request even under concurrent callers,
@@ -26,14 +55,14 @@ pub trait Transport: Send + Sync {
 ///
 /// Only `wait_for` waits: between polls of the widget tree, and for its timeout.
 /// Any `Fn(Duration) -> BoxFuture<'static, ()>` is a `Sleep`.
-pub trait Sleep: Send + Sync {
+pub trait Sleep: MaybeSend + MaybeSync {
     /// Resolve after `duration`.
     fn sleep(&self, duration: Duration) -> BoxFuture<'_, ()>;
 }
 
 impl<F> Sleep for F
 where
-    F: Fn(Duration) -> BoxFuture<'static, ()> + Send + Sync,
+    F: Fn(Duration) -> BoxFuture<'static, ()> + MaybeSend + MaybeSync,
 {
     fn sleep(&self, duration: Duration) -> BoxFuture<'_, ()> {
         self(duration)

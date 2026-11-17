@@ -28,4 +28,4 @@ pub use output::{Content, ToolOutput};
 pub use tools::{
     Effect, JsonObject, ToolDef, call, check_arguments, input_schema, run_batch, tool, tools,
 };
-pub use transport::{BoxFuture, Sleep, Transport, TreeSnapshot};
+pub use transport::{BoxFuture, MaybeSend, MaybeSync, Sleep, Transport, TreeSnapshot};
