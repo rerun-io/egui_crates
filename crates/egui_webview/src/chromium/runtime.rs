@@ -284,6 +284,20 @@ wrap_app! {
                     Some(&platform.into()),
                 );
             }
+            // On Wayland with fractional scaling, Chromium ignores the device scale factor from
+            // `screen_info` and renders a windowless browser at 1 pixel per point. A windowless
+            // browser has no Wayland surface to scale, so it loses nothing without the feature.
+            #[cfg(target_os = "linux")]
+            {
+                let name = CefString::from("disable-features");
+                let mut features = CefString::from(&command_line.switch_value(Some(&name)))
+                    .to_string();
+                if !features.is_empty() {
+                    features.push(',');
+                }
+                features.push_str("WaylandFractionalScaleV1");
+                command_line.append_switch_with_value(Some(&name), Some(&features.as_str().into()));
+            }
         }
 
         fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
