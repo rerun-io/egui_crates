@@ -5,7 +5,6 @@
 target
 # `target_ra` is the legacy Rust Analyzer target dir. It now lives inside `target/`.
 target_ra
-target_wasm
 
 # trunk output folder
 crates/egui_table_demo/dist
