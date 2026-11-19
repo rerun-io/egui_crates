@@ -219,7 +219,24 @@ impl WebViewInstance {
         id: impl Into<Id>,
         source: &WebViewSource,
     ) -> Result<Self, Error> {
-        let backend = crate::chromium::CefBackend::new(ctx, source)?;
+        Self::new_cef_with_options(ctx, id, source, crate::CefOptions::default())
+    }
+
+    /// Like [`Self::new_cef`], with `options` for how CEF renders the page.
+    ///
+    /// To give the pages of a [`crate::WebViews`] options, create it with
+    /// [`crate::WebViews::with_factory`] and call this from the factory.
+    ///
+    /// # Errors
+    /// See [`Self::new_cef`].
+    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    pub fn new_cef_with_options(
+        ctx: &Context,
+        id: impl Into<Id>,
+        source: &WebViewSource,
+        options: crate::CefOptions,
+    ) -> Result<Self, Error> {
+        let backend = crate::chromium::CefBackend::new(ctx, source, options)?;
         Ok(Self::with_backend(id, backend))
     }
 

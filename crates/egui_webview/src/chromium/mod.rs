@@ -42,6 +42,21 @@ use handlers::MenuItem;
 
 pub use runtime::{init, run_subprocess};
 
+/// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CefOptions {
+    /// The most frames per second that CEF paints of the page. The minimum is 1.
+    ///
+    /// The default is 60.
+    pub frame_rate: u32,
+}
+
+impl Default for CefOptions {
+    fn default() -> Self {
+        Self { frame_rate: 60 }
+    }
+}
+
 /// How many passes of input are kept for the backend. More than that only pile up if the app
 /// doesn't call [`crate::WebViewInstance::place`].
 const MAX_WAITING_BATCHES: usize = 64;
@@ -70,7 +85,11 @@ impl CefBackend {
     ///
     /// # Errors
     /// If CEF can't be initialised, or if it fails to create the browser.
-    pub fn new(ctx: &egui::Context, source: &WebViewSource) -> Result<Self, Error> {
+    pub fn new(
+        ctx: &egui::Context,
+        source: &WebViewSource,
+        options: CefOptions,
+    ) -> Result<Self, Error> {
         runtime::initialize(ctx)?;
 
         let (context, events) = Context::new(ctx);
@@ -79,7 +98,7 @@ impl CefBackend {
             ..Default::default()
         };
         let settings = BrowserSettings {
-            windowless_frame_rate: 60,
+            windowless_frame_rate: i32::try_from(options.frame_rate).unwrap_or(i32::MAX),
             // Opaque white like in a browser, for pages that set no background. CEF's default
             // for a windowless browser is transparent.
             background_color: 0xFFFF_FFFF,

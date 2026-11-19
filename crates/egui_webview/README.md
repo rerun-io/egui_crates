@@ -74,6 +74,7 @@ trunk serve --example minimal_instance
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
   `WebViewInstance::new` uses it on platforms without a system webview, such as Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
+  `WebViewInstance::new_cef_with_options` also takes `CefOptions`, such as the page's frame rate.
 
 The `<iframe>` lies below egui's canvas, and egui clears its rect to transparent so the page shows through.
 egui windows and popups above a page paint over it and receive the pointer input there.
