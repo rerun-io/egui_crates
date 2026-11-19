@@ -17,6 +17,7 @@ catches this: `cargo-semver-checks` reads this crate's own rustdoc, where
 | --- | --- | --- |
 | `crates/egui_tiles` | `egui_tiles` | `egui_tiles-v` |
 | `crates/egui_table` | `egui_table` | `egui_table-v` |
+| `crates/egui_inspection_tools` | `egui_inspection_tools` | `egui_inspection_tools-v` |
 | `crates/egui_mcp` | `egui_mcp` | `egui_mcp-v` |
 
 `crates/egui_table_demo` and `crates/kittest_inspector` are not published; both
@@ -29,9 +30,9 @@ and `egui_mcp 0.3.0`. Below, `CRATE` is the package name and `0.x.0` its new ver
 
 * [ ] Make a branch called `release-SUMMARY`, e.g. `release-egui-0.37`
 * [ ] For each crate: `uv run scripts/generate_changelog.py --crate CRATE --version 0.x.0`, then paste the result into `crates/CRATE/CHANGELOG.md` and edit it by hand
-* [ ] For each crate: bump `version` in `crates/CRATE/Cargo.toml`. Also bump the `egui_table` entry in `[workspace.dependencies]`. Run `cargo check`
+* [ ] For each crate: bump `version` in `crates/CRATE/Cargo.toml`. Also bump the `egui_table` and `egui_inspection_tools` entries in `[workspace.dependencies]`. Run `cargo check`
 * [ ] Open a PR titled `Release egui_tiles 0.x.0, egui_table 0.x.0, egui_mcp 0.x.0 - summary`, and wait for CI to pass. Do not merge it yet
-* [ ] On the branch: `cargo publish --quiet -p egui_table -p egui_tiles -p egui_mcp`
+* [ ] On the branch: `cargo publish --quiet -p egui_table -p egui_tiles -p egui_inspection_tools -p egui_mcp`
 * [ ] For each crate: `git tag -a CRATE-v0.x.0 -m 'Release CRATE 0.x.0 - summary'` on the published commit
 * [ ] `git push origin egui_table-v0.x.0 egui_tiles-v0.x.0 egui_mcp-v0.x.0`
 * [ ] Merge the PR

@@ -1,5 +1,5 @@
 ---
-source: crates/egui_mcp/src/real_app_tests.rs
+source: crates/egui_inspection_tools/src/real_app_tests.rs
 expression: "query_app(&QueryFilter { limit: usize::MAX, ..Default::default() })"
 ---
 [

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/egui_inspection_tools",
   "crates/egui_mcp",
   "crates/egui_table",
   "crates/egui_table_demo",
@@ -16,6 +17,7 @@ rust-version = "1.95.0" # The highest MSRV of the crates in this repo
 
 
 [workspace.dependencies]
+egui_inspection_tools = { version = "0.1.0", path = "crates/egui_inspection_tools" }
 egui_table = { version = "0.11.0", path = "crates/egui_table", default-features = false }
 
 # NOTE: egui itself is deliberately not in here. `kittest_inspector` rides the
