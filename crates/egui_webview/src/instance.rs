@@ -89,13 +89,63 @@ pub struct WebViewResponse {
     pub response: Response,
 }
 
+/// The backends that [`WebViewInstance::new`] chooses from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DefaultBackend {
+    /// The platform's own webview in an embedded view: an `<iframe>` on the web.
+    Embedded,
+
+    /// CEF, which renders the page off screen. Requires the `cef` feature.
+    Cef,
+}
+
+impl DefaultBackend {
+    /// The environment variable that overrides [`Self::FOR_TARGET`] at run time.
+    const ENV_VAR: &str = "EGUI_WEBVIEW_BACKEND";
+
+    /// The backend of the target platform, chosen at compile time: CEF where there is no system
+    /// webview.
+    const FOR_TARGET: Self = if cfg!(any(
+        target_arch = "wasm32",
+        target_os = "macos",
+        target_os = "windows"
+    )) {
+        Self::Embedded
+    } else {
+        Self::Cef
+    };
+
+    /// The backend that [`Self::ENV_VAR`] names, if it is set to a known one.
+    fn from_env() -> Option<Self> {
+        let name = std::env::var(Self::ENV_VAR).ok()?;
+        if name == "cef" {
+            Some(Self::Cef)
+        } else {
+            log::warn!(
+                "egui_webview: ignoring {}={name:?}, expected `cef`",
+                Self::ENV_VAR
+            );
+            None
+        }
+    }
+
+    /// The backend that [`WebViewInstance::new`] uses.
+    fn pick() -> Self {
+        Self::from_env().unwrap_or(Self::FOR_TARGET)
+    }
+}
+
 impl WebViewInstance {
     /// Creates a webview with the platform's default backend, in the root window that
     /// `embedded_views` belongs to.
     ///
+    /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
-    ///   as with `Self::new_cef`. This requires the `cef` feature.
+    /// - On platforms without a system webview, such as Linux: CEF, as with `Self::new_cef`.
+    ///   This requires the `cef` feature.
+    ///
+    /// Setting the `EGUI_WEBVIEW_BACKEND` environment variable to `cef` overrides that choice
+    /// at run time.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].
@@ -111,21 +161,31 @@ impl WebViewInstance {
         source: &WebViewSource,
         embedded_views: &EmbeddedViews,
     ) -> Result<Self, Error> {
-        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-        if crate::chromium::is_default() {
-            _ = embedded_views;
-            return Self::new_cef(ctx, id, source);
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
-            Ok(Self::with_backend(id, backend))
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            _ = (ctx, id, source, embedded_views);
-            Err(Error::Unsupported)
+        match DefaultBackend::pick() {
+            DefaultBackend::Cef => {
+                _ = embedded_views;
+                #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+                {
+                    Self::new_cef(ctx, id, source)
+                }
+                #[cfg(not(all(feature = "cef", not(target_arch = "wasm32"))))]
+                {
+                    _ = (ctx, id, source);
+                    Err(Error::Unsupported)
+                }
+            }
+            DefaultBackend::Embedded => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
+                    Ok(Self::with_backend(id, backend))
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    _ = (ctx, id, source, embedded_views);
+                    Err(Error::Unsupported)
+                }
+            }
         }
     }
 
@@ -135,18 +195,9 @@ impl WebViewInstance {
     /// its rect, so this is known before the page exists. A CEF page has nothing to paint
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
-        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-        if crate::chromium::is_default() {
-            return None;
-        }
-        if cfg!(any(
-            target_arch = "wasm32",
-            target_os = "macos",
-            target_os = "windows"
-        )) {
-            Some(Arc::new(crate::EmbeddedWidget))
-        } else {
-            None
+        match DefaultBackend::pick() {
+            DefaultBackend::Embedded => Some(Arc::new(crate::EmbeddedWidget)),
+            DefaultBackend::Cef => None,
         }
     }
 

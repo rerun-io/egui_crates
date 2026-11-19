@@ -42,15 +42,6 @@ use handlers::MenuItem;
 
 pub use runtime::run_subprocess;
 
-/// Whether `WebViewInstance::new` should use CEF.
-///
-/// That is the case on platforms without a system webview backend (all but macOS and Windows),
-/// and wherever the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
-pub fn is_default() -> bool {
-    cfg!(not(any(target_os = "macos", target_os = "windows")))
-        || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef")
-}
-
 /// How many passes of input are kept for the backend. More than that only pile up if the app
 /// doesn't call [`crate::WebViewInstance::place`].
 const MAX_WAITING_BATCHES: usize = 64;
