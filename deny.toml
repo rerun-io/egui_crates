@@ -41,6 +41,10 @@ ignore = [
   "RUSTSEC-2026-0370",
   "RUSTSEC-2026-0371",
   "RUSTSEC-2026-0372",
+
+  # chrono is unmaintained, with no known vulnerability and no maintained replacement yet.
+  # Brought in only by `egui_mcp`, through rmcp (and the schemars `chrono04` feature it enables).
+  "RUSTSEC-2026-0543",
 ]
 
 
