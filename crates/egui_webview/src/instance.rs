@@ -206,7 +206,7 @@ impl WebViewInstance {
     /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
     /// native platform. [`Self::new`] uses it on platforms without a system webview, such as
     /// Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`. It requires the
-    /// `cef` feature, and a call to [`crate::run_cef_subprocess`] at the start of `main`.
+    /// `cef` feature, and a call to [`crate::cef_init`] first in `main`.
     ///
     /// `id` must be unique in `ctx`.
     ///

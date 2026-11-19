@@ -12,7 +12,7 @@
 //! and sends it that input after the pass.
 //!
 //! CEF starts its helper processes from the app's own executable, so apps must call
-//! [`crate::run_cef_subprocess`] at the start of `main`.
+//! [`crate::cef_init`] first in `main`.
 
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 
@@ -40,7 +40,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
-pub use runtime::run_subprocess;
+pub use runtime::{init, run_subprocess};
 
 /// How many passes of input are kept for the backend. More than that only pile up if the app
 /// doesn't call [`crate::WebViewInstance::place`].

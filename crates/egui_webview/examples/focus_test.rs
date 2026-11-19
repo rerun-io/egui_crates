@@ -191,9 +191,7 @@ impl eframe::App for Test {
 
 fn main() -> eframe::Result {
     #[cfg(feature = "cef")]
-    if let Some(code) = egui_webview::run_cef_subprocess() {
-        std::process::exit(code);
-    }
+    egui_webview::cef_init();
     let cef = cfg!(feature = "cef")
         && (cfg!(target_os = "linux")
             || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));

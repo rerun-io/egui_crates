@@ -38,11 +38,30 @@ static INIT: OnceLock<Result<(), String>> = OnceLock::new();
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
 static CONTEXTS: std::sync::Mutex<Vec<egui::Context>> = std::sync::Mutex::new(Vec::new());
 
+/// Runs this process as a CEF helper process and exits, if Chromium started it as one. Otherwise
+/// it returns right away.
+///
+/// CEF starts its helper processes (renderer, GPU, …) from the app's own executable, so call
+/// this first in `main`:
+///
+/// ```no_run
+/// egui_webview::cef_init();
+/// // … start the app
+/// ```
+///
+/// To handle the helper's exit code yourself, call [`crate::run_cef_subprocess`] instead.
+pub fn init() {
+    if let Some(code) = run_subprocess() {
+        #[expect(clippy::exit)] // A helper process has nothing of the app to unwind.
+        std::process::exit(code);
+    }
+}
+
 /// Runs this process as a CEF helper process, if Chromium started it as one, and returns its exit
 /// code.
 ///
-/// CEF starts its helper processes (renderer, GPU, …) from the app's own executable. Call this at
-/// the start of `main`, and exit with the code it returns:
+/// This is [`crate::cef_init`] without the exit. Call it at the start of `main`, and exit with
+/// the code it returns:
 ///
 /// ```no_run
 /// if let Some(code) = egui_webview::run_cef_subprocess() {
@@ -136,7 +155,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
     let result = INIT.get_or_init(|| {
         if is_subprocess() {
             return Err(
-                "this is a CEF helper process: call `egui_webview::run_cef_subprocess` first in `main`"
+                "this is a CEF helper process: call `egui_webview::cef_init` first in `main`"
                     .to_owned(),
             );
         }
@@ -151,10 +170,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
             external_message_pump: 1,
             no_sandbox: 1,
             browser_subprocess_path: exe.to_string_lossy().as_ref().into(),
-            root_cache_path: cache_dir()
-                .to_string_lossy()
-                .as_ref()
-                .into(),
+            root_cache_path: cache_dir().to_string_lossy().as_ref().into(),
             log_severity: sys::cef_log_severity_t::LOGSEVERITY_WARNING.into(),
             ..Default::default()
         };

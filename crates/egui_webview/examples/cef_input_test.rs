@@ -199,9 +199,7 @@ impl eframe::App for Test {
 }
 
 fn main() -> eframe::Result {
-    if let Some(code) = egui_webview::run_cef_subprocess() {
-        std::process::exit(code);
-    }
+    egui_webview::cef_init();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

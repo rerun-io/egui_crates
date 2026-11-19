@@ -32,7 +32,7 @@ mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
 #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-pub use chromium::run_subprocess as run_cef_subprocess;
+pub use chromium::{init as cef_init, run_subprocess as run_cef_subprocess};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
 
