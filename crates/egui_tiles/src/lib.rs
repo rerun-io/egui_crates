@@ -148,7 +148,7 @@ pub enum UiResponse {
 /// User-tunable parameters for the animated drag-and-drop preview.
 ///
 /// Returned by [`Behavior::preview_options`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PreviewOptions {
     /// Whether the animated layout preview is shown during drag-and-drop.
     ///
