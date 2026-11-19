@@ -30,4 +30,4 @@ jobs:
           fail: true
           # When given a directory, lychee checks only markdown, html and text files, everything else we have to glob in manually.
           args: |
-            --base ${{ github.workspace }} --cache --max-cache-age 1d . "**/*.rs" "**/*.toml" "**/*.hpp" "**/*.cpp" "**/CMakeLists.txt" "**/*.py" "**/*.yml"
+            --root-dir ${{ github.workspace }} --cache --max-cache-age 1d . "**/*.rs" "**/*.toml" "**/*.hpp" "**/*.cpp" "**/CMakeLists.txt" "**/*.py" "**/*.yml"

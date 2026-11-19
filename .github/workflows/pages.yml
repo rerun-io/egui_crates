@@ -1,0 +1,67 @@
+name: Github Pages
+
+# Deploys the egui_table demo to https://rerun-io.github.io/egui_crates/ on every
+# push to main.
+#
+# This uploads the built site as an artifact and deploys it, which needs the
+# repository's Pages source set to "GitHub Actions". The alternative — pushing
+# the build to a `gh-pages` branch — would commit a multi-megabyte wasm blob on
+# every push to main.
+on:
+  push:
+    branches:
+      - main
+# to only run when you do a new github release, comment out above part and uncomment the below trigger.
+# on:
+#   release:
+#     types:
+#       - published
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and let a running one finish so a half-published site is
+# never left behind.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-github-pages:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4 # repo checkout
+        with:
+          lfs: true # the demo icons are in git-LFS
+      - name: Setup toolchain for wasm
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup set profile minimal
+          rustup target add wasm32-unknown-unknown
+      - name: Rust Cache # cache the rust build artefacts
+        uses: Swatinem/rust-cache@v2
+      - name: Download and install Trunk binary
+        run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+      - name: Build # build
+        # Environment $public_url resolves to the github project page.
+        # If using a user/organization page, remove the `${{ github.event.repository.name }}` part.
+        # using --public-url something will allow trunk to modify all the href paths like from favicon.ico to repo_name/favicon.ico .
+        # this is necessary for github pages where the site is deployed to username.github.io/repo_name and all files must be requested
+        # relatively as egui_crates/favicon.ico. if we skip public-url option, the href paths will instead request username.github.io/favicon.ico which
+        # will obviously return error 404 not found.
+        run: (cd crates/egui_table_demo && ../../trunk build --release --public-url $public_url)
+        env:
+          public_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: crates/egui_table_demo/dist
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

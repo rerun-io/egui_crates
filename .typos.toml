@@ -5,5 +5,17 @@
 [default]
 extend-ignore-re = [
     "Isse", # it's a name
-    "teh",  # part of @teh-cmc
+
+    # Widget ids in the test snapshots are hex, and hex spells words: `4ba` reads as `by`,
+    # `3daa` as `data`.
+    '"id": "[0-9a-f]+"',
 ]
+
+[default.extend-words]
+teh = "teh"           # part of @teh-cmc
+Abou = "Abou"         # part of @AmmarAbouZor
+egui = "egui"
+accesskit = "accesskit"
+# `image::Delay::from_numer_denom_ms` — the `image` crate spells "numerator"
+# this way, so we can't rename it.
+numer = "numer"

@@ -1,2 +1,6 @@
 * text=auto eol=lf
 Cargo.lock linguist-generated=false
+
+# The egui_table demo icons and all kittest snapshots are stored in git-LFS:
+*.png filter=lfs diff=lfs merge=lfs -text
+*.gif filter=lfs diff=lfs merge=lfs -text

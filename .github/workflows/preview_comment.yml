@@ -1,0 +1,21 @@
+name: preview_comment.yml
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            View snapshot changes at [kitdiff](https://rerun-io.github.io/kitdiff/?url=${{ github.event.pull_request.html_url }})
+          comment_tag: 'kitdiff-link'

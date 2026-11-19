@@ -1,0 +1,476 @@
+---
+source: crates/egui_mcp/src/real_app_tests.rs
+expression: "query_app(&QueryFilter { limit: usize::MAX, ..Default::default() })"
+---
+[
+  {
+    "id": "311f83ea3bd3e4",
+    "role": "Window",
+    "focused": true,
+    "children": [
+      {
+        "id": "e5b151f8b168e554",
+        "role": "Pane",
+        "children": [
+          {
+            "id": "825e03fce82e2144",
+            "role": "Label",
+            "value": "Search"
+          },
+          {
+            "id": "1ff08a75137e2b9e",
+            "role": "TextInput",
+            "label": "Search",
+            "value": "tree"
+          },
+          {
+            "id": "ab3815b91363f19e",
+            "role": "Button",
+            "label": "Run"
+          }
+        ]
+      },
+      {
+        "id": "6b77a1e3523353fb",
+        "role": "Pane",
+        "children": [
+          {
+            "id": "8e811bd7cee8f976",
+            "role": "Label",
+            "value": "Projects"
+          },
+          {
+            "id": "1a21f1014d0b5285",
+            "role": "Button",
+            "label": "egui"
+          },
+          {
+            "id": "149d23c7d8865e78",
+            "role": "Button",
+            "label": "kittest"
+          },
+          {
+            "id": "1a35e75bad93680",
+            "role": "Button",
+            "label": "rerun"
+          }
+        ]
+      },
+      {
+        "id": "4f073a2eb1e95383",
+        "role": "Splitter",
+        "label": "Resize panel"
+      },
+      {
+        "id": "bfe2b56da286622",
+        "role": "Pane",
+        "children": [
+          {
+            "id": "bcd793c1f599d51c",
+            "role": "Label",
+            "value": "Chat"
+          },
+          {
+            "id": "3ea4db01dcd9548a",
+            "role": "Label",
+            "value": "where is the volume slider?"
+          },
+          {
+            "id": "b195d89ac17132bd",
+            "role": "Label",
+            "value": "Second row of the settings panel."
+          }
+        ]
+      },
+      {
+        "id": "902324f74873b87a",
+        "role": "Splitter",
+        "label": "Resize panel"
+      },
+      {
+        "id": "920179beebb0a10c",
+        "role": "Pane",
+        "children": [
+          {
+            "id": "ed9ddd035da6670d",
+            "role": "Label",
+            "value": "Settings"
+          },
+          {
+            "id": "29da03ef98693066",
+            "role": "Label",
+            "value": "This paragraph is here to be long: it wraps over several lines in the central panel, so the frame ha […]"
+          },
+          {
+            "id": "41ef20283b896828",
+            "role": "CheckBox",
+            "label": "Wrap long lines"
+          },
+          {
+            "id": "4b6ee9170c2e59ce",
+            "role": "GenericContainer",
+            "children": [
+              {
+                "id": "96a8f155b766eefb",
+                "role": "Slider",
+                "label": "Volume"
+              },
+              {
+                "id": "db68ddc08d32ccd1",
+                "role": "SpinButton",
+                "label": "Volume",
+                "value": "42"
+              },
+              {
+                "id": "2389025b21f1c31",
+                "role": "Label",
+                "value": "Volume"
+              }
+            ]
+          },
+          {
+            "id": "2d46b7e030d207d8",
+            "role": "GenericContainer",
+            "children": [
+              {
+                "id": "c819768b5afac1a1",
+                "role": "DisclosureTriangle",
+                "label": "Advanced"
+              },
+              {
+                "id": "6f50df37e0905dd6",
+                "role": "GenericContainer",
+                "children": [
+                  {
+                    "id": "e53216725f2b3d60",
+                    "role": "Label",
+                    "value": "Nothing to see here"
+                  },
+                  {
+                    "id": "ace403b7a6ca8c0d",
+                    "role": "Button",
+                    "label": "Reset",
+                    "disabled": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "6420abb694f4167b",
+            "role": "GenericContainer",
+            "children": [
+              {
+                "id": "e20536b0f4e39d73",
+                "role": "Link",
+                "label": "Label"
+              },
+              {
+                "id": "d713be38ba8c13d4",
+                "role": "Label",
+                "value": "Welcome to the widget gallery!"
+              },
+              {
+                "id": "48845bd87f76651b",
+                "role": "Link",
+                "label": "Hyperlink"
+              },
+              {
+                "id": "92ced92911317344",
+                "role": "Link",
+                "label": " egui on GitHub"
+              },
+              {
+                "id": "4833857049026c6",
+                "role": "Link",
+                "label": "TextEdit"
+              },
+              {
+                "id": "3e1593196b667852",
+                "role": "TextInput",
+                "value": ""
+              },
+              {
+                "id": "d15f6c092f79ec9f",
+                "role": "Link",
+                "label": "Button"
+              },
+              {
+                "id": "ec63454b51548c53",
+                "role": "Button",
+                "label": "Click me!"
+              },
+              {
+                "id": "c2ca8602f09cb9ba",
+                "role": "Link",
+                "label": "Link"
+              },
+              {
+                "id": "dc05be6ca66ea284",
+                "role": "Link",
+                "label": "Click me!"
+              },
+              {
+                "id": "60e3ea5d1c2a450",
+                "role": "Link",
+                "label": "Checkbox"
+              },
+              {
+                "id": "938932354ca94638",
+                "role": "CheckBox",
+                "label": "Checkbox"
+              },
+              {
+                "id": "dbbe90d172064b28",
+                "role": "Link",
+                "label": "RadioButton"
+              },
+              {
+                "id": "2f6df56c77202968",
+                "role": "GenericContainer",
+                "children": [
+                  {
+                    "id": "acc74bcbe19f0ac0",
+                    "role": "RadioButton",
+                    "label": "First"
+                  },
+                  {
+                    "id": "58f0d54234d605c0",
+                    "role": "RadioButton",
+                    "label": "Second"
+                  },
+                  {
+                    "id": "8efe6e20358c9ada",
+                    "role": "RadioButton",
+                    "label": "Third"
+                  }
+                ]
+              },
+              {
+                "id": "25a572e6899d34d3",
+                "role": "Link",
+                "label": "SelectableLabel"
+              },
+              {
+                "id": "568243fd409a65c3",
+                "role": "GenericContainer",
+                "children": [
+                  {
+                    "id": "47d22251be010243",
+                    "role": "Button",
+                    "label": "First"
+                  },
+                  {
+                    "id": "220d3af9e7df4bc2",
+                    "role": "Button",
+                    "label": "Second"
+                  },
+                  {
+                    "id": "323785727c384a9c",
+                    "role": "Button",
+                    "label": "Third"
+                  }
+                ]
+              },
+              {
+                "id": "2b079b655f8aa24c",
+                "role": "Link",
+                "label": "ComboBox"
+              },
+              {
+                "id": "3f5b84c3728728c5",
+                "role": "ComboBox",
+                "label": "Take your pick",
+                "value": "First"
+              },
+              {
+                "id": "6ffcc01e6f2fb18e",
+                "role": "Label",
+                "value": "Take your pick"
+              },
+              {
+                "id": "ba0be981da5b426",
+                "role": "Link",
+                "label": "Slider"
+              },
+              {
+                "id": "45b2a96a25c8afc0",
+                "role": "GenericContainer",
+                "children": [
+                  {
+                    "id": "ec9c70ec4d94da3d",
+                    "role": "Slider",
+                    "label": "Slider"
+                  },
+                  {
+                    "id": "af8157f9885e74ae",
+                    "role": "SpinButton",
+                    "label": "Slider",
+                    "value": "42°"
+                  }
+                ]
+              },
+              {
+                "id": "7d79ede951fde045",
+                "role": "Link",
+                "label": "RangeSlider"
+              },
+              {
+                "id": "536a4a12d2e7cc2e",
+                "role": "GenericContainer",
+                "children": [
+                  {
+                    "id": "1d331fe58bd41bd6",
+                    "role": "SpinButton",
+                    "label": "°",
+                    "value": "90°"
+                  },
+                  {
+                    "id": "c241b866c7439a9d",
+                    "role": "Slider",
+                    "label": "low"
+                  },
+                  {
+                    "id": "17df5a3f2b6f880",
+                    "role": "Slider",
+                    "label": "high"
+                  },
+                  {
+                    "id": "7530785498651c25",
+                    "role": "Slider",
+                    "label": "RangeSlider"
+                  },
+                  {
+                    "id": "4d294d953bd3423f",
+                    "role": "SpinButton",
+                    "label": "°",
+                    "value": "250°"
+                  }
+                ]
+              },
+              {
+                "id": "927864cfef6fdd45",
+                "role": "Link",
+                "label": "DragValue"
+              },
+              {
+                "id": "b9c03e36244c4659",
+                "role": "SpinButton",
+                "label": "DragValue",
+                "value": "42"
+              },
+              {
+                "id": "fc4ff5e5d8f0d688",
+                "role": "Link",
+                "label": "ProgressBar"
+              },
+              {
+                "id": "e1815cfac8761082",
+                "role": "ProgressIndicator",
+                "label": "The progress bar can be animated!"
+              },
+              {
+                "id": "9023bbfe398d145",
+                "role": "Link",
+                "label": "Color picker"
+              },
+              {
+                "id": "6e50df357ebac861",
+                "role": "ColorWell",
+                "label": "Color",
+                "value": "#add7e580"
+              },
+              {
+                "id": "ce0c0e6ff28c3084",
+                "role": "Link",
+                "label": "Image"
+              },
+              {
+                "id": "28b278d32f7a7867",
+                "role": "Image"
+              },
+              {
+                "id": "1aad4187894de02b",
+                "role": "Link",
+                "label": "Button with image"
+              },
+              {
+                "id": "f85f09bb99688798",
+                "role": "Button",
+                "label": "Click me!"
+              },
+              {
+                "id": "e90263d4ce885d68",
+                "role": "Link",
+                "label": "Separator"
+              },
+              {
+                "id": "686218ec3bb411c4",
+                "role": "Link",
+                "label": "CollapsingHeader"
+              },
+              {
+                "id": "10e7d37ffb89fa6b",
+                "role": "DisclosureTriangle",
+                "label": "Click to see what is hidden!"
+              },
+              {
+                "id": "4f53a1c56e4b0af9",
+                "role": "Link",
+                "label": "Custom widget"
+              },
+              {
+                "id": "f1ba76cc68944528",
+                "role": "CheckBox",
+                "label": "It's easy to create your own widgets!\nThis toggle switch is just 15 lines of code."
+              }
+            ]
+          },
+          {
+            "id": "5b551196491b6169",
+            "role": "GenericContainer",
+            "children": [
+              {
+                "id": "153ea4aea6330eda",
+                "role": "CheckBox",
+                "label": "Visible"
+              },
+              {
+                "id": "9a251ce41d6e49fb",
+                "role": "CheckBox",
+                "label": "Interactive"
+              },
+              {
+                "id": "6d824f5e01408a93",
+                "role": "SpinButton",
+                "label": "Opacity",
+                "value": "1.00"
+              },
+              {
+                "id": "f273f32e01c0bda0",
+                "role": "Label",
+                "value": "Opacity"
+              }
+            ]
+          },
+          {
+            "id": "f8c470f16956ce6a",
+            "role": "GenericContainer",
+            "children": [
+              {
+                "id": "ad5cb3e3dae2ef04",
+                "role": "Link",
+                "label": "https://docs.rs/egui/"
+              },
+              {
+                "id": "5dc95be367fa42cd",
+                "role": "Link",
+                "label": "Source code of the widget gallery"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

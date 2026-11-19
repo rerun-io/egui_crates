@@ -1,0 +1,11 @@
+---
+source: crates/egui_mcp/src/tree.rs
+expression: "pretty(&query_all(&QueryFilter\n{\n    query: Query { role: Some(\"button\".to_owned()), ..Default::default() },\n    ..Default::default()\n}))"
+---
+[
+  {
+    "id": "3",
+    "role": "Button",
+    "label": "OK"
+  }
+]

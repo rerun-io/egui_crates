@@ -10,14 +10,15 @@ export RUSTFLAGS="--deny warnings"
 export RUSTDOCFLAGS="--deny warnings"
 
 cargo fmt --all -- --check
-cargo clippy --quiet --all-targets --all-features -- --deny warnings
-cargo test --quiet --all-targets --all-features
-cargo test --quiet --doc --all-features # checks all doc-tests
+cargo clippy --quiet --workspace --all-targets --all-features -- --deny warnings
+cargo test --quiet --workspace --all-targets --all-features
+cargo test --quiet --workspace --doc --all-features # checks all doc-tests
 
-cargo doc --quiet --no-deps --all-features
-cargo doc --quiet --document-private-items --no-deps --all-features
+cargo doc --quiet --workspace --no-deps --all-features
+cargo doc --quiet --workspace --document-private-items --no-deps --all-features
 
 cargo deny --all-features --log-level error check
+cargo shear # cargo install cargo-shear
 
 typos # cargo install typos-cli
 

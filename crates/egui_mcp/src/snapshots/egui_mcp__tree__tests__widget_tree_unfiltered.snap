@@ -1,0 +1,41 @@
+---
+source: crates/egui_mcp/src/tree.rs
+expression: "pretty(&query_all(&QueryFilter::default()))"
+---
+[
+  {
+    "id": "1",
+    "role": "Window",
+    "focused": true,
+    "children": [
+      {
+        "id": "2",
+        "children": [
+          {
+            "id": "3",
+            "role": "Button",
+            "label": "OK"
+          },
+          {
+            "id": "6",
+            "role": "CheckBox",
+            "label": "On"
+          }
+        ]
+      },
+      {
+        "id": "8",
+        "role": "Link",
+        "label": "Docs"
+      },
+      {
+        "id": "ff",
+        "label": "hi"
+      },
+      {
+        "id": "5",
+        "value": "42"
+      }
+    ]
+  }
+]

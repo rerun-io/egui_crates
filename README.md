@@ -1,38 +1,23 @@
-# `egui_tiles`
+# egui ecosystem crates
 
-[<img alt="github" src="https://img.shields.io/badge/github-rerun_io/egui_tiles-8da0cb?logo=github" height="20">](https://github.com/rerun-io/egui_tiles)
-[![Latest version](https://img.shields.io/crates/v/egui_tiles.svg)](https://crates.io/crates/egui_tiles)
-[![Documentation](https://docs.rs/egui_tiles/badge.svg)](https://docs.rs/egui_tiles)
-[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
-[![Build Status](https://github.com/rerun-io/egui_tiles/workflows/Rust/badge.svg)](https://github.com/rerun-io/egui_tiles/actions?workflow=Rust)
-[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/rerun-io/egui_tiles/blob/master/LICENSE-MIT)
-[![Apache](https://img.shields.io/badge/license-Apache-blue.svg)](https://github.com/rerun-io/egui_tiles/blob/master/LICENSE-APACHE)
+A monorepo of all the [egui](https://www.egui.rs/) crates we maintain and use within [rerun](https://rerun.io/).
 
-Layouting and docking for [egui](https://github.com/rerun-io/egui).
-
-Supports:
-* Horizontal and vertical layouts
-* Grid layouts
-* Tabs
-* Drag-and-drop docking
-
-![egui_tiles](https://github.com/rerun-io/egui_tiles/assets/1148717/f86bee40-2506-4484-8a82-37ffdc805b81)
-
-### Trying it
-`cargo r --example simple`
-
-### Comparison with [egui_dock](https://github.com/Adanos020/egui_dock)
-[egui_dock](https://github.com/Adanos020/egui_dock) is an excellent crate serving similar needs. `egui_tiles` aims to become a more flexible and feature-rich alternative to `egui_dock`.
-
-`egui_dock` only supports binary splits (left/right or top/bottom), while `egui_tiles` support full horizontal and vertical layouts, as well as grid layouts. `egui_tiles` also strives to be more customizable, enabling users to override the default style and behavior by implementing methods on a `Behavior` `trait`.
-
-`egui_dock` supports some features that `egui_tiles` does not yet support, such as close-buttons on each tab, and built-in scroll areas.
+| crate                                                  | description                                          | published                                           |
+|--------------------------------------------------------|------------------------------------------------------|-----------------------------------------------------|
+| [`crates/egui_tiles`](crates/egui_tiles)               | Tiling layout engine with drag-and-drop and resizing | [`egui_tiles`](https://crates.io/crates/egui_tiles) |
+| [`crates/egui_table`](crates/egui_table)               | Table widget for millions of rows                    | [`egui_table`](https://crates.io/crates/egui_table) |
+| [`crates/egui_table_demo`](crates/egui_table_demo)     | Web demo for `egui_table`                            | no                                                  |
+| [`crates/egui_mcp`](crates/egui_mcp)                   | Lets agents control and inspect egui apps            | [`egui_mcp`](https://crates.io/crates/egui_mcp)     |
+| [`crates/kittest_inspector`](crates/kittest_inspector) | UI to inspect and control egui apps and tests        | no                                                  |
 
 ---
 
 <div align="center">
-<img src="https://user-images.githubusercontent.com/1148717/236840584-f4795fb3-89e3-40ac-b570-ac2869e6e8fa.png" width="50%">
 
-`egui_tiles` development is sponsored by [Rerun](https://www.rerun.io/), a startup doing<br>
-visualizations for computer vision and robotics.
+  Development is sponsored by [Rerun](https://rerun.io/), an easy-to-use database and visualization toolbox for 
+  multimodal and temporal data.
+
+  <a href="https://rerun.io/">
+    <img width="1000" height="200" alt="Banner with Rerun logo" src="https://static.rerun.io/d0f5443d4803cac65c73fcc064936c09f5e7f208_rerun_banner.png" />
+  </a>
 </div>

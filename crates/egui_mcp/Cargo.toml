@@ -1,0 +1,54 @@
+[package]
+name = "egui_mcp"
+version = "0.3.0"
+authors = ["Lucas Meurer <hi@lucasmerlin.me>"]
+description = "MCP server that drives live egui apps over the egui_inspection protocol"
+edition.workspace = true
+rust-version.workspace = true
+homepage = "https://github.com/rerun-io/egui_crates"
+license.workspace = true
+readme = "README.md"
+repository = "https://github.com/rerun-io/egui_crates"
+categories = ["gui", "development-tools::testing"]
+keywords = ["egui", "mcp", "accesskit", "inspector", "testing"]
+include = ["**/*.rs", "Cargo.toml"]
+publish = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--generate-link-to-definition"]
+
+[[bin]]
+name = "egui-mcp"
+path = "src/main.rs"
+
+[dependencies]
+egui.workspace = true
+egui_inspection.workspace = true
+accesskit.workspace = true
+accesskit_consumer.workspace = true
+base64.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# `default_fonts` so a test can lay out a real frame; the lib itself needs no fonts.
+egui = { version = "0.37.0", features = ["default_fonts"] }
+# Renders the demo app to a PNG snapshot, so the tree snapshots can be read against a picture
+# of the frame they describe.
+egui_kittest = { version = "0.37.0", default-features = false, features = [
+    "snapshot",
+    "wgpu",
+] }
+# The demo app shows egui's own widget gallery, so the tests cover every widget kind egui
+# reports to AccessKit rather than the handful we'd think to write out.
+egui_demo_lib = "0.37.0"
+egui_extras = { version = "0.37.0", features = ["image", "svg"] }
+insta.workspace = true
+
+[lints]
+workspace = true

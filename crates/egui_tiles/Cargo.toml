@@ -1,0 +1,59 @@
+[package]
+authors = [
+  "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>",
+  "rerun.io <opensource@rerun.io>",
+]
+categories = ["gui"]
+description = "A tiling layout engine for egui with drag-and-drop and resizing"
+edition.workspace = true
+homepage = "https://github.com/rerun-io/egui_crates"
+include = ["**/*.rs", "Cargo.toml", "README.md"]
+keywords = ["egui", "gui", "tile", "dock", "layout"]
+license.workspace = true
+name = "egui_tiles"
+readme = "README.md"
+repository = "https://github.com/rerun-io/egui_crates"
+rust-version.workspace = true
+version = "0.18.0"
+
+[package.metadata.docs.rs]
+all-features = true
+
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "egui/serde"]
+
+
+[dependencies]
+ahash = { version = "0.8.12", default-features = false, features = [
+  "no-rng", # we don't need DOS-protection for what we use ahash for
+  "std",
+] }
+egui = { version = "0.37.0", default-features = false }
+itertools = "0.15.0"
+log = { version = "0.4.28", features = ["std"] }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+
+[dev-dependencies]
+# For the example:
+eframe = { version = "0.37.0", default-features = false, features = [
+  "default_fonts", # Embed the default egui fonts.
+  "glow",          # Use the glow rendering backend. Alternative: "wgpu".
+  "persistence",   # Enable restoring app state when restarting the app.
+  "wayland",       # Required for Linux and CI.
+] }
+env_logger = { version = "0.11.8", default-features = false, features = [
+  "auto-color",
+  "humantime",
+] }
+
+# For tests:
+egui_kittest = "0.37.0"
+ron = "0.12.2"
+serde_json = "1.0.149"
+
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+---
+source: crates/egui_mcp/src/real_app_tests.rs
+expression: "serde_json::to_string_pretty(&excluded).expect(\"serialize\")"
+---
+{
+  "Ok": [
+    {
+      "id": "96a8f155b766eefb",
+      "role": "Slider",
+      "label": "Volume"
+    },
+    {
+      "id": "db68ddc08d32ccd1",
+      "role": "SpinButton",
+      "label": "Volume",
+      "value": "42"
+    },
+    {
+      "id": "2389025b21f1c31",
+      "role": "Label",
+      "value": "Volume"
+    }
+  ]
+}

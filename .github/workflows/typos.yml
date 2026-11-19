@@ -5,7 +5,7 @@
 # install and run locally: cargo install typos-cli && typos
 
 name: Spell Check
-on: [pull_request]
+on: [pull_request, merge_group]
 
 jobs:
   run:
@@ -16,4 +16,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check spelling of entire workspace
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@v1.49.0

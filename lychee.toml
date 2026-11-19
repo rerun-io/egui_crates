@@ -44,6 +44,9 @@ exclude_path = [
   "target_wasm",
   "target",
   "venv",
+
+  # This file. The `exclude` patterns below are not links to check.
+  "lychee.toml",
 ]
 
 # Exclude URLs and mail addresses from checking (supports regex).
@@ -72,8 +75,32 @@ exclude = [
   'https://fonts.gstatic.com/',    # Font API entrypoint, not a link.
   'https://tel.rerun.io/',         # Analytics endpoint.
 
+  # GitHub media assets (videos/images) require auth and can be inaccessible to link checkers.
+  'https://github.com/user-attachments',
+
+  # docs.rs links for crates that are not published yet.
+  'https://docs.rs/egui_mcp',
+
+  # Used in the rerun_template repo until the user search-replaces `new_repo_name`.
+  'https://github.com/rerun-io/new_repo_name',
+
   # Avoid rate limiting.
-  'https://crates.io/crates/.*',                  # Avoid crates.io rate-limiting
-  'https://github.com/rerun-io/rerun/commit/\.*', # Ignore links to our own commits (typically in changelog).
-  'https://github.com/rerun-io/rerun/pull/\.*',   # Ignore links to our own pull requests (typically in changelog).
+  'https://crates.io/crates/.*',                       # Avoid crates.io rate-limiting
+  'https://github.com/rerun-io/egui_crates/commit/\.*', # Ignore links to our own commits (typically in changelog).
+  'https://github.com/rerun-io/egui_crates/pull/\.*',   # Ignore links to our own pull requests (typically in changelog).
+  'https://github.com/rerun-io/egui_table/commit/\.*', # The egui_table changelog predates the monorepo.
+  'https://github.com/rerun-io/egui_table/pull/\.*',   # The egui_table changelog predates the monorepo.
+  'https://www.unicode.org/.*',                        # Avoid unicode.org rate-limiting
+
+  # License pages in `deny.toml` that are often down (500/503).
+  'https://tldrlegal.com/license/',
+  'https://ubuntu.com/legal/font-licence',
+
+  # The demo is deployed by `.github/workflows/pages.yml`, which only runs on `main`,
+  # so this 404s until the monorepo lands.
+  'https://rerun-io.github.io/egui_crates/',
+
+  # Badge images are generated on demand and time out under load; a 408 says nothing
+  # about link rot. The pages they link *to* are still checked.
+  'https://docs\.rs/.*/badge\.svg',
 ]

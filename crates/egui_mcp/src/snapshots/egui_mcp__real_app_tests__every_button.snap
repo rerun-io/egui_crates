@@ -1,0 +1,57 @@
+---
+source: crates/egui_mcp/src/real_app_tests.rs
+expression: "query_app(&QueryFilter\n{\n    query: Query { role: Some(\"Button\".to_owned()), ..Default::default() },\n    ..Default::default()\n})"
+---
+[
+  {
+    "id": "ab3815b91363f19e",
+    "role": "Button",
+    "label": "Run"
+  },
+  {
+    "id": "1a21f1014d0b5285",
+    "role": "Button",
+    "label": "egui"
+  },
+  {
+    "id": "149d23c7d8865e78",
+    "role": "Button",
+    "label": "kittest"
+  },
+  {
+    "id": "1a35e75bad93680",
+    "role": "Button",
+    "label": "rerun"
+  },
+  {
+    "id": "ace403b7a6ca8c0d",
+    "role": "Button",
+    "label": "Reset",
+    "disabled": true
+  },
+  {
+    "id": "ec63454b51548c53",
+    "role": "Button",
+    "label": "Click me!"
+  },
+  {
+    "id": "47d22251be010243",
+    "role": "Button",
+    "label": "First"
+  },
+  {
+    "id": "220d3af9e7df4bc2",
+    "role": "Button",
+    "label": "Second"
+  },
+  {
+    "id": "323785727c384a9c",
+    "role": "Button",
+    "label": "Third"
+  },
+  {
+    "id": "f85f09bb99688798",
+    "role": "Button",
+    "label": "Click me!"
+  }
+]
