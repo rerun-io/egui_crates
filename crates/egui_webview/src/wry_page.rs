@@ -1,7 +1,7 @@
 //! The parts of the macOS and Windows backends that are the same for both: a wry webview and
 //! the events it reports.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use egui::Context;
@@ -16,6 +16,9 @@ use crate::{Error, WebViewEvent, WebViewSource, warn};
 pub struct WryPage {
     pub webview: wry::WebView,
     events: Rc<RefCell<Vec<WebViewEvent>>>,
+
+    /// The page zoom last set with [`Self::set_zoom`].
+    zoom: Cell<f32>,
 }
 
 impl WryPage {
@@ -61,7 +64,11 @@ impl WryPage {
             WebViewSource::Url(url) => builder.with_url(url),
         };
         let webview = builder.build_as_child(parent).map_err(Error::backend)?;
-        Ok(Self { webview, events })
+        Ok(Self {
+            webview,
+            events,
+            zoom: Cell::new(1.0),
+        })
     }
 
     pub fn load(&self, source: &WebViewSource) -> Result<(), Error> {
@@ -74,6 +81,15 @@ impl WryPage {
 
     pub fn evaluate_script(&self, script: &str) -> Result<(), Error> {
         self.webview.evaluate_script(script).map_err(Error::backend)
+    }
+
+    /// Zooms the page by `zoom`, so that it scales together with egui's
+    /// [`Context::zoom_factor`].
+    pub fn set_zoom(&self, zoom: f32) {
+        if self.zoom.get() != zoom {
+            self.zoom.set(zoom);
+            warn(self.webview.zoom(zoom.into()));
+        }
     }
 
     pub fn reload(&self) {

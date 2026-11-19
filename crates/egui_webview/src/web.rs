@@ -303,14 +303,18 @@ impl IframeBackend {
         // An `<iframe>` is transparent where its page paints no background, so give it the
         // background of a browser tab, which also shows while the page loads. `Canvas` is that
         // color for the `<iframe>`'s `color-scheme`, so it is dark in the dark theme.
+        //
+        // One CSS pixel of the page is one ui point, so that the page zooms together with egui:
+        // the `<iframe>` is laid out in ui points, and scaled up to CSS pixels.
         let offset = rect.min - visible.min;
         let iframe = format!(
             "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; \
+             transform: scale({scale}); transform-origin: 0 0; \
              border: none; color-scheme: {}; background: Canvas; pointer-events: auto;",
             offset.x,
             offset.y,
-            rect.width(),
-            rect.height(),
+            output.rect.width(),
+            output.rect.height(),
             color_scheme(theme),
         );
         (container, iframe)
