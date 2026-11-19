@@ -3,7 +3,6 @@
 //! The tools depend only on [`Transport`], so they don't care whether the bytes travel over a
 //! TCP socket, a gRPC call, or an in-process channel to the app's own inspection handler.
 
-use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 

@@ -22,7 +22,6 @@
 //! Recoverable failures (no app connected, node not found, etc.) become a tool result with
 //! `isError: true` — not a JSON-RPC error, per MCP spec.
 
-use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;

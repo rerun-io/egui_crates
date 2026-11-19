@@ -1,6 +1,5 @@
 //! [`crate::call`] against a fake app, to pin how the tools talk to the [`Transport`].
 
-use std::future::Future;
 use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};

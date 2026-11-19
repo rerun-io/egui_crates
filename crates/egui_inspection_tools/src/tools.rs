@@ -6,7 +6,6 @@
 //! (`GetTree`), resolves the locator to a logical-point position, synthesizes the matching
 //! `egui::Event`s, and sends them via `ApplyEvents`. The app-side handler stays low-level.
 
-use std::future::Future;
 use std::pin::pin;
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, Ordering};
