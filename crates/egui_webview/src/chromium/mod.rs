@@ -49,12 +49,34 @@ pub struct CefOptions {
     ///
     /// The default is 60.
     pub frame_rate: u32,
+
+    /// The color behind the page. It shows until a page has loaded, and where a page sets no
+    /// background of its own.
+    ///
+    /// The default is white.
+    ///
+    /// CEF takes an opaque background or none at all. With [`Color32::TRANSPARENT`], egui
+    /// shows through such a page. The alpha of every other color is ignored.
+    pub background_color: Color32,
 }
 
 impl Default for CefOptions {
     fn default() -> Self {
-        Self { frame_rate: 60 }
+        Self {
+            frame_rate: 60,
+            background_color: Color32::WHITE,
+        }
     }
+}
+
+/// `color` as CEF's ARGB color. CEF takes a background that is opaque or fully transparent, so
+/// every color that isn't fully transparent becomes opaque.
+fn cef_color(color: Color32) -> u32 {
+    if color.a() == 0 {
+        return 0;
+    }
+    let [r, g, b, _] = color.to_srgba_unmultiplied();
+    u32::from_be_bytes([0xFF, r, g, b])
 }
 
 /// How many passes of input are kept for the backend. More than that only pile up if the app
@@ -99,9 +121,7 @@ impl CefBackend {
         };
         let settings = BrowserSettings {
             windowless_frame_rate: i32::try_from(options.frame_rate).unwrap_or(i32::MAX),
-            // Opaque white like in a browser, for pages that set no background. CEF's default
-            // for a windowless browser is transparent.
-            background_color: 0xFFFF_FFFF,
+            background_color: cef_color(options.background_color),
             ..Default::default()
         };
         let browser = cef::browser_host_create_browser_sync(
