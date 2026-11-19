@@ -1,6 +1,7 @@
 //! What the CEF handlers of one page, its widget and its backend share.
 
 use std::sync::Arc;
+use std::sync::mpsc;
 
 use egui::mutex::Mutex;
 use egui::{CursorIcon, FocusDirection, Rect, Vec2, ViewportId};
@@ -15,6 +16,9 @@ use crate::WebViewEvent;
 pub struct Context {
     pub egui_ctx: egui::Context,
 
+    /// Carries what happened in the page to [`crate::Backend::take_events`].
+    events: mpsc::Sender<WebViewEvent>,
+
     /// Never keep this locked across a call into CEF. CEF can run a handler before it returns,
     /// and the handler locks the state too.
     pub state: Mutex<State>,
@@ -22,8 +26,6 @@ pub struct Context {
 
 /// Everything about a page that changes while it lives.
 pub struct State {
-    /// What happened in the page, for [`crate::Backend::take_events`].
-    pub events: Vec<WebViewEvent>,
     /// The size of the view in points, and the pixels per point.
     ///
     /// CEF's view coordinates (DIPs) are egui points, with the origin at the view's top-left.
@@ -66,9 +68,10 @@ pub struct Inbox {
 }
 
 impl Context {
-    pub fn new(egui_ctx: &egui::Context) -> Arc<Self> {
+    /// Returns the context of a new page, and the receiving end of the page's events.
+    pub fn new(egui_ctx: &egui::Context) -> (Arc<Self>, mpsc::Receiver<WebViewEvent>) {
+        let (events, receiver) = mpsc::channel();
         let state = State {
-            events: Vec::new(),
             size: (egui::vec2(1.0, 1.0), egui_ctx.pixels_per_point()),
             view: Layer::default(),
             popup: Layer::default(),
@@ -82,16 +85,20 @@ impl Context {
             inbox: Inbox::default(),
             shown_pass: None,
         };
-        Arc::new(Self {
+        let context = Arc::new(Self {
             egui_ctx: egui_ctx.clone(),
+            events,
             state: Mutex::new(state),
-        })
+        });
+        (context, receiver)
     }
 
     /// Queues `event` for [`crate::Backend::take_events`], and requests a repaint so that the
     /// widget picks it up.
     pub fn send(&self, event: WebViewEvent) {
-        self.state.lock().events.push(event);
+        // CEF closes a browser some time after its backend is dropped. Nobody receives the
+        // events of a page in between.
+        self.events.send(event).ok();
         self.request_repaint();
     }
 

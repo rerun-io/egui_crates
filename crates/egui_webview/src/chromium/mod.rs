@@ -25,6 +25,7 @@ mod runtime;
 
 use std::fmt::Write as _;
 use std::sync::Arc;
+use std::sync::mpsc;
 
 use cef::{
     BrowserSettings, ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _,
@@ -59,6 +60,9 @@ const MAX_WAITING_BATCHES: usize = 64;
 pub struct CefBackend {
     browser: cef::Browser,
     context: Arc<Context>,
+
+    /// What happened in the page, sent by the CEF handlers.
+    events: mpsc::Receiver<WebViewEvent>,
     input: input::Input,
 
     /// Whether the browser was last told that it is hidden (`was_hidden(1)`), which lets CEF stop
@@ -78,7 +82,7 @@ impl CefBackend {
     pub fn new(ctx: &egui::Context, source: &WebViewSource) -> Result<Self, Error> {
         runtime::initialize(ctx)?;
 
-        let context = Context::new(ctx);
+        let (context, events) = Context::new(ctx);
         let window_info = WindowInfo {
             windowless_rendering_enabled: 1,
             ..Default::default()
@@ -108,6 +112,7 @@ impl CefBackend {
         Ok(Self {
             browser,
             context,
+            events,
             input: input::Input::default(),
             hidden: false,
             told_size: None,
@@ -415,7 +420,7 @@ impl Backend for CefBackend {
     }
 
     fn take_events(&mut self) -> Vec<WebViewEvent> {
-        std::mem::take(&mut self.context.state.lock().events)
+        self.events.try_iter().collect()
     }
 }
 
