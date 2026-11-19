@@ -41,7 +41,6 @@ use rmcp::{
         Implementation, ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig,
         Tool, ToolAnnotations,
     },
-    schemars,
     service::{RequestContext, RoleServer},
     tool, tool_router,
 };

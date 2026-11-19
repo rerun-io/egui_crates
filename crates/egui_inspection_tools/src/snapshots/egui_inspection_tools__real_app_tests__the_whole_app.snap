@@ -133,7 +133,7 @@ expression: "query_app(&QueryFilter { limit: usize::MAX, ..Default::default() })
             "role": "GenericContainer",
             "children": [
               {
-                "id": "cdfe39bc5c18786c",
+                "id": "c819768b5afac1a1",
                 "role": "DisclosureTriangle",
                 "label": "Advanced"
               },
@@ -142,12 +142,12 @@ expression: "query_app(&QueryFilter { limit: usize::MAX, ..Default::default() })
                 "role": "GenericContainer",
                 "children": [
                   {
-                    "id": "57ecedfc8498d6ff",
+                    "id": "e53216725f2b3d60",
                     "role": "Label",
                     "value": "Nothing to see here"
                   },
                   {
-                    "id": "53f88f38e6976025",
+                    "id": "ace403b7a6ca8c0d",
                     "role": "Button",
                     "label": "Reset",
                     "disabled": true
@@ -410,7 +410,7 @@ expression: "query_app(&QueryFilter { limit: usize::MAX, ..Default::default() })
                 "label": "CollapsingHeader"
               },
               {
-                "id": "18813c8724eae525",
+                "id": "10e7d37ffb89fa6b",
                 "role": "DisclosureTriangle",
                 "label": "Click to see what is hidden!"
               },

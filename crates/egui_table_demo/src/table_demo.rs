@@ -167,7 +167,7 @@ impl egui_table::TableDelegate for TableDemo {
     fn row_ui(&mut self, ui: &mut Ui, _row_nr: u64) {
         if ui.rect_contains_pointer(ui.max_rect()) {
             ui.painter()
-                .rect_filled(ui.max_rect(), 0.0, ui.visuals().code_bg_color);
+                .rect_filled(ui.max_rect(), 0.0, ui.visuals().code.bg_color);
         }
 
         if ui.response().interact(Sense::click()).clicked() {
