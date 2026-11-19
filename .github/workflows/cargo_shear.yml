@@ -6,6 +6,7 @@ on:
       - "main"
   pull_request:
     types: [opened, synchronize]
+  merge_group:
 
 jobs:
   cargo-shear:

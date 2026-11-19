@@ -1,12 +1,12 @@
 #![allow(clippy::tuple_array_conversions)]
 
-use egui::{NumExt as _, Rect, emath::GuiRounding as _, pos2, vec2};
+use egui::{HighlightState, NumExt as _, Rect, emath::GuiRounding as _, pos2, vec2};
 use itertools::Itertools as _;
 
 use crate::behavior::{EditAction, LayoutContext};
 use crate::{
-    Behavior, ContainerInsertion, DropContext, InsertionPoint, ResizeState, SimplifyAction, TileId,
-    Tiles, Tree, is_being_dragged,
+    Behavior, ContainerInsertion, DropContext, InsertionPoint, SimplifyAction, TileId, Tiles, Tree,
+    is_being_dragged,
 };
 
 // ----------------------------------------------------------------------------
@@ -274,12 +274,12 @@ impl Linear {
             let x = egui::lerp(left_rect.right()..=right_rect.left(), 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui.style(), ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, HighlightState::Idle);
                 ui.painter().vline(x, parent_rect.y_range(), stroke);
                 continue;
             }
 
-            let mut resize_state = ResizeState::Idle;
+            let mut resize_state = HighlightState::Idle;
             let line_rect = Rect::from_center_size(
                 pos2(x, parent_rect.center().y),
                 vec2(
@@ -302,12 +302,12 @@ impl Linear {
                     |tile_id: TileId| tree.tiles.rect_or_die(tile_id).width(),
                 );
 
-                if resize_state != ResizeState::Idle {
+                if resize_state != HighlightState::Idle {
                     ui.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
                 }
             }
 
-            let stroke = behavior.resize_stroke(ui.style(), resize_state);
+            let stroke = behavior.resize_stroke(ui, resize_id, resize_state);
             ui.painter().vline(x, parent_rect.y_range(), stroke);
         }
     }
@@ -348,12 +348,12 @@ impl Linear {
             let y = egui::lerp(top_rect.bottom()..=bottom_rect.top(), 0.5);
 
             if !resizable {
-                let stroke = behavior.resize_stroke(ui.style(), ResizeState::Idle);
+                let stroke = behavior.resize_stroke(ui, resize_id, HighlightState::Idle);
                 ui.painter().hline(parent_rect.x_range(), y, stroke);
                 continue;
             }
 
-            let mut resize_state = ResizeState::Idle;
+            let mut resize_state = HighlightState::Idle;
             let line_rect = Rect::from_center_size(
                 pos2(parent_rect.center().x, y),
                 vec2(
@@ -376,12 +376,12 @@ impl Linear {
                     |tile_id: TileId| tree.tiles.rect_or_die(tile_id).height(),
                 );
 
-                if resize_state != ResizeState::Idle {
+                if resize_state != HighlightState::Idle {
                     ui.set_cursor_icon(egui::CursorIcon::ResizeVertical);
                 }
             }
 
-            let stroke = behavior.resize_stroke(ui.style(), resize_state);
+            let stroke = behavior.resize_stroke(ui, resize_id, resize_state);
             ui.painter().hline(parent_rect.x_range(), y, stroke);
         }
     }
@@ -416,7 +416,7 @@ fn resize_interaction<Pane>(
     dx: f32,
     i: usize,
     tile_width: impl Fn(TileId) -> f32,
-) -> ResizeState {
+) -> HighlightState {
     if splitter_response.double_clicked() {
         behavior.on_edit(EditAction::TileResized);
 
@@ -424,7 +424,7 @@ fn resize_interaction<Pane>(
         let mean = 0.5 * (shares[left] + shares[right]);
         shares[left] = mean;
         shares[right] = mean;
-        ResizeState::Hovering
+        HighlightState::Hovered
     } else if splitter_response.dragged() {
         behavior.on_edit(EditAction::TileResized);
 
@@ -442,11 +442,11 @@ fn resize_interaction<Pane>(
             shares[left] +=
                 shrink_shares(behavior, shares, &children[i + 1..], dx.abs(), tile_width);
         }
-        ResizeState::Dragging
+        HighlightState::Active
     } else if splitter_response.hovered() {
-        ResizeState::Hovering
+        HighlightState::Hovered
     } else {
-        ResizeState::Idle
+        HighlightState::Idle
     }
 }
 

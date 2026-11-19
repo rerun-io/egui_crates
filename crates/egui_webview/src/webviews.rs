@@ -495,7 +495,7 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
-    use egui::{EmbeddedViewOutput, FocusDirection, vec2};
+    use egui::{FocusDirection, vec2};
 
     use super::*;
     use crate::{Backend, EmbeddedWidget};
