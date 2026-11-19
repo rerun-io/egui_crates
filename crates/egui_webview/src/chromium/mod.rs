@@ -411,7 +411,7 @@ impl Backend for CefBackend {
             }
         }
 
-        for batch in inbox.batches {
+        for batch in &inbox.batches {
             self.input.replay(&self.browser, batch);
         }
         if let Some((menu, picked)) = inbox.menu_done {
