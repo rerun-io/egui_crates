@@ -16,11 +16,12 @@
 
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 
-mod client;
+mod handlers;
 mod input;
 mod keys;
 mod layer;
 mod runtime;
+mod shared;
 
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -36,7 +37,8 @@ use egui::{
 };
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
-use client::{MenuItem, Shared};
+use handlers::MenuItem;
+use shared::Shared;
 
 pub use runtime::run_subprocess;
 
@@ -91,7 +93,7 @@ impl CefBackend {
         };
         let browser = cef::browser_host_create_browser_sync(
             Some(&window_info),
-            Some(&mut shared.client()),
+            Some(&mut handlers::client(&shared)),
             Some(&source_url(source).as_str().into()),
             Some(&settings),
             None,
