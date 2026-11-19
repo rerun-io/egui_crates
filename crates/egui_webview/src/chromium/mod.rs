@@ -19,6 +19,7 @@
 mod client;
 mod input;
 mod keys;
+mod layer;
 mod runtime;
 
 use std::fmt::Write as _;
