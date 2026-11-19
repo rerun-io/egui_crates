@@ -1115,7 +1115,7 @@ impl<Pane> Tree<Pane> {
         !self.preview.memory.smoothed_rects.is_empty()
     }
 
-    /// How a [`Tabs`](crate::Tabs) container should be drawn mid-drag, if a drag is under way.
+    /// How a [`Tabs`] container should be drawn mid-drag, if a drag is under way.
     pub(crate) fn preview_tabs(&self, tile_id: TileId) -> Option<&Tabs> {
         match self.preview.tiles.as_ref()?.get(tile_id)? {
             Tile::Container(Container::Tabs(tabs)) => Some(tabs),
