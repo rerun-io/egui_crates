@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use egui::mutex::Mutex;
-use egui::{Context, Id, ViewportId};
+use egui::{Context, Id, IdMap, ViewportId};
 
 use crate::instance::FocusChange;
 use crate::{PageWidget, WebViewEvent, WebViewSource};
@@ -23,35 +23,15 @@ pub(crate) struct Inner {
     /// in the first pass, so the registry can place it in its first frame.
     pub fallback: Option<Arc<dyn PageWidget>>,
 
-    /// One slot per webview id. A `Vec`, because there are few and they are visited in order.
-    pub webviews: Vec<(Id, WebViewState)>,
-}
-
-impl Inner {
-    /// The webview state of `id`. Creates it if it doesn't exist.
-    pub fn get_or_create_state(&mut self, id: Id) -> &mut WebViewState {
-        let index = self.webviews.iter().position(|(slot_id, _)| *slot_id == id);
-        let index = index.unwrap_or_else(|| {
-            self.webviews.push((id, WebViewState::default()));
-            self.webviews.len() - 1
-        });
-        &mut self.webviews[index].1
-    }
-
-    /// The webview state of `id`, if it exists.
-    pub fn get_state(&mut self, id: Id) -> Option<&mut WebViewState> {
-        self.webviews
-            .iter_mut()
-            .find(|(slot_id, _)| *slot_id == id)
-            .map(|(_, slot)| slot)
-    }
+    /// The state of each webview, by its id.
+    pub webviews: IdMap<WebViewState>,
 }
 
 impl Mailbox {
     pub fn new(fallback: Option<Arc<dyn PageWidget>>) -> Self {
         Self(Arc::new(Mutex::new(Inner {
             fallback,
-            webviews: Vec::new(),
+            webviews: IdMap::default(),
         })))
     }
 
@@ -64,12 +44,9 @@ impl Mailbox {
         ctx.data(|data| data.get_temp(Self::key()))
     }
 
-    /// Puts this mailbox into `ctx`, if it isn't there already.
+    /// Puts this mailbox into `ctx`.
     pub fn install(&self, ctx: &Context) {
-        let installed = Self::of(ctx).is_some_and(|other| Arc::ptr_eq(&other.0, &self.0));
-        if !installed {
-            ctx.data_mut(|data| data.insert_temp(Self::key(), self.clone()));
-        }
+        ctx.data_mut(|data| data.insert_temp(Self::key(), self.clone()));
     }
 
     /// Locks the mailbox for `f`. Don't run backend code in `f`, nor egui code that could call
@@ -80,17 +57,12 @@ impl Mailbox {
 
     /// Locks the mailbox for `f`, running `f` with the webview state of `id`, if it exists.
     pub fn with_view_state<R>(&self, id: Id, f: impl FnOnce(&mut WebViewState) -> R) -> Option<R> {
-        self.with(|inner| {
-            if let Some(state) = inner.get_state(id) {
-                return Some(f(state));
-            }
-            None
-        })
+        self.with(|inner| inner.webviews.get_mut(&id).map(f))
     }
 }
 
-/// One webview's data. Only [`crate::WebView::show`] creates a slot, so every slot stands for a
-/// page that some code wants to see.
+/// One webview's data. Only [`crate::WebView::show`] creates it, so each one stands for a page
+/// that some code wants to see.
 #[derive(Default)]
 pub(crate) struct WebViewState {
     pub source: Option<Arc<WebViewSource>>,
@@ -140,7 +112,7 @@ impl WebViewState {
     pub fn extend_events(&mut self, ctx: &Context, events: Vec<WebViewEvent>) {
         // The events of a hidden page wait. Nobody reads them before the page is shown again.
         if !events.is_empty() && self.was_shown(ctx.cumulative_pass_nr_for(ViewportId::ROOT)) {
-            // The widget reads the mailbox in its next pass, so make sure there is one.
+            // Repaint, so the widget gets a pass in which it reads the events.
             ctx.request_repaint_of(ViewportId::ROOT);
         }
         self.events.extend(events);
