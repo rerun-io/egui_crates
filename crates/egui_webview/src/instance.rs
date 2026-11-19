@@ -211,7 +211,8 @@ impl WebViewInstance {
     /// `id` must be unique in `ctx`.
     ///
     /// # Errors
-    /// [`Error::Backend`] if CEF fails to initialize or to create the browser.
+    /// [`Error::Backend`] if [`crate::cef_init`] hasn't run, or if CEF fails to initialize or to
+    /// create the browser.
     #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
     pub fn new_cef(
         ctx: &Context,

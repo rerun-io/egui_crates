@@ -1,7 +1,8 @@
 //! CEF's process-wide initialisation, the entry point of its helper processes, and the external
 //! message pump that egui's passes drive.
 
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, OnceLock};
 use std::time::Duration;
 
 // The `wrap_*` macros call `add_ref` from this trait.
@@ -32,6 +33,9 @@ pub const MAX_PUMP_DELAY: Duration = Duration::from_millis(100);
 
 /// The result of initialising CEF, which can happen only once per process.
 static INIT: OnceLock<Result<(), String>> = OnceLock::new();
+
+/// Whether [`run_subprocess`] has run. Without it, CEF's helper processes would run the app.
+static RAN_SUBPROCESS_CHECK: AtomicBool = AtomicBool::new(false);
 
 /// The contexts that run CEF's message loop work in their passes, and so are repainted when CEF
 /// schedules work.
@@ -69,47 +73,40 @@ pub fn init() {
 /// }
 /// ```
 pub fn run_subprocess() -> Option<i32> {
-    if !is_subprocess() {
-        return None;
-    }
-    if let Err(err) = load_library() {
-        // A helper process has no logger set up, so the error goes to stderr.
-        #[expect(clippy::print_stderr)]
-        {
-            eprintln!("egui_webview: {err}");
-        }
-        return Some(1);
-    }
-    // Select the CEF API version that these bindings were generated for, before other CEF calls.
-    _ = cef::api_hash(sys::CEF_API_VERSION_LAST, 0);
+    RAN_SUBPROCESS_CHECK.store(true, Ordering::Relaxed);
+    // A process that can't load the library is no helper process, because the process that
+    // starts the helpers has loaded the same library. `initialize` reports the error when the
+    // app creates its first webview.
+    load_library().ok()?;
     let args = cef::args::Args::new();
     let mut app = EguiApp::new();
-    Some(cef::execute_process(
+    let code = cef::execute_process(
         Some(args.as_main_args()),
         Some(&mut app),
         std::ptr::null_mut(),
-    ))
+    );
+    // CEF decides what kind of process this is. In the browser process, which is the app
+    // itself, it returns -1 right away.
+    (0 <= code).then_some(code)
 }
 
-/// Whether Chromium started this process as one of its helpers, which it marks with a
-/// `--type=<kind>` argument.
-///
-/// Like Chromium, this stops looking at `--`. It accepts arguments that aren't valid Unicode.
-fn is_subprocess() -> bool {
-    std::env::args_os()
-        .skip(1)
-        .take_while(|arg| arg != "--")
-        .any(|arg| {
-            arg.as_encoded_bytes()
-                .strip_prefix(b"--type=")
-                .is_some_and(|kind| !kind.is_empty())
-        })
+/// Loads the CEF library, and selects the CEF API version that these bindings were generated
+/// for. Both come before every other CEF call, and happen once per process.
+fn load_library() -> Result<(), String> {
+    static LOADED: LazyLock<Result<(), String>> = LazyLock::new(|| {
+        // On other platforms, the CEF library is linked at build time.
+        #[cfg(target_os = "macos")]
+        load_framework()?;
+        _ = cef::api_hash(sys::CEF_API_VERSION_LAST, 0);
+        Ok(())
+    });
+    LOADED.clone()
 }
 
 /// Loads the CEF framework on macOS, from the app bundle if there is one, and otherwise from where
 /// the `cef` crate downloaded it at build time.
 #[cfg(target_os = "macos")]
-fn load_library() -> Result<(), String> {
+fn load_framework() -> Result<(), String> {
     use std::os::unix::ffi::OsStrExt as _;
 
     const FRAMEWORK: &str = "Chromium Embedded Framework.framework/Chromium Embedded Framework";
@@ -138,31 +135,20 @@ fn load_library() -> Result<(), String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-#[expect(clippy::unnecessary_wraps)]
-fn load_library() -> Result<(), String> {
-    // On other platforms, the CEF library is linked at build time.
-    Ok(())
-}
-
 /// Initialises CEF once per process, and has `ctx` run CEF's message loop work at the start of
 /// each of its passes.
 ///
 /// # Errors
-/// If this is a CEF helper process, if the CEF library can't be loaded, or if CEF fails to
+/// If [`run_subprocess`] hasn't run, if the CEF library can't be loaded, or if CEF fails to
 /// initialise. The first result is kept, so later calls fail in the same way.
 pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
     let result = INIT.get_or_init(|| {
-        if is_subprocess() {
-            return Err(
-                "this is a CEF helper process: call `egui_webview::cef_init` first in `main`"
-                    .to_owned(),
-            );
+        // CEF starts its helper processes from this executable. Refuse to start them before the
+        // app has shown that its `main` handles being one.
+        if !RAN_SUBPROCESS_CHECK.load(Ordering::Relaxed) {
+            return Err("call `egui_webview::cef_init` first in `main`".to_owned());
         }
         load_library()?;
-        // Select the CEF API version that these bindings were generated for, before other CEF
-        // calls.
-        _ = cef::api_hash(sys::CEF_API_VERSION_LAST, 0);
 
         let exe = std::env::current_exe().map_err(|err| err.to_string())?;
         let mut settings = cef::Settings {
