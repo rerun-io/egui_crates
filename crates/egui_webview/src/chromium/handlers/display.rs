@@ -10,7 +10,7 @@ use cef::{
 };
 use egui::CursorIcon;
 
-use crate::chromium::shared::Shared;
+use crate::chromium::context::Context;
 
 /// The native cursor handle CEF passes to `on_cursor_change`, whose type differs per platform.
 #[cfg(not(target_os = "macos"))]
@@ -20,7 +20,7 @@ type CursorHandle = *mut u8;
 
 wrap_display_handler! {
     pub struct EguiDisplayHandler {
-        shared: Arc<Shared>,
+        context: Arc<Context>,
     }
 
     impl DisplayHandler {
@@ -31,8 +31,8 @@ wrap_display_handler! {
             type_: cef::CursorType,
             _custom_cursor_info: Option<&cef::CursorInfo>,
         ) -> ::std::os::raw::c_int {
-            *self.shared.cursor.lock() = cursor_icon(*type_.as_ref());
-            self.shared.request_repaint();
+            self.context.state.lock().cursor = cursor_icon(*type_.as_ref());
+            self.context.request_repaint();
             1
         }
 
@@ -42,7 +42,7 @@ wrap_display_handler! {
             text: Option<&mut CefString>,
         ) -> ::std::os::raw::c_int {
             let text = text.map(|t| t.to_string()).filter(|t| !t.is_empty());
-            *self.shared.tooltip.lock() = text;
+            self.context.state.lock().tooltip = text;
             1
         }
     }

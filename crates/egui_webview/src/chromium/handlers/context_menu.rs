@@ -11,7 +11,7 @@ use cef::{
 };
 use egui::{Pos2, pos2};
 
-use crate::chromium::shared::Shared;
+use crate::chromium::context::Context;
 
 /// A context menu that CEF asked to show, which egui shows instead.
 pub struct ContextMenu {
@@ -41,7 +41,7 @@ pub enum MenuItem {
 
 wrap_context_menu_handler! {
     pub struct EguiContextMenuHandler {
-        shared: Arc<Shared>,
+        context: Arc<Context>,
     }
 
     impl ContextMenuHandler {
@@ -81,10 +81,12 @@ wrap_context_menu_handler! {
                 callback: callback.clone(),
                 shown: false,
             };
-            if let Some(old) = self.shared.context_menu.lock().replace(menu) {
+            // Unlock the state before the call into CEF.
+            let old = self.context.state.lock().context_menu.replace(menu);
+            if let Some(old) = old {
                 old.callback.cancel();
             }
-            self.shared.request_repaint();
+            self.context.request_repaint();
             1
         }
     }

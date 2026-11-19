@@ -7,7 +7,7 @@
 //! top of it, and it works the same with every egui renderer and on every platform, including
 //! Wayland.
 //!
-//! The backend has two halves. The widget half is [`Shared`]. It runs in egui's pass, paints the
+//! The backend has two halves. The widget half is [`Context`]. It runs in egui's pass, paints the
 //! page, and writes down the pass's input. The page half is [`CefBackend`]. It owns the browser,
 //! and sends it that input after the pass.
 //!
@@ -16,29 +16,28 @@
 
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 
+mod context;
 mod handlers;
 mod input;
 mod keys;
 mod layer;
 mod runtime;
-mod shared;
 
 use std::fmt::Write as _;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use cef::{
     BrowserSettings, ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _,
     ImplRunContextMenuCallback as _, WindowInfo,
 };
 use egui::{
-    Color32, Context, EmbeddedViewOutput, EventFilter, FocusDirection, Id, Pos2, Rect, Sense, Ui,
-    Vec2, ViewportId, pos2,
+    Color32, EmbeddedViewOutput, EventFilter, FocusDirection, Id, Pos2, Rect, Sense, Ui, Vec2,
+    ViewportId, pos2,
 };
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
+use context::Context;
 use handlers::MenuItem;
-use shared::Shared;
 
 pub use runtime::run_subprocess;
 
@@ -59,7 +58,7 @@ const MAX_WAITING_BATCHES: usize = 64;
 /// texture.
 pub struct CefBackend {
     browser: cef::Browser,
-    shared: Arc<Shared>,
+    context: Arc<Context>,
     input: input::Input,
 
     /// Whether the browser was last told that it is hidden (`was_hidden(1)`), which lets CEF stop
@@ -76,10 +75,10 @@ impl CefBackend {
     ///
     /// # Errors
     /// If CEF can't be initialised, or if it fails to create the browser.
-    pub fn new(ctx: &Context, source: &WebViewSource) -> Result<Self, Error> {
+    pub fn new(ctx: &egui::Context, source: &WebViewSource) -> Result<Self, Error> {
         runtime::initialize(ctx)?;
 
-        let shared = Shared::new(ctx);
+        let context = Context::new(ctx);
         let window_info = WindowInfo {
             windowless_rendering_enabled: 1,
             ..Default::default()
@@ -93,7 +92,7 @@ impl CefBackend {
         };
         let browser = cef::browser_host_create_browser_sync(
             Some(&window_info),
-            Some(&mut handlers::client(&shared)),
+            Some(&mut handlers::client(&context)),
             Some(&source_url(source).as_str().into()),
             Some(&settings),
             None,
@@ -108,7 +107,7 @@ impl CefBackend {
 
         Ok(Self {
             browser,
-            shared,
+            context,
             input: input::Input::default(),
             hidden: false,
             told_size: None,
@@ -117,7 +116,7 @@ impl CefBackend {
 }
 
 /// The half of a CEF page that runs in egui's pass.
-impl PageWidget for Shared {
+impl PageWidget for Context {
     fn allocate(&self, ui: &mut Ui, id: Id, size: Vec2) -> egui::Response {
         let (_, rect) = ui.allocate_space(size);
         ui.interact(rect, id, Sense::click_and_drag())
@@ -130,17 +129,20 @@ impl PageWidget for Shared {
 
         // A page that is scrolled out of view counts as not shown, so CEF stops rendering it.
         let visible = ui.is_rect_visible(rect);
-        if visible {
-            *self.shown_pass.lock() = Some(ctx.cumulative_pass_nr_for(ViewportId::ROOT));
-        }
-
-        // CEF asks for this size when it renders. The backend tells CEF after the pass that it
-        // changed.
-        *self.size.lock() = (rect.size(), ctx.pixels_per_point());
+        let pass = ctx.cumulative_pass_nr_for(ViewportId::ROOT);
+        let menu_open = {
+            let mut state = self.state.lock();
+            if visible {
+                state.shown_pass = Some(pass);
+            }
+            // CEF asks for this size when it renders. The backend tells CEF after the pass that
+            // it changed.
+            state.size = (rect.size(), ctx.pixels_per_point());
+            state.context_menu.is_some()
+        };
 
         // Keep egui's focus on the webview while its context menu is open, also when the menu is
         // clicked. CEF runs a menu command such as Copy or Paste only in a focused page.
-        let menu_open = self.context_menu.lock().is_some();
         let keep_focus = menu_open && {
             let menu_rect = ctx.memory(|mem| mem.area_rect(context_menu_id(response)));
             let pressed_at = ui.input(|i| {
@@ -176,11 +178,12 @@ impl PageWidget for Shared {
         // is closed.
         let batch = input::Batch::record(ui, response, !menu_open);
         if !batch.is_empty() {
-            let mut inbox = self.inbox.lock();
-            inbox.batches.push(batch);
-            let waiting = inbox.batches.len();
+            let mut state = self.state.lock();
+            let batches = &mut state.inbox.batches;
+            batches.push(batch);
+            let waiting = batches.len();
             if MAX_WAITING_BATCHES < waiting {
-                inbox.batches.drain(..waiting - MAX_WAITING_BATCHES);
+                batches.drain(..waiting - MAX_WAITING_BATCHES);
             }
         }
 
@@ -189,19 +192,19 @@ impl PageWidget for Shared {
         }
         self.show_context_menu(ui, response);
 
+        let state = self.state.lock();
         if response.contains_pointer() {
-            ctx.set_cursor_icon(*self.cursor.lock());
-            if let Some(tooltip) = self.tooltip.lock().clone() {
-                response.clone().on_hover_text(tooltip);
+            ctx.set_cursor_icon(state.cursor);
+            if let Some(tooltip) = &state.tooltip {
+                response.clone().on_hover_text(tooltip.as_str());
             }
         }
 
         // Enable the IME while an editable element in the page has focus. The text cursor is
         // relative to the view, so it is moved into egui's screen space.
-        if response.has_focus() && self.editable.load(Ordering::Relaxed) {
-            let cursor = self
+        if response.has_focus() && state.editable {
+            let cursor = state
                 .text_cursor
-                .lock()
                 .map_or(rect, |cursor| cursor.translate(rect.min.to_vec2()));
             ctx.output_mut(|o| {
                 o.ime = Some(egui::output::IMEOutput {
@@ -215,14 +218,14 @@ impl PageWidget for Shared {
     }
 }
 
-impl Shared {
+impl Context {
     /// Shows the context menu the page asked for.
     ///
     /// Picking an item, pressing Escape or pressing outside the menu closes it. The backend
     /// completes its CEF callback after the pass.
     fn show_context_menu(&self, ui: &Ui, page: &egui::Response) {
-        let mut menu = self.context_menu.lock();
-        let Some(open) = menu.as_mut() else {
+        let mut state = self.state.lock();
+        let Some(open) = state.context_menu.as_mut() else {
             return;
         };
         let first_time = !std::mem::replace(&mut open.shown, true);
@@ -267,10 +270,10 @@ impl Shared {
                         .is_some_and(|pos| !area.rect.contains(pos)))
         });
         if (picked.is_some() || closed)
-            && let Some(open) = menu.take()
+            && let Some(open) = state.context_menu.take()
         {
             // Taking the menu out hides it right away. The backend tells CEF what was picked.
-            self.inbox.lock().menu_done = Some((open, picked));
+            state.inbox.menu_done = Some((open, picked));
         }
     }
 
@@ -280,7 +283,8 @@ impl Shared {
         let painter = ui.painter_at(rect);
         let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
 
-        if let Some(texture) = self.view.lock().upload(ctx, "egui_webview") {
+        let mut state = self.state.lock();
+        if let Some(texture) = state.view.upload(ctx, "egui_webview") {
             // Paint at the texture's own size, so that a frame rendered before a resize isn't
             // stretched to the new rect.
             let size = texture.resolution_vec2() / ctx.pixels_per_point();
@@ -291,9 +295,8 @@ impl Shared {
                 Color32::WHITE,
             );
         }
-        let popup_rect = *self.popup_rect.lock();
-        if let Some(popup) = popup_rect
-            && let Some(texture) = self.popup.lock().upload(ctx, "egui_webview_popup")
+        if let Some(popup) = state.popup_rect
+            && let Some(texture) = state.popup.upload(ctx, "egui_webview_popup")
         {
             painter.image(
                 texture.id(),
@@ -333,11 +336,11 @@ impl Backend for CefBackend {
     }
 
     fn widget(&self) -> Arc<dyn PageWidget> {
-        Arc::<Shared>::clone(&self.shared)
+        Arc::<Context>::clone(&self.context)
     }
 
     /// Tells the browser what its widget saw in the pass that just ended.
-    fn place(&mut self, ctx: &Context, _output: Option<&EmbeddedViewOutput>) {
+    fn place(&mut self, ctx: &egui::Context, _output: Option<&EmbeddedViewOutput>) {
         // Shown or not, the browser needs CEF's message loop work, so egui must keep running
         // passes.
         ctx.request_repaint_after(runtime::MAX_PUMP_DELAY);
@@ -345,17 +348,24 @@ impl Backend for CefBackend {
         let Some(host) = self.browser.host() else {
             return;
         };
-        let inbox = std::mem::take(&mut *self.shared.inbox.lock());
+        // CEF runs the handlers from the calls below, so the state can't stay locked.
+        let (inbox, shown_pass, size) = {
+            let mut state = self.context.state.lock();
+            (
+                std::mem::take(&mut state.inbox),
+                state.shown_pass,
+                state.size,
+            )
+        };
 
         // The page was shown if its widget ran, and was on screen, in the pass that just ended.
-        let shown = (self.shared.shown_pass.lock())
-            .is_some_and(|pass| pass + 1 == ctx.cumulative_pass_nr_for(ViewportId::ROOT));
+        let shown =
+            shown_pass.is_some_and(|pass| pass + 1 == ctx.cumulative_pass_nr_for(ViewportId::ROOT));
 
         if shown {
             if std::mem::take(&mut self.hidden) {
                 host.was_hidden(0);
             }
-            let size = *self.shared.size.lock();
             if self.told_size != Some(size) {
                 let rescaled = self.told_size.is_some_and(|(_, scale)| scale != size.1);
                 if rescaled {
@@ -401,18 +411,20 @@ impl Backend for CefBackend {
     }
 
     fn poll_focus_left(&mut self) -> Option<FocusDirection> {
-        self.shared.took_focus_away.lock().take()
+        self.context.state.lock().took_focus_away.take()
     }
 
     fn take_events(&mut self) -> Vec<WebViewEvent> {
-        std::mem::take(&mut self.shared.events.lock())
+        std::mem::take(&mut self.context.state.lock().events)
     }
 }
 
 impl Drop for CefBackend {
     fn drop(&mut self) {
-        // A context menu that egui closed in the last pass still waits for its answer.
-        if let Some((menu, _)) = self.shared.inbox.lock().menu_done.take() {
+        // A context menu that egui closed in the last pass still waits for its answer. Unlock
+        // the state before the call into CEF.
+        let menu_done = self.context.state.lock().inbox.menu_done.take();
+        if let Some((menu, _)) = menu_done {
             menu.callback.cancel();
         }
         if let Some(host) = self.browser.host() {

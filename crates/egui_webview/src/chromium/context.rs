@@ -1,46 +1,55 @@
 //! What the CEF handlers of one page, its widget and its backend share.
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 use egui::mutex::Mutex;
-use egui::{Context, CursorIcon, FocusDirection, Rect, Vec2, ViewportId};
+use egui::{CursorIcon, FocusDirection, Rect, Vec2, ViewportId};
 
 use super::handlers::ContextMenu;
 use super::layer::Layer;
 use crate::WebViewEvent;
 
-/// The state that the CEF handlers share with the [`super::CefBackend`].
-pub struct Shared {
-    pub ctx: Context,
+/// What the CEF handlers of one page share with its widget and its [`super::CefBackend`].
+///
+/// It is also the page's [`crate::PageWidget`], the half that runs in egui's pass.
+pub struct Context {
+    pub egui_ctx: egui::Context,
+
+    /// Never keep this locked across a call into CEF. CEF can run a handler before it returns,
+    /// and the handler locks the state too.
+    pub state: Mutex<State>,
+}
+
+/// Everything about a page that changes while it lives.
+pub struct State {
     /// What happened in the page, for [`crate::Backend::take_events`].
-    pub events: Mutex<Vec<WebViewEvent>>,
+    pub events: Vec<WebViewEvent>,
     /// The size of the view in points, and the pixels per point.
     ///
     /// CEF's view coordinates (DIPs) are egui points, with the origin at the view's top-left.
-    pub size: Mutex<(Vec2, f32)>,
+    pub size: (Vec2, f32),
     /// The latest frame of the page.
-    pub view: Mutex<Layer>,
+    pub view: Layer,
     /// The latest frame of the popup widget, such as the drop-down list of a `<select>`.
-    pub popup: Mutex<Layer>,
+    pub popup: Layer,
     /// The popup widget's rect in view points, while it is open.
-    pub popup_rect: Mutex<Option<Rect>>,
-    pub cursor: Mutex<CursorIcon>,
-    pub tooltip: Mutex<Option<String>>,
+    pub popup_rect: Option<Rect>,
+    pub cursor: CursorIcon,
+    pub tooltip: Option<String>,
     /// Whether an editable element of the page has focus.
-    pub editable: AtomicBool,
+    pub editable: bool,
     /// The text cursor at the end of the IME composition, in view points, for placing the IME's
     /// candidate window.
-    pub text_cursor: Mutex<Option<Rect>>,
+    pub text_cursor: Option<Rect>,
     /// The context menu CEF asked to show, until egui closes it.
-    pub context_menu: Mutex<Option<ContextMenu>>,
+    pub context_menu: Option<ContextMenu>,
     /// Which way Tab left the page, until [`crate::Backend::poll_focus_left`] picks it up.
-    pub took_focus_away: Mutex<Option<FocusDirection>>,
+    pub took_focus_away: Option<FocusDirection>,
 
     /// What the widget wrote down in its passes, until the backend acts on it after the pass.
-    pub inbox: Mutex<Inbox>,
+    pub inbox: Inbox,
     /// The root viewport's pass (see [`crate::mailbox::now`]) that last showed the page.
-    pub shown_pass: Mutex<Option<u64>>,
+    pub shown_pass: Option<u64>,
 }
 
 /// What the page's widget saw and did in its passes, for the backend.
@@ -56,30 +65,33 @@ pub struct Inbox {
     pub menu_done: Option<(ContextMenu, Option<i32>)>,
 }
 
-impl Shared {
-    pub fn new(ctx: &Context) -> Arc<Self> {
+impl Context {
+    pub fn new(egui_ctx: &egui::Context) -> Arc<Self> {
+        let state = State {
+            events: Vec::new(),
+            size: (egui::vec2(1.0, 1.0), egui_ctx.pixels_per_point()),
+            view: Layer::default(),
+            popup: Layer::default(),
+            popup_rect: None,
+            cursor: CursorIcon::Default,
+            tooltip: None,
+            editable: false,
+            text_cursor: None,
+            context_menu: None,
+            took_focus_away: None,
+            inbox: Inbox::default(),
+            shown_pass: None,
+        };
         Arc::new(Self {
-            ctx: ctx.clone(),
-            events: Mutex::default(),
-            size: Mutex::new((egui::vec2(1.0, 1.0), ctx.pixels_per_point())),
-            view: Mutex::default(),
-            popup: Mutex::default(),
-            popup_rect: Mutex::new(None),
-            cursor: Mutex::new(CursorIcon::Default),
-            tooltip: Mutex::new(None),
-            editable: AtomicBool::new(false),
-            text_cursor: Mutex::new(None),
-            context_menu: Mutex::new(None),
-            took_focus_away: Mutex::new(None),
-            inbox: Mutex::default(),
-            shown_pass: Mutex::new(None),
+            egui_ctx: egui_ctx.clone(),
+            state: Mutex::new(state),
         })
     }
 
     /// Queues `event` for [`crate::Backend::take_events`], and requests a repaint so that the
     /// widget picks it up.
     pub fn send(&self, event: WebViewEvent) {
-        self.events.lock().push(event);
+        self.state.lock().events.push(event);
         self.request_repaint();
     }
 
@@ -88,6 +100,6 @@ impl Shared {
     /// CEF calls the handlers during a pass of whichever viewport runs the message loop work,
     /// which isn't necessarily the root.
     pub fn request_repaint(&self) {
-        self.ctx.request_repaint_of(ViewportId::ROOT);
+        self.egui_ctx.request_repaint_of(ViewportId::ROOT);
     }
 }

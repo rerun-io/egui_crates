@@ -10,11 +10,11 @@ use cef::{
 };
 
 use crate::WebViewEvent;
-use crate::chromium::shared::Shared;
+use crate::chromium::context::Context;
 
 wrap_load_handler! {
     pub struct EguiLoadHandler {
-        shared: Arc<Shared>,
+        context: Arc<Context>,
     }
 
     impl LoadHandler {
@@ -25,7 +25,7 @@ wrap_load_handler! {
             _transition_type: cef::TransitionType,
         ) {
             if let Some(url) = main_frame_url(frame) {
-                self.shared.send(WebViewEvent::Loading { url });
+                self.context.send(WebViewEvent::Loading { url });
             }
         }
 
@@ -36,7 +36,7 @@ wrap_load_handler! {
             _http_status_code: ::std::os::raw::c_int,
         ) {
             if let Some(url) = main_frame_url(frame) {
-                self.shared.send(WebViewEvent::Loaded { url });
+                self.context.send(WebViewEvent::Loaded { url });
             }
         }
     }

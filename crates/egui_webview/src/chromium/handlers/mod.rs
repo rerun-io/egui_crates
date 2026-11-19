@@ -11,19 +11,19 @@ mod render;
 
 use std::sync::Arc;
 
-use crate::chromium::shared::Shared;
+use crate::chromium::context::Context;
 
 pub use context_menu::{ContextMenu, MenuItem};
 
-/// Creates the CEF client of a browser that renders into `shared`.
-pub fn client(shared: &Arc<Shared>) -> cef::Client {
+/// Creates the CEF client of a browser that renders into `context`.
+pub fn client(context: &Arc<Context>) -> cef::Client {
     client::EguiClient::new(
-        Arc::clone(shared),
-        render::EguiRenderHandler::new(Arc::clone(shared)),
-        display::EguiDisplayHandler::new(Arc::clone(shared)),
-        load::EguiLoadHandler::new(Arc::clone(shared)),
+        Arc::clone(context),
+        render::EguiRenderHandler::new(Arc::clone(context)),
+        display::EguiDisplayHandler::new(Arc::clone(context)),
+        load::EguiLoadHandler::new(Arc::clone(context)),
         life_span::EguiLifeSpanHandler::new(),
-        context_menu::EguiContextMenuHandler::new(Arc::clone(shared)),
-        focus::EguiFocusHandler::new(Arc::clone(shared)),
+        context_menu::EguiContextMenuHandler::new(Arc::clone(context)),
+        focus::EguiFocusHandler::new(Arc::clone(context)),
     )
 }

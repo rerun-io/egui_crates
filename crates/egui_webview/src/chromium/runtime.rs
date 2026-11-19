@@ -16,7 +16,7 @@ use cef::{
     ImplListValue as _, ImplProcessMessage as _, ImplV8Context as _, ImplV8Handler,
     ImplV8Value as _, V8Handler, V8Value, WrapV8Handler, wrap_v8_handler,
 };
-use egui::{Context, Ui};
+use egui::Ui;
 
 use crate::Error;
 
@@ -36,7 +36,7 @@ static INIT: OnceLock<Result<(), String>> = OnceLock::new();
 /// The contexts that run CEF's message loop work in their passes, and so are repainted when CEF
 /// schedules work.
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
-static CONTEXTS: std::sync::Mutex<Vec<Context>> = std::sync::Mutex::new(Vec::new());
+static CONTEXTS: std::sync::Mutex<Vec<egui::Context>> = std::sync::Mutex::new(Vec::new());
 
 /// Runs this process as a CEF helper process, if Chromium started it as one, and returns its exit
 /// code.
@@ -132,7 +132,7 @@ fn load_library() -> Result<(), String> {
 /// # Errors
 /// If this is a CEF helper process, if the CEF library can't be loaded, or if CEF fails to
 /// initialise. The first result is kept, so later calls fail in the same way.
-pub fn initialize(ctx: &Context) -> Result<(), Error> {
+pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
     let result = INIT.get_or_init(|| {
         if is_subprocess() {
             return Err(

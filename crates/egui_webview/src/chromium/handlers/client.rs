@@ -11,12 +11,12 @@ use cef::{
 };
 
 use crate::WebViewEvent;
+use crate::chromium::context::Context;
 use crate::chromium::runtime::IPC_MESSAGE;
-use crate::chromium::shared::Shared;
 
 wrap_client! {
     pub struct EguiClient {
-        shared: Arc<Shared>,
+        context: Arc<Context>,
         render: RenderHandler,
         display: DisplayHandler,
         load: LoadHandler,
@@ -72,7 +72,7 @@ wrap_client! {
                 .argument_list()
                 .map(|arguments| CefString::from(&arguments.string(0)).to_string())
                 .unwrap_or_default();
-            self.shared.send(WebViewEvent::Message(text));
+            self.context.send(WebViewEvent::Message(text));
             1
         }
     }
