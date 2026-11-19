@@ -19,12 +19,14 @@ wrap_render_handler! {
     impl RenderHandler {
         fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut cef::Rect>) {
             if let Some(rect) = rect {
-                let (size, _) = self.context.state.lock().size;
+                let size = self.context.state.lock().size.0.round();
                 // CEF requires a view rect that isn't empty.
                 rect.x = 0;
                 rect.y = 0;
-                rect.width = crate::chromium::round(size.x).max(1);
-                rect.height = crate::chromium::round(size.y).max(1);
+                #[expect(clippy::cast_possible_truncation)] // CEF takes whole points.
+                let (width, height) = (size.x as i32, size.y as i32);
+                rect.width = width.max(1);
+                rect.height = height.max(1);
             }
         }
 

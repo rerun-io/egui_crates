@@ -145,11 +145,12 @@ impl Input {
             points_per_line,
             ..
         } = *batch;
+        #[expect(clippy::cast_possible_truncation)] // CEF takes whole points.
         let mouse = |pos: Pos2, modifiers: Modifiers, buttons: &[PointerButton]| {
-            let pos = pos - rect.min;
+            let pos = (pos - rect.min).round();
             MouseEvent {
-                x: super::round(pos.x),
-                y: super::round(pos.y),
+                x: pos.x as i32,
+                y: pos.y as i32,
                 modifiers: event_flags(modifiers) | button_flags(buttons),
             }
         };
@@ -205,10 +206,10 @@ impl Input {
                     };
                     let event = mouse(hover_pos.unwrap_or(rect.min), modifiers, &[]);
                     let delta = delta + self.wheel_remainder;
-                    let (x, y) = (super::round(delta.x), super::round(delta.y));
-                    #[expect(clippy::cast_precision_loss)]
-                    let sent = egui::vec2(x as f32, y as f32);
+                    let sent = delta.round();
                     self.wheel_remainder = delta - sent;
+                    #[expect(clippy::cast_possible_truncation)] // CEF takes whole points.
+                    let (x, y) = (sent.x as i32, sent.y as i32);
                     host.send_mouse_wheel_event(Some(&event), x, y);
                 }
             }

@@ -474,12 +474,6 @@ fn context_menu_id(page: &egui::Response) -> egui::Id {
     page.id.with("context_menu")
 }
 
-/// Rounds `x` to one of CEF's integer coordinates. Out-of-range values saturate, as with `as`.
-#[expect(clippy::cast_possible_truncation)]
-fn round(x: f32) -> i32 {
-    x.round() as i32
-}
-
 /// The URL that loads `source`. CEF loads only URLs, so HTML becomes a percent-encoded `data:`
 /// URL.
 fn source_url(source: &WebViewSource) -> String {
