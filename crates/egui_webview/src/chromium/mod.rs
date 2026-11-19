@@ -30,8 +30,8 @@ use cef::{
     ImplRunContextMenuCallback as _, WindowInfo,
 };
 use egui::{
-    Color32, Context, EmbeddedViewOutput, EventFilter, FocusDirection, Id, Pos2, Rect, Sense, Ui,
-    Vec2, pos2,
+    Color32, Context, EmbeddedViewOutput, EventFilter, FocusDirection, Id, Pos2, Rect, Sense,
+    Theme, Ui, Vec2, pos2,
 };
 
 use crate::mailbox::{is_latest, now};
@@ -332,6 +332,23 @@ impl Backend for CefBackend {
 
     fn widget(&self) -> Arc<dyn PageWidget> {
         Arc::<Shared>::clone(&self.shared)
+    }
+
+    fn set_theme(&mut self, theme: Theme) {
+        // A windowless browser ignores CEF's color scheme setting, so emulate the media feature
+        // through DevTools instead. The emulation stays when the page navigates.
+        let scheme = match theme {
+            Theme::Dark => "dark",
+            Theme::Light => "light",
+        };
+        let message = format!(
+            r#"{{"id":1,"method":"Emulation.setEmulatedMedia","params":{{"features":[{{"name":"prefers-color-scheme","value":"{scheme}"}}]}}}}"#
+        );
+        if let Some(host) = self.browser.host()
+            && host.send_dev_tools_message(Some(message.as_bytes())) == 0
+        {
+            log::warn!("egui_webview: CEF didn't take the color scheme");
+        }
     }
 
     /// Tells the browser what its widget saw in the pass that just ended.

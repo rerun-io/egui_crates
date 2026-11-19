@@ -22,7 +22,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Rect};
+use egui::{Context, EmbeddedViewOutput, FocusDirection, Rect, Theme};
 use raw_window_handle::RawWindowHandle;
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_MOVE_FOCUS_REASON, COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT,
@@ -275,6 +275,15 @@ impl Backend for WryBackend {
 
     fn forward(&mut self) {
         self.page.forward();
+    }
+
+    fn set_theme(&mut self, theme: Theme) {
+        // This sets `PreferredColorScheme` of the `WebView2` profile, which the page sees as its
+        // `prefers-color-scheme`. Pages that share the profile all get the theme.
+        warn(self.page.webview.set_theme(match theme {
+            Theme::Dark => wry::Theme::Dark,
+            Theme::Light => wry::Theme::Light,
+        }));
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
