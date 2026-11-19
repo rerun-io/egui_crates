@@ -12,7 +12,7 @@
 //! and sends it that input after the pass.
 //!
 //! CEF starts its helper processes from the app's own executable, so apps must call
-//! [`crate::cef_init`] first in `main`.
+//! [`crate::init`] first in `main`.
 
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 

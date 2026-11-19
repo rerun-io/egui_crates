@@ -420,9 +420,8 @@ fn report(log: &mut Vec<String>, result: Result<(), egui_webview::Error>) {
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
-    // CEF runs its helper processes from this executable. A helper process ends here.
-    #[cfg(feature = "cef")]
-    egui_webview::cef_init();
+    // With CEF, its helper processes run from this executable. A helper process ends here.
+    egui_webview::init();
 
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -445,6 +444,8 @@ fn main() {
 
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+
+    egui_webview::init();
 
     let search = web_sys::window()
         .and_then(|window| window.location().search().ok())

@@ -45,11 +45,12 @@ static CONTEXTS: std::sync::Mutex<Vec<egui::Context>> = std::sync::Mutex::new(Ve
 /// Runs this process as a CEF helper process and exits, if Chromium started it as one. Otherwise
 /// it returns right away.
 ///
-/// CEF starts its helper processes (renderer, GPU, …) from the app's own executable, so call
-/// this first in `main`:
+/// CEF starts its helper processes (renderer, GPU, …) from the app's own executable, so this
+/// must run first in `main`. [`crate::init`] does that when the `cef` feature is enabled, so
+/// apps should call that instead:
 ///
 /// ```no_run
-/// egui_webview::cef_init();
+/// egui_webview::init();
 /// // … start the app
 /// ```
 ///
@@ -146,7 +147,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
         // CEF starts its helper processes from this executable. Refuse to start them before the
         // app has shown that its `main` handles being one.
         if !RAN_SUBPROCESS_CHECK.load(Ordering::Relaxed) {
-            return Err("call `egui_webview::cef_init` first in `main`".to_owned());
+            return Err("call `egui_webview::init` first in `main`".to_owned());
         }
         load_library()?;
 

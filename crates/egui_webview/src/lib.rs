@@ -36,6 +36,23 @@ pub use chromium::{CefOptions, init as cef_init, run_subprocess as run_cef_subpr
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
 
+/// Initializes `egui_webview`. Call this first in `main`, whatever the platform and whichever
+/// features are enabled:
+///
+/// ```no_run
+/// egui_webview::init();
+/// // … start the app
+/// ```
+///
+/// Currently, it only does something natively with the `cef` feature, where it calls
+/// `egui_webview::cef_init`: CEF starts its helper processes (renderer, GPU, …) from the app's
+/// own executable, and in such a process this function runs the helper and then exits the
+/// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
+pub fn init() {
+    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    cef_init();
+}
+
 /// What should the webview load?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WebViewSource {

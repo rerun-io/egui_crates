@@ -22,6 +22,17 @@ impl eframe::App for MyApp {
 Tab and Shift-Tab move the keyboard focus between egui widgets and the page's elements.
 `examples/minimal_instance.rs` is a complete app of this shape.
 
+## Initialization
+
+Call `egui_webview::init` first in `main`:
+
+```rust,ignore
+fn main() {
+    egui_webview::init();
+    // …
+}
+```
+
 ## Showing a page without keeping it
 
 A `WebViewInstance` isn't `Send`, so not every piece of code can keep one.
@@ -84,17 +95,10 @@ egui windows and popups above a page paint over it and receive the pointer input
 The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built, and builds a small C++ wrapper library, which requires CMake and Ninja.
 Set `CEF_PATH` to share one download between projects.
 
-CEF runs its helper processes from the app's own executable, so call `egui_webview::cef_init` first in `main`.
-In a helper process it runs CEF and exits, and otherwise it returns right away:
+CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
+With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns right away.
 
-```rust,ignore
-fn main() {
-    egui_webview::cef_init();
-    // …
-}
-```
-
-`egui_webview::run_cef_subprocess` does the same without exiting, and returns the helper's exit code.
+`egui_webview::run_cef_subprocess` does the same as `cef_init` without exiting, and returns the helper's exit code.
 
 * Linux and Windows: the build copies CEF's files next to the binaries in `target/<profile>`.
   A packaged app ships them next to its executable.

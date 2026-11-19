@@ -206,12 +206,12 @@ impl WebViewInstance {
     /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
     /// native platform. [`Self::new`] uses it on platforms without a system webview, such as
     /// Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`. It requires the
-    /// `cef` feature, and a call to [`crate::cef_init`] first in `main`.
+    /// `cef` feature, and a call to [`crate::init`] first in `main`.
     ///
     /// `id` must be unique in `ctx`.
     ///
     /// # Errors
-    /// [`Error::Backend`] if [`crate::cef_init`] hasn't run, or if CEF fails to initialize or to
+    /// [`Error::Backend`] if [`crate::init`] hasn't run, or if CEF fails to initialize or to
     /// create the browser.
     #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
     pub fn new_cef(

@@ -190,8 +190,7 @@ impl eframe::App for Test {
 }
 
 fn main() -> eframe::Result {
-    #[cfg(feature = "cef")]
-    egui_webview::cef_init();
+    egui_webview::init();
     let cef = cfg!(feature = "cef")
         && (cfg!(target_os = "linux")
             || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
