@@ -40,8 +40,7 @@ exclude_path = [
   "_deps/",
   ".pixi",
   "build",
-  "target_ra",
-  "target_wasm",
+  "target_ra", # legacy Rust Analyzer target dir
   "target",
   "venv",
 
