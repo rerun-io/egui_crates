@@ -51,7 +51,7 @@ impl eframe::App for MyApp {
 
 ## Running the examples
 
-The examples run on the web with [Trunk](https://trunkrs.dev/):
+The examples run on the web with [Trunk](https://github.com/trunk-rs/trunk):
 
 ```sh
 cd crates/egui_webview
