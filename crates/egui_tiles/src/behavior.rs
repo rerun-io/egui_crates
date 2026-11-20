@@ -3,7 +3,7 @@ use egui::{
     Visuals, WidgetInfo, WidgetText, vec2,
 };
 
-use super::{SimplificationOptions, Tile, TileId, Tiles, UiResponse};
+use super::{PreviewOptions, SimplificationOptions, Tile, TileId, Tiles, UiResponse};
 
 /// The kind of edit that triggered the call to [`Behavior::on_edit`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -380,6 +380,14 @@ pub trait Behavior<Pane> {
     /// No child should shrink below this width nor height.
     fn min_size(&self) -> f32 {
         32.0
+    }
+
+    /// Options controlling the animated drag preview.
+    ///
+    /// Set [`PreviewOptions::enabled`] to `false` to disable the animated
+    /// preview and show only a simple highlighted drop zone.
+    fn preview_options(&self) -> PreviewOptions {
+        PreviewOptions::default()
     }
 
     /// Show we preview panes that are being dragged,

@@ -145,6 +145,35 @@ pub enum UiResponse {
     DragStarted,
 }
 
+/// User-tunable parameters for the animated drag-and-drop preview.
+///
+/// Returned by [`Behavior::preview_options`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PreviewOptions {
+    /// Whether the animated layout preview is shown during drag-and-drop.
+    ///
+    /// When `false`, only a simple highlighted drop zone is shown.
+    pub enabled: bool,
+
+    /// How much of the remaining distance a tile covers in one [`egui::Style::animation_time`].
+    ///
+    /// Passed as `reach_this_fraction` to [`egui::emath::exponential_smooth_factor`], with
+    /// `egui::Style::animation_time` as `in_this_many_seconds` — so how long the animation takes
+    /// is tuned with the rest of egui rather than separately here.
+    pub reach_this_fraction: f32,
+}
+
+impl Default for PreviewOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+
+            // Get 95% of the way there in one `Style::animation_time`.
+            reach_this_fraction: 0.95,
+        }
+    }
+}
+
 /// What are the rules for simplifying the tree?
 ///
 /// Drag-dropping tiles can often leave containers empty, or with only a single child.
@@ -250,7 +279,7 @@ impl ContainerInsertion {
 }
 
 /// Where in the tree to insert a tile.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct InsertionPoint {
     pub parent_id: TileId,
 
@@ -293,7 +322,8 @@ fn cover_tile_if_dragged<Pane>(
     tile_id: TileId,
 ) {
     if is_being_dragged(ui, tree.id, tile_id)
-        && let Some(child_rect) = tree.tiles.rect(tile_id)
+        && !tree.is_previewing()
+        && let Some(child_rect) = tree.display_rect(tile_id)
     {
         let overlay_color = behavior.dragged_overlay_color(ui.visuals());
         ui.painter().rect_filled(child_rect, 0.0, overlay_color);
