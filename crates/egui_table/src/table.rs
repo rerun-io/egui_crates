@@ -25,12 +25,33 @@ pub enum AutoSizeMode {
     OnParentResize,
 }
 
+/// The stored state of one resizable column.
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
+pub struct ColumnState {
+    /// Current width of the column.
+    pub width: f32,
+
+    /// Refit the column to its content on the next frame that has rows.
+    ///
+    /// Set when the width was picked while the table had no rows.
+    pub needs_refit: bool,
+}
+
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct TableState {
-    // Maps columns ids to their widths.
-    pub col_widths: IdMap<f32>,
+    /// Maps column ids to their state.
+    pub columns: IdMap<ColumnState>,
 
     pub parent_width: Option<f32>,
+}
+
+impl ColumnState {
+    fn new(width: f32) -> Self {
+        Self {
+            width,
+            needs_refit: false,
+        }
+    }
 }
 
 impl TableState {
@@ -384,15 +405,21 @@ impl Table {
         let is_new = state.is_none();
         let do_full_sizing_pass = is_new;
         let mut state = state.unwrap_or_default();
+        let has_rows = 0 < self.num_rows;
 
+        let mut had_stored_state = Vec::with_capacity(self.columns.len());
         for (i, column) in self.columns.iter_mut().enumerate() {
-            let column_id = column.id_for(i);
-            if let Some(existing_width) = state.col_widths.get(&column_id) {
-                column.current = *existing_width;
+            let stored = state.columns.get(&column.id_for(i)).copied();
+            had_stored_state.push(stored.is_some());
+            if let Some(stored) = stored {
+                column.current = stored.width;
             }
             column.current = column.range.clamp(column.current);
 
-            if do_full_sizing_pass {
+            // A column added after the table was created, or one that was sized before
+            // there were any rows, is fitted to its content once there is content to fit.
+            let needs_fit = stored.is_none_or(|stored| stored.needs_refit);
+            if do_full_sizing_pass || (column.resizable && has_rows && needs_fit) {
                 column.auto_size_this_frame = true;
             }
         }
@@ -493,6 +520,29 @@ impl Table {
                 );
             })
             .response;
+
+        for (i, (column, had_stored_state)) in
+            std::iter::zip(&self.columns, had_stored_state).enumerate()
+        {
+            if !column.resizable {
+                continue;
+            }
+
+            // Columns that were outside the viewport were never measured.
+            // Store their width anyway, so we don't keep re-sizing them every frame.
+            let column_state = state
+                .columns
+                .entry(column.id_for(i))
+                .or_insert_with(|| ColumnState::new(column.current));
+
+            if has_rows {
+                if column.auto_size_this_frame {
+                    column_state.needs_refit = false;
+                }
+            } else if column.auto_size_this_frame || !had_stored_state {
+                column_state.needs_refit = true;
+            }
+        }
 
         state.store(ui, id);
         response
@@ -891,11 +941,12 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
             let column_id = column.id_for(col_nr);
             let used_width = column.range.clamp(self.max_column_widths[col_nr]);
 
-            let column_width = self
+            let column_state = self
                 .state
-                .col_widths
+                .columns
                 .entry(column_id)
-                .or_insert(column.current);
+                .or_insert_with(|| ColumnState::new(column.current));
+            let column_width = &mut column_state.width;
 
             let layout_width = *column_width; // Width used when computing col_x
 
@@ -928,6 +979,9 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
                 let new_width = column.range.clamp(new_width);
                 x += new_width - *column_width;
                 *column_width = new_width;
+
+                // The user picked a width, so don't override it once rows arrive.
+                column_state.needs_refit = false;
             }
 
             let dragging_something_else =

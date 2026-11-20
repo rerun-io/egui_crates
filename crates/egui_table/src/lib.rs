@@ -9,6 +9,6 @@ mod table;
 pub use columns::Column;
 pub use split_scroll::{SplitScroll, SplitScrollDelegate};
 pub use table::{
-    AutoSizeMode, CellInfo, HeaderCellInfo, HeaderRow, PrefetchInfo, Table, TableDelegate,
-    TableState,
+    AutoSizeMode, CellInfo, ColumnState, HeaderCellInfo, HeaderRow, PrefetchInfo, Table,
+    TableDelegate, TableState,
 };
