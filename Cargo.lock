@@ -1193,7 +1193,7 @@ dependencies = [
 [[package]]
 name = "ecolor"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "bytemuck",
  "color-hex",
@@ -1239,7 +1239,7 @@ dependencies = [
 [[package]]
 name = "eframe"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -1296,7 +1296,7 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "accesskit 0.25.2",
  "ahash",
@@ -1336,7 +1336,7 @@ dependencies = [
 [[package]]
 name = "egui-wgpu"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -1376,7 +1376,7 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "accesskit_winit 0.34.2",
  "arboard",
@@ -1399,7 +1399,7 @@ dependencies = [
 [[package]]
 name = "egui_demo_lib"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "egui 0.37.0",
  "egui_extras",
@@ -1410,7 +1410,7 @@ dependencies = [
 [[package]]
 name = "egui_extras"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "ahash",
  "egui 0.37.0",
@@ -1440,7 +1440,7 @@ dependencies = [
 [[package]]
 name = "egui_glow"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "bytemuck",
  "egui 0.37.0",
@@ -1453,7 +1453,7 @@ dependencies = [
 [[package]]
 name = "egui_inspection"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "egui 0.37.0",
  "rmp-serde",
@@ -1503,7 +1503,7 @@ dependencies = [
 [[package]]
 name = "egui_kittest"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "dify",
  "eframe 0.37.0",
@@ -1541,7 +1541,7 @@ dependencies = [
 [[package]]
 name = "egui_system_font_provider"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "epaint 0.37.0",
  "fontique",
@@ -1578,6 +1578,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_webview"
+version = "0.1.0"
+dependencies = [
+ "eframe 0.37.0",
+ "egui 0.37.0",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "egui_webview_demo"
+version = "0.1.0"
+dependencies = [
+ "eframe 0.37.0",
+ "egui 0.37.0",
+ "egui_webview",
+ "env_logger",
+ "log",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1595,7 +1621,7 @@ dependencies = [
 [[package]]
 name = "emath"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "bytemuck",
  "serde",
@@ -1716,7 +1742,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -1747,7 +1773,7 @@ source = "git+https://github.com/emilk/egui?branch=lucas%2Fkittest-inspect#0cefd
 [[package]]
 name = "epaint_default_fonts"
 version = "0.37.0"
-source = "git+https://github.com/emilk/egui.git?branch=main#9c20804709fcfd834ef1a4a674fb39017c195c5b"
+source = "git+https://github.com/emilk/egui.git?branch=main#d33dec58efd165add27acb9cddaf7e457eb5e64f"
 
 [[package]]
 name = "equivalent"

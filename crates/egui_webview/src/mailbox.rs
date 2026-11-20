@@ -1,0 +1,149 @@
+//! What the [`crate::WebView`] widget and the [`crate::WebViews`] registry trade.
+//!
+//! The widget can't hold a page, because pages aren't `Send`. So the widget writes what it
+//! wants into the mailbox during the pass, and the registry acts on it after the pass. The
+//! registry writes what the page did, and the widget reads that in the next pass.
+//!
+//! Everything in here is plain data, so it can live in [`egui::Context::data`].
+
+use std::sync::Arc;
+
+use egui::mutex::Mutex;
+use egui::{Context, Id, IdMap, ViewportId};
+
+use crate::instance::FocusChange;
+use crate::{PageWidget, WebViewEvent, WebViewSource};
+
+/// The mailbox itself. The widget and the registry each hold a clone.
+#[derive(Clone)]
+pub(crate) struct Mailbox(Arc<Mutex<Inner>>);
+
+pub(crate) struct Inner {
+    /// The widget for a page that doesn't exist yet. With it, an embedded page gets its rect
+    /// in the first pass, so the registry can place it in its first frame.
+    pub fallback: Option<Arc<dyn PageWidget>>,
+
+    /// The state of each webview, by its id.
+    pub webviews: IdMap<WebViewState>,
+}
+
+impl Mailbox {
+    pub fn new(fallback: Option<Arc<dyn PageWidget>>) -> Self {
+        Self(Arc::new(Mutex::new(Inner {
+            fallback,
+            webviews: IdMap::default(),
+        })))
+    }
+
+    fn key() -> Id {
+        Id::unique("egui_webview::Mailbox")
+    }
+
+    /// The mailbox that a [`crate::WebViews`] put into `ctx`, if there is one.
+    pub fn of(ctx: &Context) -> Option<Self> {
+        ctx.data(|data| data.get_temp(Self::key()))
+    }
+
+    /// Puts this mailbox into `ctx`.
+    pub fn install(&self, ctx: &Context) {
+        ctx.data_mut(|data| data.insert_temp(Self::key(), self.clone()));
+    }
+
+    /// Locks the mailbox for `f`. Don't run backend code in `f`, nor egui code that could call
+    /// back into the mailbox.
+    pub fn with<R>(&self, f: impl FnOnce(&mut Inner) -> R) -> R {
+        f(&mut self.0.lock())
+    }
+
+    /// Locks the mailbox for `f`, running `f` with the webview state of `id`, if it exists.
+    pub fn with_view_state<R>(&self, id: Id, f: impl FnOnce(&mut WebViewState) -> R) -> Option<R> {
+        self.with(|inner| inner.webviews.get_mut(&id).map(f))
+    }
+}
+
+/// One webview's data. Only [`crate::WebView::show`] creates it, so each one stands for a page
+/// that some code wants to see.
+#[derive(Default)]
+pub(crate) struct WebViewState {
+    pub source: Option<Arc<WebViewSource>>,
+
+    pub alive_pass: Option<u64>,
+
+    /// The pass that last showed the widget. Unlike [`Self::alive_pass`], `keep_alive` doesn't
+    /// set it.
+    pub shown_pass: Option<u64>,
+
+    pub page_command_queue: Vec<Command>,
+    pub events: Vec<WebViewEvent>,
+
+    pub ui: UiState,
+}
+
+#[derive(Default)]
+pub struct UiState {
+    pub widget: Option<WidgetResult>,
+    /// Any pending focus change the widget needs to know about next pass.
+    pub pending_focus_change: Option<FocusChange>,
+}
+
+type WidgetResult = Result<Arc<dyn PageWidget>, String>;
+
+impl WebViewState {
+    pub fn mark_shown(&mut self, pass: u64) {
+        self.shown_pass = Some(pass);
+    }
+
+    #[must_use]
+    pub fn mark_alive(&mut self, pass: u64) -> Vec<WebViewEvent> {
+        self.alive_pass = Some(pass);
+        std::mem::take(&mut self.events)
+    }
+
+    /// Whether the widget was shown in the pass before `pass`.
+    pub fn was_shown(&self, pass: u64) -> bool {
+        self.shown_pass.is_some_and(|shown| shown + 1 == pass)
+    }
+    /// Whether the widget was alive in the pass before `pass`.
+    pub fn was_alive(&self, pass: u64) -> bool {
+        self.alive_pass.is_some_and(|alive| alive + 1 == pass)
+    }
+
+    /// Adds the page's new events.
+    pub fn extend_events(&mut self, ctx: &Context, events: Vec<WebViewEvent>) {
+        // The events of a hidden page wait. Nobody reads them before the page is shown again.
+        if !events.is_empty() && self.was_shown(ctx.cumulative_pass_nr_for(ViewportId::ROOT)) {
+            // Repaint, so the widget gets a pass in which it reads the events.
+            ctx.request_repaint_of(ViewportId::ROOT);
+        }
+        self.events.extend(events);
+    }
+
+    /// Hands a focus change that the page made itself to the widget.
+    pub fn set_pending_focus_change(&mut self, ctx: &Context, change: Option<FocusChange>) {
+        if !self.was_shown(ctx.cumulative_pass_nr_for(ViewportId::ROOT)) {
+            // Nobody will act on it, and it would be stale by the time the widget is back.
+            self.ui.pending_focus_change = None;
+        } else if let Some(change) = change {
+            self.ui.pending_focus_change = Some(change);
+            ctx.request_repaint_of(ViewportId::ROOT);
+        }
+    }
+
+    pub fn set_page_widget(&mut self, ctx: &Context, page_widget: WidgetResult) {
+        self.ui.widget = Some(page_widget);
+        ctx.request_repaint_of(ViewportId::ROOT);
+    }
+
+    pub fn push_command(&mut self, command: Command) {
+        self.page_command_queue.push(command);
+    }
+}
+
+pub(crate) enum Command {
+    Load(WebViewSource),
+    Reload,
+    Back,
+    Forward,
+    EvaluateScript(String),
+    ChangeFocus(FocusChange),
+}
