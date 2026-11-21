@@ -1,0 +1,506 @@
+//! A [`Backend`] that renders pages off screen with [CEF](https://github.com/chromiumembedded/cef)
+//! (the Chromium Embedded Framework).
+//!
+//! Each page is a windowless Chromium browser (CEF's off-screen rendering mode). CEF paints the
+//! page into a BGRA pixel buffer, which is uploaded to an egui texture, and egui's input events
+//! are forwarded to the browser. Because the page is an ordinary texture, egui can paint on
+//! top of it, and it works the same with every egui renderer and on every platform, including
+//! Wayland.
+//!
+//! The backend has two halves. The widget half is [`Context`]. It runs in egui's pass, paints the
+//! page, and writes down the pass's input. The page half is [`CefBackend`]. It owns the browser,
+//! and sends it that input after the pass.
+//!
+//! CEF starts its helper processes from the app's own executable, so apps must call
+//! [`crate::init`] first in `main`.
+
+#![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
+
+mod context;
+mod handlers;
+mod input;
+mod keys;
+mod layer;
+mod runtime;
+
+use std::fmt::Write as _;
+use std::sync::Arc;
+use std::sync::mpsc;
+
+use cef::{
+    BrowserSettings, ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _,
+    ImplRunContextMenuCallback as _, WindowInfo,
+};
+use egui::{
+    Color32, EmbeddedViewOutput, EventFilter, FocusDirection, Id, Pos2, Rect, Sense, Ui, Vec2,
+    ViewportId, pos2,
+};
+
+use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
+use context::Context;
+use handlers::MenuItem;
+
+pub use runtime::{init, run_subprocess};
+
+/// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CefOptions {
+    /// The most frames per second that CEF paints of the page. The minimum is 1.
+    ///
+    /// The default is 60.
+    pub frame_rate: u32,
+
+    /// The color behind the page. It shows until a page has loaded, and where a page sets no
+    /// background of its own.
+    ///
+    /// The default is white.
+    ///
+    /// CEF takes an opaque background or none at all. With [`Color32::TRANSPARENT`], egui
+    /// shows through such a page. The alpha of every other color is ignored.
+    pub background_color: Color32,
+}
+
+impl Default for CefOptions {
+    fn default() -> Self {
+        Self {
+            frame_rate: 60,
+            background_color: Color32::WHITE,
+        }
+    }
+}
+
+/// `color` as CEF's ARGB color. CEF takes a background that is opaque or fully transparent, so
+/// every color that isn't fully transparent becomes opaque.
+fn cef_color(color: Color32) -> u32 {
+    if color.a() == 0 {
+        return 0;
+    }
+    let [r, g, b, _] = color.to_srgba_unmultiplied();
+    u32::from_be_bytes([0xFF, r, g, b])
+}
+
+/// How many passes of input are kept for the backend. More than that only pile up if the app
+/// doesn't call [`crate::WebViewInstance::place`].
+const MAX_WAITING_BATCHES: usize = 64;
+
+/// A [`Backend`] that renders the page in a windowless CEF browser and paints it as an egui
+/// texture.
+pub struct CefBackend {
+    browser: cef::Browser,
+    context: Arc<Context>,
+
+    /// What happened in the page, sent by the CEF handlers.
+    events: mpsc::Receiver<WebViewEvent>,
+    input: input::Input,
+
+    /// Whether the browser was last told that it is hidden (`was_hidden(1)`), which lets CEF stop
+    /// rendering it.
+    hidden: bool,
+
+    /// The view's size in points and the pixels per point that the browser was last told.
+    told_size: Option<(Vec2, f32)>,
+}
+
+impl std::fmt::Debug for CefBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CefBackend")
+            .field("context", &self.context)
+            .field("events", &self.events)
+            .field("input", &self.input)
+            .field("hidden", &self.hidden)
+            .field("told_size", &self.told_size)
+            .finish()
+    }
+}
+
+impl CefBackend {
+    /// Creates a windowless browser that loads `source`, and initialises CEF if this is the first
+    /// browser in the process.
+    ///
+    /// # Errors
+    /// If CEF can't be initialised, or if it fails to create the browser.
+    pub fn new(
+        ctx: &egui::Context,
+        source: &WebViewSource,
+        options: CefOptions,
+    ) -> Result<Self, Error> {
+        runtime::initialize(ctx)?;
+
+        let (context, events) = Context::new(ctx);
+        let window_info = WindowInfo {
+            windowless_rendering_enabled: 1,
+            ..Default::default()
+        };
+        let settings = BrowserSettings {
+            windowless_frame_rate: i32::try_from(options.frame_rate).unwrap_or(i32::MAX),
+            background_color: cef_color(options.background_color),
+            ..Default::default()
+        };
+        let browser = cef::browser_host_create_browser_sync(
+            Some(&window_info),
+            Some(&mut handlers::client(&context)),
+            Some(&source_url(source).as_str().into()),
+            Some(&settings),
+            None,
+            None,
+        )
+        .ok_or_else(|| Error::backend("CEF failed to create a browser"))?;
+        // A windowless browser starts out focused. Blur it, so that it has the focus only while
+        // egui's focus is on the webview.
+        if let Some(host) = browser.host() {
+            host.set_focus(0);
+        }
+
+        Ok(Self {
+            browser,
+            context,
+            events,
+            input: input::Input::default(),
+            hidden: false,
+            told_size: None,
+        })
+    }
+}
+
+/// The half of a CEF page that runs in egui's pass.
+impl PageWidget for Context {
+    fn allocate(&self, ui: &mut Ui, id: Id, size: Vec2) -> egui::Response {
+        let (_, rect) = ui.allocate_space(size);
+        ui.interact(rect, id, Sense::click_and_drag())
+    }
+
+    /// Paints the page into `response.rect`, and writes down this pass's input for the backend.
+    fn show(&self, ui: &mut Ui, response: &egui::Response) {
+        let ctx = ui.ctx().clone();
+        let rect = response.rect;
+
+        // A page that is scrolled out of view counts as not shown, so CEF stops rendering it.
+        let visible = ui.is_rect_visible(rect);
+        let pass = ctx.cumulative_pass_nr_for(ViewportId::ROOT);
+        let menu_open = {
+            let mut state = self.state.lock();
+            if visible {
+                state.shown_pass = Some(pass);
+            }
+            // CEF asks for this size when it renders. The backend tells CEF after the pass that
+            // it changed.
+            state.size = (rect.size(), ctx.pixels_per_point());
+            state.context_menu.is_some()
+        };
+
+        // Keep egui's focus on the webview while its context menu is open, also when the menu is
+        // clicked. CEF runs a menu command such as Copy or Paste only in a focused page.
+        let keep_focus = menu_open && {
+            let menu_rect = ctx.memory(|mem| mem.area_rect(context_menu_id(response)));
+            let pressed_at = ui.input(|i| {
+                i.pointer
+                    .any_pressed()
+                    .then(|| i.pointer.interact_pos())
+                    .flatten()
+            });
+            pressed_at.is_none_or(|pos| menu_rect.is_some_and(|menu| menu.contains(pos)))
+        };
+        if keep_focus && !response.has_focus() {
+            response.request_focus();
+        }
+        if response.has_focus() {
+            // The page handles Tab, the arrow keys and Escape, so they mustn't move egui's
+            // focus. CEF reports Tab past the page's last element through `on_take_focus`.
+            // While the context menu is open, they mustn't move it either.
+            ui.memory_mut(|mem| {
+                mem.set_focus_lock_filter(
+                    response.id,
+                    EventFilter {
+                        tab: true,
+                        horizontal_arrows: true,
+                        vertical_arrows: true,
+                        escape: true,
+                    },
+                );
+            });
+        }
+
+        // While the context menu is open, keys don't go to the page, so Escape only closes the
+        // menu. That has to be decided now. By the time the backend sends the input, the menu
+        // is closed.
+        let batch = input::Batch::record(ui, response, !menu_open);
+        if !batch.is_empty() {
+            let mut state = self.state.lock();
+            let batches = &mut state.inbox.batches;
+            batches.push(batch);
+            let waiting = batches.len();
+            if MAX_WAITING_BATCHES < waiting {
+                batches.drain(..waiting - MAX_WAITING_BATCHES);
+            }
+        }
+
+        if visible {
+            self.paint(ui, rect);
+        }
+        self.show_context_menu(ui, response);
+
+        let state = self.state.lock();
+        if response.contains_pointer() {
+            ctx.set_cursor_icon(state.cursor);
+            if let Some(tooltip) = &state.tooltip {
+                response.clone().on_hover_text(tooltip.as_str());
+            }
+        }
+
+        // Enable the IME while an editable element in the page has focus. The text cursor is
+        // relative to the view, so it is moved into egui's screen space.
+        if response.has_focus() && state.editable {
+            let cursor = state
+                .text_cursor
+                .map_or(rect, |cursor| cursor.translate(rect.min.to_vec2()));
+            ctx.output_mut(|o| {
+                o.ime = Some(egui::output::IMEOutput {
+                    rect,
+                    cursor_rect: cursor,
+                    purpose: egui::IMEPurpose::Normal,
+                    should_interrupt_composition: false,
+                });
+            });
+        }
+    }
+}
+
+impl Context {
+    /// Shows the context menu the page asked for.
+    ///
+    /// Picking an item, pressing Escape or pressing outside the menu closes it. The backend
+    /// completes its CEF callback after the pass.
+    fn show_context_menu(&self, ui: &Ui, page: &egui::Response) {
+        let mut state = self.state.lock();
+        let Some(open) = state.context_menu.as_mut() else {
+            return;
+        };
+        let first_time = !std::mem::replace(&mut open.shown, true);
+
+        let mut picked = None;
+        let area = egui::Area::new(context_menu_id(page))
+            .kind(egui::UiKind::Menu)
+            .order(egui::Order::Foreground)
+            .fixed_pos(page.rect.min + open.pos.to_vec2())
+            .sizing_pass(first_time)
+            .layout(egui::Layout::top_down_justified(egui::Align::Min))
+            .show(ui.ctx(), |ui| {
+                egui::Frame::menu(ui.style()).show(ui, |ui| {
+                    egui::containers::menu::menu_style(ui.style_mut());
+                    for item in &open.items {
+                        match item {
+                            MenuItem::Separator => {
+                                ui.separator();
+                            }
+                            MenuItem::Command {
+                                id,
+                                label,
+                                enabled,
+                                checked,
+                            } => {
+                                let button = egui::Button::selectable(*checked, label.as_str());
+                                if ui.add_enabled(*enabled, button).clicked() {
+                                    picked = Some(*id);
+                                }
+                            }
+                        }
+                    }
+                });
+            })
+            .response;
+
+        let closed = ui.input(|i| {
+            i.key_pressed(egui::Key::Escape)
+                || (i.pointer.any_pressed()
+                    && i.pointer
+                        .interact_pos()
+                        .is_some_and(|pos| !area.rect.contains(pos)))
+        });
+        if (picked.is_some() || closed)
+            && let Some(open) = state.context_menu.take()
+        {
+            // Taking the menu out hides it right away. The backend tells CEF what was picked.
+            state.inbox.menu_done = Some((open, picked));
+        }
+    }
+
+    /// Uploads new frames to the textures and paints the view and its popup into `rect`.
+    fn paint(&self, ui: &Ui, rect: Rect) {
+        let ctx = ui.ctx();
+        let painter = ui.painter_at(rect);
+        let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+
+        let mut state = self.state.lock();
+        if let Some(texture) = state.view.upload(ctx, "egui_webview") {
+            // Paint at the texture's own size, so that a frame rendered before a resize isn't
+            // stretched to the new rect.
+            let size = texture.resolution_vec2() / ctx.pixels_per_point();
+            painter.image(
+                texture.id(),
+                Rect::from_min_size(rect.min, size),
+                uv,
+                Color32::WHITE,
+            );
+        }
+        if let Some(popup) = state.popup_rect
+            && let Some(texture) = state.popup.upload(ctx, "egui_webview_popup")
+        {
+            painter.image(
+                texture.id(),
+                popup.translate(rect.min.to_vec2()),
+                uv,
+                Color32::WHITE,
+            );
+        }
+    }
+}
+
+impl Backend for CefBackend {
+    fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
+        if let Some(frame) = self.browser.main_frame() {
+            frame.load_url(Some(&source_url(source).as_str().into()));
+        }
+        Ok(())
+    }
+
+    fn evaluate_script(&mut self, script: &str) -> Result<(), Error> {
+        if let Some(frame) = self.browser.main_frame() {
+            frame.execute_java_script(Some(&script.into()), None, 0);
+        }
+        Ok(())
+    }
+
+    fn reload(&mut self) {
+        self.browser.reload();
+    }
+
+    fn back(&mut self) {
+        self.browser.go_back();
+    }
+
+    fn forward(&mut self) {
+        self.browser.go_forward();
+    }
+
+    fn widget(&self) -> Arc<dyn PageWidget> {
+        Arc::<Context>::clone(&self.context)
+    }
+
+    /// Tells the browser what its widget saw in the pass that just ended.
+    fn place(&mut self, ctx: &egui::Context, _output: Option<&EmbeddedViewOutput>) {
+        // Shown or not, the browser needs CEF's message loop work, so egui must keep running
+        // passes.
+        ctx.request_repaint_after(runtime::MAX_PUMP_DELAY);
+
+        let Some(host) = self.browser.host() else {
+            return;
+        };
+        // CEF runs the handlers from the calls below, so the state can't stay locked.
+        let (inbox, shown_pass, size) = {
+            let mut state = self.context.state.lock();
+            (
+                std::mem::take(&mut state.inbox),
+                state.shown_pass,
+                state.size,
+            )
+        };
+
+        // The page was shown if its widget ran, and was on screen, in the pass that just ended.
+        let shown =
+            shown_pass.is_some_and(|pass| pass + 1 == ctx.cumulative_pass_nr_for(ViewportId::ROOT));
+
+        if shown {
+            if std::mem::take(&mut self.hidden) {
+                host.was_hidden(0);
+            }
+            if self.told_size != Some(size) {
+                let rescaled = self.told_size.is_some_and(|(_, scale)| scale != size.1);
+                if rescaled {
+                    host.notify_screen_info_changed();
+                }
+                host.was_resized();
+                self.told_size = Some(size);
+            }
+        }
+
+        for batch in &inbox.batches {
+            self.input.replay(&self.browser, batch);
+        }
+        if let Some((menu, picked)) = inbox.menu_done {
+            match picked {
+                Some(id) => menu
+                    .callback
+                    .cont(id, cef::sys::cef_event_flags_t::EVENTFLAG_NONE.into()),
+                None => menu.callback.cancel(),
+            }
+        }
+
+        // Let CEF stop rendering a page that isn't shown. It is told when the page is back.
+        if !shown && !self.hidden {
+            host.was_hidden(1);
+            self.hidden = true;
+        }
+    }
+
+    fn focus(&mut self, direction: FocusDirection) {
+        if let Some(host) = self.browser.host() {
+            host.set_focus(1);
+        }
+        if let Some(script) = crate::backend::focus_script(direction) {
+            self.evaluate_script(&script).ok();
+        }
+    }
+
+    fn blur(&mut self) {
+        if let Some(host) = self.browser.host() {
+            host.set_focus(0);
+        }
+    }
+
+    fn poll_focus_left(&mut self) -> Option<FocusDirection> {
+        self.context.state.lock().took_focus_away.take()
+    }
+
+    fn take_events(&mut self) -> Vec<WebViewEvent> {
+        self.events.try_iter().collect()
+    }
+}
+
+impl Drop for CefBackend {
+    fn drop(&mut self) {
+        // A context menu that egui closed in the last pass still waits for its answer. Unlock
+        // the state before the call into CEF.
+        let menu_done = self.context.state.lock().inbox.menu_done.take();
+        if let Some((menu, _)) = menu_done {
+            menu.callback.cancel();
+        }
+        if let Some(host) = self.browser.host() {
+            // Force the close, which skips the page's `beforeunload` handlers.
+            host.close_browser(1);
+        }
+    }
+}
+
+/// The [`egui::Area`] id of the context menu of the page whose response is `page`.
+fn context_menu_id(page: &egui::Response) -> egui::Id {
+    page.id.with("context_menu")
+}
+
+/// The URL that loads `source`. CEF loads only URLs, so HTML becomes a percent-encoded `data:`
+/// URL.
+fn source_url(source: &WebViewSource) -> String {
+    match source {
+        WebViewSource::Url(url) => url.clone(),
+        WebViewSource::Html(html) => {
+            let mut url = String::from("data:text/html;charset=utf-8,");
+            for byte in html.bytes() {
+                if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
+                    url.push(char::from(byte));
+                } else {
+                    write!(url, "%{byte:02X}").ok();
+                }
+            }
+            url
+        }
+    }
+}
