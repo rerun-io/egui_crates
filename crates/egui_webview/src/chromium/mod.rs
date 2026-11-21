@@ -101,6 +101,18 @@ pub struct CefBackend {
     told_size: Option<(Vec2, f32)>,
 }
 
+impl std::fmt::Debug for CefBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CefBackend")
+            .field("context", &self.context)
+            .field("events", &self.events)
+            .field("input", &self.input)
+            .field("hidden", &self.hidden)
+            .field("told_size", &self.told_size)
+            .finish()
+    }
+}
+
 impl CefBackend {
     /// Creates a windowless browser that loads `source`, and initialises CEF if this is the first
     /// browser in the process.

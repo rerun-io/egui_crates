@@ -24,7 +24,18 @@ pub struct Context {
     pub state: Mutex<State>,
 }
 
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context")
+            .field("egui_ctx", &self.egui_ctx)
+            .field("events", &self.events)
+            // TODO(alan): should we lock the mutex just for this Debug impl?
+            .finish_non_exhaustive()
+    }
+}
+
 /// Everything about a page that changes while it lives.
+#[derive(Debug)]
 pub struct State {
     /// The size of the view in points, and the pixels per point.
     ///
@@ -58,7 +69,7 @@ pub struct State {
 ///
 /// The widget can't reach the browser. So it writes this down during the pass, and the backend
 /// tells the browser after the pass.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Inbox {
     /// The input of each pass that showed the page, oldest first.
     pub batches: Vec<super::input::Batch>,

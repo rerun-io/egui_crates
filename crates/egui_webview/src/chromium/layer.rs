@@ -20,6 +20,17 @@ pub struct Layer {
     texture: Option<TextureHandle>,
 }
 
+impl std::fmt::Debug for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Layer")
+            .field("size", &self.size)
+            .field("pending", &self.pending)
+            .field("resized", &self.resized)
+            .field("texture", &self.texture.as_ref().map(|_| ()))
+            .finish()
+    }
+}
+
 impl Layer {
     /// Takes the `dirty` rects of a new frame from `buffer`, which holds the whole frame as BGRA
     /// pixels with premultiplied alpha. A frame of a new size replaces the whole layer.

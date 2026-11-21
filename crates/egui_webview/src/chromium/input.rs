@@ -19,6 +19,7 @@ use super::keys::KeyExt as _;
 ///
 /// The widget records it during the pass, and [`Input::replay`] sends it to the page after the
 /// pass. Everything is copied here, because by then egui's input has moved on.
+#[derive(Debug)]
 pub struct Batch {
     events: Vec<Event>,
 
@@ -108,7 +109,7 @@ impl Batch {
 }
 
 /// The pointer state that forwarding input to one page carries from pass to pass.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Input {
     /// The event flags of the mouse buttons pressed on the page and not released yet.
     ///
@@ -127,7 +128,7 @@ pub struct Input {
 }
 
 /// A press of a mouse button on the page.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Click {
     time: f64,
     pos: Pos2,
@@ -443,7 +444,7 @@ impl Keystroke {
 }
 
 /// A mouse button that CEF has a type for.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MouseButton {
     type_: MouseButtonType,
 

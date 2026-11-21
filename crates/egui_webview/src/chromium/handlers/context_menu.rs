@@ -28,7 +28,18 @@ pub struct ContextMenu {
     pub shown: bool,
 }
 
+impl std::fmt::Debug for ContextMenu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContextMenu")
+            .field("pos", &self.pos)
+            .field("items", &self.items)
+            .field("shown", &self.shown)
+            .finish_non_exhaustive()
+    }
+}
+
 /// An item of a [`ContextMenu`].
+#[derive(Debug)]
 pub enum MenuItem {
     Command {
         id: i32,
