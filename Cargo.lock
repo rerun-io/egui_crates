@@ -1832,19 +1832,16 @@ dependencies = [
 name = "egui_mcp"
 version = "0.3.0"
 dependencies = [
- "accesskit 0.25.2",
- "accesskit_consumer 0.39.2",
  "base64",
  "egui 0.37.0",
- "egui_demo_lib",
- "egui_extras",
  "egui_inspection",
- "egui_kittest 0.37.0",
+ "egui_inspection_tools",
  "insta",
  "rmcp",
  "schemars",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing-subscriber",
 ]
