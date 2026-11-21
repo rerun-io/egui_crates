@@ -5,6 +5,12 @@ use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Resp
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 
+// The platform's embedded backend, which `WebViewInstance::new` uses unless CEF is the default.
+#[cfg(target_os = "macos")]
+use crate::macos::WryBackend as PlatformBackend;
+#[cfg(target_arch = "wasm32")]
+use crate::web::IframeBackend as PlatformBackend;
+
 /// A web page shown as an egui widget.
 ///
 /// The instance owns the page, including its history and state, so create it once and keep it.
@@ -87,7 +93,7 @@ pub struct WebViewResponse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
     /// The platform's own webview in an embedded view: an `<iframe>` on the web.
-    Embedded,
+    Platform,
 
     /// CEF, which renders the page off screen. Requires the `cef` feature.
     Cef,
@@ -104,7 +110,7 @@ impl DefaultBackend {
         target_os = "macos",
         target_os = "windows"
     )) {
-        Self::Embedded
+        Self::Platform
     } else {
         Self::Cef
     };
@@ -135,11 +141,9 @@ impl WebViewInstance {
     ///
     /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - On platforms without a system webview, such as Linux: CEF, as with `Self::new_cef`.
-    ///   This requires the `cef` feature.
-    ///
-    /// Setting the `EGUI_WEBVIEW_BACKEND` environment variable to `cef` overrides that choice
-    /// at run time.
+    /// - On macOS: a `WKWebView` below egui's surface. It needs eframe's wgpu renderer.
+    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
+    ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].
@@ -168,13 +172,13 @@ impl WebViewInstance {
                     Err(Error::Unsupported)
                 }
             }
-            DefaultBackend::Embedded => {
-                #[cfg(target_arch = "wasm32")]
+            DefaultBackend::Platform => {
+                #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
                 {
-                    let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
+                    let backend = PlatformBackend::new(ctx, source, embedded_views)?;
                     Ok(Self::with_backend(id, backend))
                 }
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(any(target_arch = "wasm32", target_os = "macos")))]
                 {
                     _ = (ctx, id, source, embedded_views);
                     Err(Error::Unsupported)
@@ -190,7 +194,7 @@ impl WebViewInstance {
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
         match DefaultBackend::pick() {
-            DefaultBackend::Embedded => Some(Arc::new(crate::EmbeddedWidget)),
+            DefaultBackend::Platform => Some(Arc::new(crate::EmbeddedWidget)),
             DefaultBackend::Cef => None,
         }
     }
