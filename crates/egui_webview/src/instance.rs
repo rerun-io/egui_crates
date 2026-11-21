@@ -99,7 +99,7 @@ pub struct WebViewResponse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
     /// The platform's own webview in an embedded view: an `<iframe>` on the web.
-    Embedded,
+    Platform,
 
     /// CEF, which renders the page off screen. Requires the `cef` feature.
     Cef,
@@ -109,10 +109,14 @@ impl DefaultBackend {
     /// The environment variable that overrides [`Self::FOR_TARGET`] at run time.
     const ENV_VAR: &str = "EGUI_WEBVIEW_BACKEND";
 
-    /// The backend of the target platform, chosen at compile time: the `<iframe>` on the web,
-    /// and CEF natively.
-    const FOR_TARGET: Self = if cfg!(target_arch = "wasm32") {
-        Self::Embedded
+    /// The backend of the target platform, chosen at compile time: CEF where there is no system
+    /// webview.
+    const FOR_TARGET: Self = if cfg!(any(
+        target_arch = "wasm32",
+        target_os = "macos",
+        target_os = "windows"
+    )) {
+        Self::Platform
     } else {
         Self::Cef
     };
@@ -174,13 +178,13 @@ impl WebViewInstance {
                     Err(Error::Unsupported)
                 }
             }
-            DefaultBackend::Embedded => {
-                #[cfg(target_arch = "wasm32")]
+            DefaultBackend::Platform => {
+                #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
                 {
-                    let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
+                    let backend = PlatformBackend::new(ctx, source, embedded_views)?;
                     Ok(Self::with_backend(id, backend))
                 }
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(any(target_arch = "wasm32", target_os = "macos")))]
                 {
                     _ = (ctx, id, source, embedded_views);
                     Err(Error::Unsupported)
@@ -196,7 +200,7 @@ impl WebViewInstance {
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
         match DefaultBackend::pick() {
-            DefaultBackend::Embedded => Some(Arc::new(crate::EmbeddedWidget)),
+            DefaultBackend::Platform => Some(Arc::new(crate::EmbeddedWidget)),
             DefaultBackend::Cef => None,
         }
     }
