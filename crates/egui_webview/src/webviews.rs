@@ -128,8 +128,8 @@ impl WebViews {
         let alive = self.mailbox.with(|mail| {
             // Close the webviews that were neither shown nor kept alive in the latest pass.
             mail.webviews
-                .retain(|(_, state)| state.was_alive(pass) || state.was_shown(pass));
-            mail.webviews.iter().map(|(id, _)| *id).collect::<Vec<_>>()
+                .retain(|_, state| state.was_alive(pass) || state.was_shown(pass));
+            mail.webviews.keys().copied().collect::<Vec<_>>()
         });
         // Dropping a page closes it.
         self.pages.retain(|page| alive.contains(&page.id));
@@ -220,7 +220,6 @@ impl WebViews {
         mailbox.with_view_state(id, |state| {
             if let Some(widget) = new_widget {
                 state.set_page_widget(ctx, widget);
-                ctx.request_repaint_of(ViewportId::ROOT);
             }
             state.set_pending_focus_change(ctx, pending_focus_change);
             state.extend_events(ctx, events);
@@ -235,8 +234,12 @@ fn create_page(
     id: Id,
     source: Option<&WebViewSource>,
 ) -> Result<WebViewInstance, String> {
-    let empty = WebViewSource::Html(String::new());
-    create(ctx, id, source.unwrap_or(&empty)).map_err(|err| {
+    create(
+        ctx,
+        id,
+        source.unwrap_or(&WebViewSource::Html(String::new())),
+    )
+    .map_err(|err| {
         log::warn!("egui_webview: failed to create the page of {id:?}: {err}");
         err.to_string()
     })
@@ -365,7 +368,7 @@ impl<'a> WebView<'a> {
 
         let (page, events, pending_focus_change) = mailbox.with(|inner| {
             let fallback = inner.fallback.clone();
-            let state = inner.get_or_create_state(id);
+            let state = inner.webviews.entry(id).or_default();
 
             state.mark_shown(pass);
             // Only copy the text when it changed.
@@ -392,7 +395,7 @@ impl<'a> WebView<'a> {
         let shown = show_widget(ui, id, size, &*widget, pending_focus_change);
 
         mailbox.with(|inner| {
-            let state = inner.get_or_create_state(id);
+            let state = inner.webviews.entry(id).or_default();
             // Tell the webview about any focus changes from the egui side.
             if let Some(change) = shown.focus_change {
                 state.push_command(Command::ChangeFocus(change));
@@ -492,7 +495,7 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
-    use egui::{EmbeddedViewOutput, FocusDirection, vec2};
+    use egui::{FocusDirection, vec2};
 
     use super::*;
     use crate::{Backend, EmbeddedWidget};
@@ -500,6 +503,7 @@ mod tests {
     type Log = Rc<RefCell<Vec<String>>>;
 
     /// A page that only writes down what it is told.
+    #[derive(Debug)]
     struct FakeBackend {
         log: Log,
         events: Rc<RefCell<Vec<WebViewEvent>>>,

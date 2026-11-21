@@ -1,0 +1,47 @@
+[package]
+name = "egui_inspection_tools"
+version = "0.1.0"
+authors = ["Lucas Meurer <hi@lucasmerlin.me>"]
+description = "Agent tools that drive a live egui app over the egui_inspection protocol, with no MCP or async runtime"
+edition.workspace = true
+rust-version.workspace = true
+homepage = "https://github.com/rerun-io/egui_crates"
+license.workspace = true
+readme = "README.md"
+repository = "https://github.com/rerun-io/egui_crates"
+categories = ["gui", "development-tools::testing"]
+keywords = ["egui", "agent", "accesskit", "inspector", "testing"]
+include = ["**/*.rs", "Cargo.toml"]
+publish = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--generate-link-to-definition"]
+
+[dependencies]
+accesskit.workspace = true
+accesskit_consumer.workspace = true
+egui.workspace = true
+egui_inspection.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# `default_fonts` so a test can lay out a real frame; the lib itself needs no fonts.
+egui = { version = "0.37.0", features = ["default_fonts"] }
+# Renders the demo app to a PNG snapshot, so the tree snapshots can be read against a picture
+# of the frame they describe.
+egui_kittest = { version = "0.37.0", default-features = false, features = [
+    "snapshot",
+    "wgpu",
+] }
+# The demo app shows egui's own widget gallery, so the tests cover every widget kind egui
+# reports to AccessKit rather than the handful we'd think to write out.
+egui_demo_lib = "0.37.0"
+egui_extras = { version = "0.37.0", features = ["image", "svg"] }
+insta.workspace = true
+parking_lot = "0.12.5"
+
+[lints]
+workspace = true

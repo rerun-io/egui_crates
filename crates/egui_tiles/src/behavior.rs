@@ -1,12 +1,12 @@
 use egui::{
-    Color32, Id, Rect, Response, Rgba, Role, Sense, Stroke, TextStyle, Ui, Vec2, Visuals,
-    WidgetInfo, WidgetText, vec2,
+    Color32, HighlightState, Id, Rect, Response, Rgba, Role, Sense, Stroke, TextStyle, Ui, Vec2,
+    Visuals, WidgetInfo, WidgetText, vec2,
 };
 
-use super::{ResizeState, SimplificationOptions, Tile, TileId, Tiles, UiResponse};
+use super::{SimplificationOptions, Tile, TileId, Tiles, UiResponse};
 
 /// The kind of edit that triggered the call to [`Behavior::on_edit`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditAction {
     /// A tile was resized by dragging or double-clicking a boundary.
     TileResized,
@@ -23,7 +23,7 @@ pub enum EditAction {
 }
 
 /// The state of a tab, used to inform the rendering of the tab.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TabState {
     /// Is the tab currently selected?
     pub active: bool,
@@ -409,14 +409,13 @@ pub trait Behavior<Pane> {
     }
 
     /// The stroke used for the lines in horizontal, vertical, and grid layouts.
-    fn resize_stroke(&self, style: &egui::Style, resize_state: ResizeState) -> Stroke {
-        match resize_state {
-            ResizeState::Idle => {
-                Stroke::new(self.gap_width(style), self.tab_bar_color(&style.visuals))
-            }
-            ResizeState::Hovering => style.visuals.widgets.hovered.fg_stroke,
-            ResizeState::Dragging => style.visuals.widgets.active.fg_stroke,
-        }
+    ///
+    /// Called every frame for each line, with a `resize_id` unique to that line.
+    /// The default fades in the hover highlight after a delay, using [`egui::Ui::resize_line_stroke`].
+    fn resize_stroke(&self, ui: &Ui, resize_id: Id, resize_state: HighlightState) -> Stroke {
+        let style = ui.style();
+        let idle_stroke = Stroke::new(self.gap_width(style), self.tab_bar_color(&style.visuals));
+        ui.resize_line_stroke(resize_id, resize_state, idle_stroke)
     }
 
     /// Extra spacing to left and right of tab titles.

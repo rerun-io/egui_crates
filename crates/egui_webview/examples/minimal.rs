@@ -3,8 +3,16 @@
 //! The app keeps a [`WebViews`], which owns the pages, and updates it in
 //! [`eframe::App::output_hook`]. The code that shows the page only needs a [`egui::Ui`].
 //!
+//! Native:
+//!
 //! ```sh
 //! cargo run -p egui_webview --example minimal
+//! ```
+//!
+//! Web:
+//!
+//! ```sh
+//! cd crates/egui_webview && trunk serve --example minimal
 //! ```
 
 mod common;

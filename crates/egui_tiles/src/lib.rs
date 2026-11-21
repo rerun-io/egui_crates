@@ -217,20 +217,6 @@ impl Default for SimplificationOptions {
     }
 }
 
-/// The current state of a resize handle.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ResizeState {
-    Idle,
-
-    /// The user is hovering over the resize handle.
-    Hovering,
-
-    /// The user is dragging the resize handle.
-    Dragging,
-}
-
-// ----------------------------------------------------------------------------
-
 /// An insertion point in a specific container.
 ///
 /// Specifies the expected container layout type, and where to insert.

@@ -13,6 +13,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 /// [`Self::ui`] wasn't called in that pass.
 ///
 /// Pages live on the thread that runs egui, so this type isn't `Send`.
+#[derive(Debug)]
 pub struct WebViewInstance {
     id: Id,
     backend: Box<dyn Backend>,
@@ -65,17 +66,10 @@ impl FocusChange {
 pub(crate) struct Shown {
     pub response: Response,
 
-    /// Whether the focus was changed by egui
+    /// How egui moved the focus to or from the webview in this pass, if it did.
+    ///
     /// Tell the page about this with [`WebViewInstance::apply_focus`].
     pub focus_change: Option<FocusChange>,
-}
-
-impl std::fmt::Debug for WebViewInstance {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WebViewInstance")
-            .field("id", &self.id)
-            .finish_non_exhaustive()
-    }
 }
 
 /// The result of [`WebViewInstance::ui`] and [`crate::WebView::show`].

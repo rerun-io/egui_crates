@@ -12,7 +12,7 @@ use crate::{Error, WebViewEvent, WebViewSource};
 /// The webview calls [`Self::allocate`] first, then moves egui's keyboard focus, then calls
 /// [`Self::show`].
 #[expect(unused_variables)] // The default implementations ignore their arguments.
-pub trait PageWidget: Send + Sync {
+pub trait PageWidget: Send + Sync + std::fmt::Debug {
     /// Allocates the page's rect in `ui`.
     ///
     /// `id` is the webview's id. Use it for the widget, so that egui's keyboard focus works.
@@ -51,7 +51,7 @@ impl PageWidget for EmbeddedWidget {
 ///
 /// All methods are called on the thread that runs egui, so a backend doesn't need to be `Send`.
 #[expect(unused_variables)] // The default implementations ignore their arguments.
-pub trait Backend {
+pub trait Backend: std::fmt::Debug {
     /// Load a page.
     ///
     /// # Errors

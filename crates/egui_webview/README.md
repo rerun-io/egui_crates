@@ -69,7 +69,7 @@ cargo run -p egui_webview --example minimal
 cargo run -p egui_webview --example minimal_instance
 ```
 
-On the web, with [Trunk](https://trunkrs.dev/):
+The examples run on the web with [Trunk](https://github.com/trunk-rs/trunk):
 
 ```sh
 cd crates/egui_webview
@@ -82,13 +82,12 @@ trunk serve --example minimal_instance
 ## Backends
 
 * Web: an `<iframe>` below egui's canvas.
+    * egui clears its rect to transparent so the page shows through.
+    * egui windows and popups above a page paint over it and receive the pointer input there.
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
   `WebViewInstance::new` uses it on platforms without a system webview, such as Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
-
-The `<iframe>` lies below egui's canvas, and egui clears its rect to transparent so the page shows through.
-egui windows and popups above a page paint over it and receive the pointer input there.
 
 ## CEF
 

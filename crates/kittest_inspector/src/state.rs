@@ -9,7 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::sync::mpsc;
 
-use eframe::egui::{self, Context};
+use eframe::egui::Context;
 use egui::accesskit::NodeId;
 use egui_kittest::inspector_api::Frame;
 

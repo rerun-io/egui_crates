@@ -39,7 +39,9 @@ window.ipc = { postMessage: (message) => window.parent.postMessage(message, "*")
 window.addEventListener("message", (event) => {
     const script = event.source === window.parent && event.data && event.data.__egui_webview_eval;
     if (typeof script === "string") {
-        (0, eval)(script);
+        // `window.eval` runs the script in the global scope, like `evaluateJavaScript` on the
+        // other backends. A plain `eval(script)` would run it inside this listener.
+        window.eval(script);
     }
 });
 </script>"#;
@@ -53,6 +55,7 @@ window.addEventListener("message", (event) => {
 ///
 /// When Tab or Shift-Tab leaves the page, the adjacent edge receives the focus, and its `focus`
 /// event records which way the focus left.
+#[derive(Debug)]
 struct FocusEdge {
     element: HtmlElement,
     _on_focus: Closure<dyn FnMut()>,
@@ -64,42 +67,46 @@ impl FocusEdge {
     /// [`FocusDirection::Previous`] for the edge before the `<iframe>`, and
     /// [`FocusDirection::Next`] for the edge after it.
     ///
-    /// `left` and `waiting` are shared with [`IframeBackend`].
+    /// `left` and `parked` are shared with [`IframeBackend`].
     fn new(
         document: &web_sys::Document,
         ctx: &Context,
         direction: FocusDirection,
         left: &Rc<Cell<Option<FocusDirection>>>,
-        waiting: &Rc<Cell<bool>>,
+        parked: &Rc<Cell<bool>>,
     ) -> Result<Self, Error> {
         let element: HtmlElement = document
             .create_element("div")
             .map_err(js_error)?
             .unchecked_into();
         element.set_tab_index(0);
-        set_style(
-            &element,
-            "position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;",
-        );
+        element
+            .set_attribute(
+                "style",
+                "position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;",
+            )
+            .ok();
 
         let on_focus = {
-            let (ctx, left, waiting) = (ctx.clone(), Rc::clone(left), Rc::clone(waiting));
+            let (ctx, left, parked) = (ctx.clone(), Rc::clone(left), Rc::clone(parked));
             Closure::<dyn FnMut()>::new(move || {
-                waiting.set(false);
+                parked.set(false);
                 left.set(Some(direction));
                 ctx.request_repaint();
             })
         };
-        // While the edge waits for the Tab into the page, a Tab away from the page (Shift-Tab
-        // on the edge before it, Tab on the edge after it) is cancelled and reported like a
-        // Tab out of the page, so egui moves its own focus on. An edge that got the focus from
-        // the browser's Tab out of the page isn't waiting, and leaves the key to the browser.
+        // Say the user tabs from an egui widget to a cross-origin page. The focus is parked on
+        // the edge before the page. If they press Shift-Tab now, the browser would move the
+        // focus to some other HTML element. So cancel the key, and report that the focus left
+        // the page, so egui moves its focus back. The edge after the page does the same for Tab.
+        // If the focus got here by leaving the page, it isn't parked, and the key goes to the
+        // browser.
         let on_keydown = {
-            let (ctx, left, waiting) = (ctx.clone(), Rc::clone(left), Rc::clone(waiting));
+            let (ctx, left, parked) = (ctx.clone(), Rc::clone(left), Rc::clone(parked));
             Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {
                 let away = event.key() == "Tab"
                     && event.shift_key() == (direction == FocusDirection::Previous);
-                if away && waiting.get() {
+                if away && parked.get() {
                     event.prevent_default();
                     left.set(Some(direction));
                     ctx.request_repaint();
@@ -120,7 +127,15 @@ impl FocusEdge {
     }
 }
 
+/// The inline styles of an [`IframeBackend`]'s container and `<iframe>`.
+#[derive(Debug, PartialEq)]
+struct Styles {
+    container: String,
+    iframe: String,
+}
+
 /// Shows a page in an `<iframe>` below the canvas. See the module docs.
+#[derive(Debug)]
 pub struct IframeBackend {
     canvas: HtmlCanvasElement,
 
@@ -139,20 +154,22 @@ pub struct IframeBackend {
 
     /// The inline styles last set on the container and the `<iframe>`, or `None` while hidden.
     /// Used to skip redundant style writes.
-    last_style: Option<(String, String)>,
+    last_style: Option<Styles>,
 
     /// The [`FocusEdge`]s before and after the `<iframe>`, in that order.
     focus_edges: [FocusEdge; 2],
 
     /// The direction in which the keyboard focus left the page, set by a [`FocusEdge`].
     ///
-    /// A Tab or Shift-Tab that moved away from a waiting edge without entering the page counts
-    /// too.
+    /// A Tab or Shift-Tab away from the page while the focus is parked on an edge counts too.
     focus_left: Rc<Cell<Option<FocusDirection>>>,
 
-    /// Whether an edge holds the focus that [`Backend::focus`] gave it, and waits for the
-    /// browser's Tab into the page.
-    edge_waiting: Rc<Cell<bool>>,
+    /// Whether [`Backend::focus`] parked the focus on an edge, so the user's next Tab carries it
+    /// into the page.
+    ///
+    /// An edge can also have the focus because the focus just left the page. Then it isn't
+    /// parked.
+    focus_parked: Rc<Cell<bool>>,
 
     _on_load: Closure<dyn FnMut()>,
     on_message: Closure<dyn FnMut(MessageEvent)>,
@@ -179,21 +196,21 @@ impl IframeBackend {
             .create_element("div")
             .map_err(js_error)?
             .unchecked_into();
-        set_style(&container, "display: none;");
+        // We don't know the page's rect yet, so hide it until the first `place`. This also
+        // matches `last_style`, which starts as `None`.
+        container.set_attribute("style", "display: none;").ok();
         let iframe: HtmlIFrameElement = document
             .create_element("iframe")
             .map_err(js_error)?
             .unchecked_into();
-        container.append_child(&iframe).map_err(js_error)?;
 
         let focus_left = Rc::new(Cell::new(None));
-        let edge_waiting = Rc::new(Cell::new(false));
+        let focus_parked = Rc::new(Cell::new(false));
         let [before, after] = [FocusDirection::Previous, FocusDirection::Next]
-            .map(|direction| FocusEdge::new(&document, ctx, direction, &focus_left, &edge_waiting));
+            .map(|direction| FocusEdge::new(&document, ctx, direction, &focus_left, &focus_parked));
         let (before, after) = (before?, after?);
-        container
-            .insert_before(&before.element, Some(&iframe))
-            .map_err(js_error)?;
+        container.append_child(&before.element).map_err(js_error)?;
+        container.append_child(&iframe).map_err(js_error)?;
         container.append_child(&after.element).map_err(js_error)?;
 
         let loaded = Rc::new(Cell::new(false));
@@ -262,7 +279,7 @@ impl IframeBackend {
             last_style: None,
             focus_edges: [before, after],
             focus_left,
-            edge_waiting,
+            focus_parked,
             _on_load: on_load,
             on_message,
             on_window_blur,
@@ -277,8 +294,8 @@ impl IframeBackend {
     /// The inline styles of the container and the `<iframe>` for `output`.
     ///
     /// `output` is in ui points. `scale` is how many CSS pixels one ui point is, which
-    /// [`css_pixels_per_point`] measures.
-    fn style(output: &EmbeddedViewOutput, scale: f32) -> (String, String) {
+    /// [`css_pixels_per_point`] measures. `visuals` is egui's theme.
+    fn style(output: &EmbeddedViewOutput, scale: f32, visuals: &egui::Visuals) -> Styles {
         let rect = output.rect * scale;
         let visible = output.visible * scale;
         let z_index = output.z_index;
@@ -296,24 +313,32 @@ impl IframeBackend {
         );
 
         // The `<iframe>` is positioned relative to the container, which clips it to `visible`.
-        // An `<iframe>` is transparent where its page paints no background, so give it the
-        // white background of a browser tab, which also shows while the page loads.
+        //
+        // Its `color-scheme` follows egui's theme, and its background is egui's panel color.
+        // A page that supports that scheme, and the blank page while it loads, show that
+        // background, so a dark app doesn't flash white. A page that only supports the other
+        // scheme gets an opaque background from the browser in its own scheme, so a light-only
+        // page stays readable in a dark app.
         let offset = rect.min - visible.min;
+        let color_scheme = if visuals.dark_mode { "dark" } else { "light" };
+        let [r, g, b, a] = visuals.panel_fill.to_srgba_unmultiplied();
         let iframe = format!(
             "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; \
-             border: none; background: white; pointer-events: auto;",
+             border: none; color-scheme: {color_scheme}; \
+             background: rgba({r}, {g}, {b}, {}); pointer-events: auto;",
             offset.x,
             offset.y,
             rect.width(),
             rect.height(),
+            f32::from(a) / 255.0,
         );
-        (container, iframe)
+        Styles { container, iframe }
     }
 
     /// Whether the page has the keyboard focus.
     ///
     /// With `or_edge`, also whether one of its [`Self::focus_edges`] has it,
-    /// as one does while it waits for the browser's Tab into the page,
+    /// as one does while the focus is parked there,
     /// or for a moment when Tab moves the focus out of it.
     fn is_focused(&self, or_edge: bool) -> bool {
         let Some(active) = web_sys::window()
@@ -396,16 +421,18 @@ impl Backend for IframeBackend {
         // A hidden page needs no scale, so it doesn't measure the canvas.
         let style = output.map(|output| {
             let scale = css_pixels_per_point(ctx, &self.canvas.get_bounding_client_rect());
-            Self::style(output, scale)
+            Self::style(output, scale, &ctx.global_style().visuals)
         });
         if style == self.last_style {
             return;
         }
         match &style {
-            None => set_style(&self.container, "display: none;"),
-            Some((container, iframe)) => {
-                set_style(&self.container, container);
-                set_style(&self.iframe, iframe);
+            None => {
+                self.container.set_attribute("style", "display: none;").ok();
+            }
+            Some(Styles { container, iframe }) => {
+                self.container.set_attribute("style", container).ok();
+                self.iframe.set_attribute("style", iframe).ok();
             }
         }
         self.last_style = style;
@@ -424,7 +451,7 @@ impl Backend for IframeBackend {
         // If an edge's `focus` event fired, it was for this call, not for the focus leaving
         // the page.
         self.focus_left.set(None);
-        self.edge_waiting.set(matches!(
+        self.focus_parked.set(matches!(
             direction,
             FocusDirection::Next | FocusDirection::Previous
         ));
@@ -440,7 +467,7 @@ impl Backend for IframeBackend {
     }
 
     fn blur(&mut self) {
-        self.edge_waiting.set(false);
+        self.focus_parked.set(false);
         if self.is_focused(true) {
             // As in eframe, focusing the canvas must not scroll the document it's embedded in.
             let options = web_sys::FocusOptions::new();
@@ -494,7 +521,7 @@ impl Drop for IframeBackend {
 fn css_pixels_per_point(ctx: &Context, canvas: &web_sys::DomRect) -> f32 {
     #[expect(clippy::cast_possible_truncation)]
     let scale = (canvas.width() as f32) / ctx.viewport_rect().width();
-    if scale.is_finite() && 0.0 < scale {
+    if scale.is_finite() && scale > 0.0 {
         scale
     } else {
         ctx.zoom_factor()
@@ -552,10 +579,6 @@ fn with_prelude(html: &str) -> String {
         .map_or(0, |end| end + 1);
     let (doctype, rest) = trimmed.split_at(doctype_end);
     format!("{doctype}{HTML_PRELUDE}{rest}")
-}
-
-fn set_style(element: &web_sys::Element, css: &str) {
-    element.set_attribute("style", css).ok();
 }
 
 fn js_error(err: impl Into<JsValue>) -> Error {
