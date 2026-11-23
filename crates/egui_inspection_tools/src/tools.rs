@@ -28,7 +28,7 @@ use crate::tree::{self, Id, Locator, QueryFilter, Widget};
 /// A JSON object, as tool arguments and JSON Schemas are.
 pub type JsonObject = serde_json::Map<String, Value>;
 
-/// How long `wait_for` waits between two looks at the widget tree.
+/// How long `ui_wait_for` waits between two looks at the widget tree.
 const WAIT_FOR_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 // ---------------------------------------------------------------------------------------
@@ -61,7 +61,7 @@ impl Effect {
 /// A tool an agent can call: its name, what it does, and the arguments it takes.
 #[derive(Clone, Debug)]
 pub struct ToolDef {
-    /// The unique name to [`call`] it by, e.g. `click`.
+    /// The unique name to [`call`] it by, e.g. `ui_click`.
     pub name: &'static str,
 
     /// A short human-readable name, e.g. `Click`.
@@ -143,49 +143,54 @@ pub fn tools() -> &'static [ToolDef] {
     static TOOLS: LazyLock<Vec<ToolDef>> = LazyLock::new(|| {
         vec![
             ToolDef::new::<QueryFilter>(
-                "widget_tree",
+                "ui_widget_tree",
                 "Widget tree",
                 WIDGET_TREE_DESCRIPTION,
                 Effect::ReadOnly,
             )
             .with_output::<WidgetTreeResult>(),
             ToolDef::new::<GetWidgetArgs>(
-                "get_widget",
+                "ui_get_widget",
                 "Widget details",
                 GET_WIDGET_DESCRIPTION,
                 Effect::ReadOnly,
             )
             .with_output::<GetWidgetResult>(),
             ToolDef::new::<ScreenshotArgs>(
-                "screenshot",
+                "ui_screenshot",
                 "Screenshot",
                 SCREENSHOT_DESCRIPTION,
                 Effect::ReadOnly,
             ),
             ToolDef::new::<WaitForArgs>(
-                "wait_for",
+                "ui_wait_for",
                 "Wait for widgets",
                 WAIT_FOR_DESCRIPTION,
                 Effect::ReadOnly,
             ),
-            ToolDef::new::<ClickArgs>("click", "Click", CLICK_DESCRIPTION, Effect::Destructive),
-            ToolDef::new::<HoverArgs>("hover", "Hover", HOVER_DESCRIPTION, Effect::Idempotent),
-            ToolDef::new::<ScrollArgs>("scroll", "Scroll", SCROLL_DESCRIPTION, Effect::Cumulative),
-            ToolDef::new::<DragArgs>("drag", "Drag", DRAG_DESCRIPTION, Effect::Destructive),
+            ToolDef::new::<ClickArgs>("ui_click", "Click", CLICK_DESCRIPTION, Effect::Destructive),
+            ToolDef::new::<HoverArgs>("ui_hover", "Hover", HOVER_DESCRIPTION, Effect::Idempotent),
+            ToolDef::new::<ScrollArgs>(
+                "ui_scroll",
+                "Scroll",
+                SCROLL_DESCRIPTION,
+                Effect::Cumulative,
+            ),
+            ToolDef::new::<DragArgs>("ui_drag", "Drag", DRAG_DESCRIPTION, Effect::Destructive),
             ToolDef::new::<TypeTextArgs>(
-                "type_text",
+                "ui_type_text",
                 "Type text",
                 TYPE_TEXT_DESCRIPTION,
                 Effect::Destructive,
             ),
             ToolDef::new::<PressKeyArgs>(
-                "press_key",
+                "ui_press_key",
                 "Press key",
                 PRESS_KEY_DESCRIPTION,
                 Effect::Destructive,
             ),
             ToolDef::new::<ResizeArgs>(
-                "resize",
+                "ui_resize",
                 "Resize viewport",
                 RESIZE_DESCRIPTION,
                 Effect::Idempotent,
@@ -197,7 +202,7 @@ pub fn tools() -> &'static [ToolDef] {
 }
 
 static BATCH: LazyLock<ToolDef> = LazyLock::new(|| {
-    ToolDef::new::<BatchArgs>("batch", "Batch", BATCH_DESCRIPTION, Effect::Destructive)
+    ToolDef::new::<BatchArgs>("ui_batch", "Batch", BATCH_DESCRIPTION, Effect::Destructive)
 });
 
 /// The tool called `name`, if there is one.
@@ -211,31 +216,31 @@ Widgets in between that don't match are skipped, so a `children` entry is a desc
 `limit` (200 by default) caps how many widgets come back: whole levels are kept from the top down, so the app's structure survives and the leaves go first, and any widget whose children were cut reports how many in `omitted_children`.
 `root` starts the walk at one widget instead of the app's root — pass the `id` of a widget that reported `omitted_children` to see that part of the tree in full.
 `exclude` leaves a subtree out — pass a widget `id`, or the same constraints the filter takes — and takes everything below it with it; use it to skip a panel whose text would otherwise answer every query.
-Use the returned `id` with `click`, `type_text`, or `get_widget`.
-The widgets are abridged — call `get_widget` with an `id` for one widget's full detail, including its `bounds` (logical points, its center is where `click` lands), its parent, and its text in full.
+Use the returned `id` with `ui_click`, `ui_type_text`, or `ui_get_widget`.
+The widgets are abridged — call `ui_get_widget` with an `id` for one widget's full detail, including its `bounds` (logical points, its center is where `ui_click` lands), its parent, and its text in full.
 `label` and `value` are cut short at 100 characters, marked with a trailing ` […]`; the filters still match against the whole text, so a phrase past the cut still finds its widget.
 Empty scaffolding is dropped: a widget with no children, no `label`, no `value`, and no `role` (a `role` of `Unknown` is reported as none) never appears.";
 
-const GET_WIDGET_DESCRIPTION: &str = "Return a single widget by id (from `widget_tree`), in full detail: its `bounds` in logical points, its `parent_id`, its state, and its `label`/`value` untruncated.
-This is the follow-up to `widget_tree`, which omits `bounds` and cuts long text short to stay compact.";
+const GET_WIDGET_DESCRIPTION: &str = "Return a single widget by id (from `ui_widget_tree`), in full detail: its `bounds` in logical points, its `parent_id`, its state, and its `label`/`value` untruncated.
+This is the follow-up to `ui_widget_tree`, which omits `bounds` and cuts long text short to stay compact.";
 
 const SCREENSHOT_DESCRIPTION: &str = "Capture the current frame as a PNG screenshot.
-Defaults to logical-point resolution (`pixels_per_point: 1.0`) so pixels align with `click`/`widget_tree` coordinates; pass a higher `pixels_per_point` for detail.
+Defaults to logical-point resolution (`pixels_per_point: 1.0`) so pixels align with `ui_click`/`ui_widget_tree` coordinates; pass a higher `pixels_per_point` for detail.
 Requires the app window to be visible — a fully-occluded or minimized window can't render a frame to capture (notably on macOS), so the call times out; bring the window to the foreground first.";
 
 const CLICK_DESCRIPTION: &str = "Click the center of a widget's bounding box, or a raw `pos` in logical points.
-Specify either a locator (`id` from `widget_tree`, `role`, or a text match — prefer `content_contains`, which matches `label` or `value`; `label_contains`/`value_contains` match just one field) or `pos: { x, y }`.
+Specify either a locator (`id` from `ui_widget_tree`, `role`, or a text match — prefer `content_contains`, which matches `label` or `value`; `label_contains`/`value_contains` match just one field) or `pos: { x, y }`.
 `button` defaults to `primary` (accepts `primary`/`secondary`/`middle`/`extra1`/`extra2`, or aliases `left`/`right`).
 `count: 2` → double-click, `3` → triple.";
 
 const HOVER_DESCRIPTION: &str = "Move the pointer over a widget (or raw `pos`) without clicking.
-Tooltips and hover popups only appear after a short delay — follow with `wait_for` (e.g. its `min_steps`) to let them settle before reading the tree or screenshotting.";
+Tooltips and hover popups only appear after a short delay — follow with `ui_wait_for` (e.g. its `min_steps`) to let them settle before reading the tree or screenshotting.";
 
 const SCROLL_DESCRIPTION: &str = "Send a mouse wheel scroll over a widget (or raw `pos`).
 `delta` is in logical points: positive Y scrolls down (reveals content below); positive X scrolls right.";
 
 const DRAG_DESCRIPTION: &str = "Primary-button drag from `start` to `end`.
-Each target accepts the same fields as `click`: locator (`id`/`content_contains`/`role`/`label_contains`/`value_contains`) or `pos: {x, y}`.
+Each target accepts the same fields as `ui_click`: locator (`id`/`content_contains`/`role`/`label_contains`/`value_contains`) or `pos: {x, y}`.
 `steps` controls how many intermediate pointer-move events are emitted between press and release.";
 
 const RESIZE_DESCRIPTION: &str = "Resize the app's viewport to the given logical-point dimensions.";
@@ -254,8 +259,8 @@ const PRESS_KEY_DESCRIPTION: &str = "Send a key press (down + up) to the focused
 const BATCH_DESCRIPTION: &str = "Execute a sequence of tool calls in one round trip.
 Stops on the first error.
 Results are emitted in execution order, interleaved: each step contributes one JSON text item followed by any image items it produced (e.g. screenshots).
-`batch` cannot be nested.
-Use this to act and observe in one call, e.g. a `click` then a `widget_tree` or `screenshot`.";
+`ui_batch` cannot be nested.
+Use this to act and observe in one call, e.g. a `ui_click` then a `ui_widget_tree` or `ui_screenshot`.";
 
 // ---------------------------------------------------------------------------------------
 // Dispatch
@@ -271,7 +276,7 @@ pub async fn call(
     name: &str,
     arguments: JsonObject,
 ) -> ToolOutput {
-    if name == "batch" {
+    if name == "ui_batch" {
         let args = match BATCH.parse_arguments(arguments) {
             Ok(args) => args,
             Err(err) => return ToolOutput::error(err),
@@ -286,7 +291,7 @@ pub async fn call(
     call_one(transport, sleep, name, arguments).await
 }
 
-/// [`call`] for any tool but `batch`, which can't be nested.
+/// [`call`] for any tool but `ui_batch`, which can't be nested.
 async fn call_one(
     transport: &dyn Transport,
     sleep: &dyn Sleep,
@@ -308,22 +313,22 @@ async fn run(
     arguments: JsonObject,
 ) -> Result<ToolOutput, String> {
     match def.name {
-        "widget_tree" => widget_tree(transport, def.parse_arguments(arguments)?).await,
-        "get_widget" => get_widget(transport, def.parse_arguments(arguments)?).await,
-        "screenshot" => screenshot(transport, def.parse_arguments(arguments)?).await,
-        "wait_for" => wait_for(transport, sleep, def.parse_arguments(arguments)?).await,
-        "click" => click(transport, def.parse_arguments(arguments)?).await,
-        "hover" => hover(transport, def.parse_arguments(arguments)?).await,
-        "scroll" => scroll(transport, def.parse_arguments(arguments)?).await,
-        "drag" => drag(transport, def.parse_arguments(arguments)?).await,
-        "type_text" => type_text(transport, def.parse_arguments(arguments)?).await,
-        "press_key" => press_key(transport, def.parse_arguments(arguments)?).await,
-        "resize" => resize(transport, def.parse_arguments(arguments)?).await,
+        "ui_widget_tree" => widget_tree(transport, def.parse_arguments(arguments)?).await,
+        "ui_get_widget" => get_widget(transport, def.parse_arguments(arguments)?).await,
+        "ui_screenshot" => screenshot(transport, def.parse_arguments(arguments)?).await,
+        "ui_wait_for" => wait_for(transport, sleep, def.parse_arguments(arguments)?).await,
+        "ui_click" => click(transport, def.parse_arguments(arguments)?).await,
+        "ui_hover" => hover(transport, def.parse_arguments(arguments)?).await,
+        "ui_scroll" => scroll(transport, def.parse_arguments(arguments)?).await,
+        "ui_drag" => drag(transport, def.parse_arguments(arguments)?).await,
+        "ui_type_text" => type_text(transport, def.parse_arguments(arguments)?).await,
+        "ui_press_key" => press_key(transport, def.parse_arguments(arguments)?).await,
+        "ui_resize" => resize(transport, def.parse_arguments(arguments)?).await,
         name => Err(format!("unknown tool `{name}`")),
     }
 }
 
-/// Run a `batch`: call `step` for each action, by its unprefixed tool name, until one fails.
+/// Run a `ui_batch`: call `step` for each action, by its unprefixed tool name, until one fails.
 ///
 /// [`call`] runs each step as a call of its own. A host that serves more tools, or overrides
 /// some, passes its own dispatch as `step`, so a batch reaches those too.
@@ -331,8 +336,8 @@ pub async fn run_batch<'a>(
     args: BatchArgs,
     mut step: impl FnMut(String, JsonObject) -> BoxFuture<'a, ToolOutput>,
 ) -> ToolOutput {
-    if args.actions.iter().any(|action| action.name == "batch") {
-        return ToolOutput::error("nested `batch` is not allowed");
+    if args.actions.iter().any(|action| action.name == "ui_batch") {
+        return ToolOutput::error("nested `ui_batch` is not allowed");
     }
     let mut content = Vec::new();
     let mut any_error = false;
@@ -577,7 +582,7 @@ async fn get_widget(transport: &dyn Transport, args: GetWidgetArgs) -> Result<To
     let locator = Locator::Id { id: args.id };
     let snap = transport::fetch_tree(transport).await?;
     let ppp = snap.pixels_per_point;
-    // `get_widget` is a lookup, not an action: a missing id is `null`, not an error.
+    // `ui_get_widget` is a lookup, not an action: a missing id is `null`, not an error.
     let node = match snap.tree {
         Some(tree) => tree::resolve_unique(&tree, &locator, ppp)
             .ok()
@@ -783,7 +788,7 @@ async fn wait_for(
             }
             if timed_out.load(Ordering::Relaxed) {
                 return Err(format!(
-                    "wait_for timed out after {}s (content_contains={:?}, role={:?}, label_contains={:?}, value_contains={:?}, found {}, min_steps={}, steps_waited={})",
+                    "ui_wait_for timed out after {}s (content_contains={:?}, role={:?}, label_contains={:?}, value_contains={:?}, found {}, min_steps={}, steps_waited={})",
                     args.timeout_secs,
                     args.query.content_contains,
                     args.query.role,
@@ -886,7 +891,7 @@ mod tests {
     /// A misspelled filter used to read as "no filter", which quietly matches every widget.
     #[test]
     fn a_misspelled_argument_is_an_error() {
-        let err = check("widget_tree", &json!({ "content_contain": "Save" }))
+        let err = check("ui_widget_tree", &json!({ "content_contain": "Save" }))
             .expect_err("`content_contain` is not an argument");
         assert!(
             err.starts_with("unknown argument `content_contain`"),
@@ -899,7 +904,7 @@ mod tests {
 
         // Flattened fields belong to the tool just as much as the declared ones.
         check(
-            "widget_tree",
+            "ui_widget_tree",
             &json!({ "content_contains": "Save", "limit": 5 }),
         )
         .expect("both are real arguments");
@@ -908,11 +913,15 @@ mod tests {
     /// Nested argument objects are checked too — `exclude` takes the same shape as the filter.
     #[test]
     fn a_misspelled_argument_inside_a_nested_object_is_an_error() {
-        let err = check("widget_tree", &json!({ "exclude": { "rol": "Button" } }))
+        let err = check("ui_widget_tree", &json!({ "exclude": { "rol": "Button" } }))
             .expect_err("`rol` is not a field of `exclude`");
         assert!(err.starts_with("unknown argument `exclude.rol`"), "{err}");
 
-        check("widget_tree", &json!({ "exclude": { "role": "Button" } })).expect("`role` is one");
+        check(
+            "ui_widget_tree",
+            &json!({ "exclude": { "role": "Button" } }),
+        )
+        .expect("`role` is one");
     }
 
     /// A batch step carries another tool's arguments, which the schema leaves free-form; the
@@ -920,12 +929,12 @@ mod tests {
     #[test]
     fn a_free_form_argument_object_is_left_alone() {
         check(
-            "batch",
-            &json!({ "actions": [{ "name": "click", "args": { "anything": 1 } }] }),
+            "ui_batch",
+            &json!({ "actions": [{ "name": "ui_click", "args": { "anything": 1 } }] }),
         )
         .expect("`args` is free-form");
 
-        let err = check("batch", &json!({ "actions": [{ "tool": "click" }] }))
+        let err = check("ui_batch", &json!({ "actions": [{ "tool": "ui_click" }] }))
             .expect_err("a step has a fixed shape");
         assert!(err.contains("`actions.tool`"), "{err}");
     }

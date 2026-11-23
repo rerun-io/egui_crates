@@ -25,7 +25,7 @@ const TEXT_RUN_ROLE: &str = "TextRun";
 /// A widget's text is unbounded — a text editor's contents, a log line, a chat message — and
 /// egui exports even the scrolled-out parts of a `ScrollArea`, so a whole-tree query can hand
 /// back far more text than an agent needs to find its way around. Filters still match the full
-/// text, and `get_widget` still returns it.
+/// text, and `ui_get_widget` still returns it.
 pub const MAX_TEXT_CHARS: usize = 100;
 
 /// Marks text cut short at [`MAX_TEXT_CHARS`]. Distinct enough that an agent can tell it from
@@ -34,7 +34,7 @@ pub const TRUNCATION_MARKER: &str = " […]";
 
 /// A widget id: the original `accesskit::NodeId`, written as lower-case hex with no prefix.
 ///
-/// Hex keeps ids short, which matters because a `widget_tree` result is mostly ids. The type
+/// Hex keeps ids short, which matters because a `ui_widget_tree` result is mostly ids. The type
 /// exists so a malformed id is rejected where it is read, rather than silently becoming "no
 /// id" — a mistyped `exclude.id` used to leave the subtree in the result, and say nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -51,7 +51,7 @@ impl std::str::FromStr for Id {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         u64::from_str_radix(text.trim(), 16).map(Self).map_err(|err| {
-            format!("invalid widget id `{text}` ({err}) — pass an `id` exactly as `widget_tree` returned it")
+            format!("invalid widget id `{text}` ({err}) — pass an `id` exactly as `ui_widget_tree` returned it")
         })
     }
 }
@@ -78,14 +78,14 @@ impl JsonSchema for Id {
         schemars::json_schema!({
             "type": "string",
             "pattern": "^[0-9a-fA-F]{1,16}$",
-            "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+            "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         })
     }
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct WidgetDetail {
-    /// Node id, used with `click`, `type_text`, and `get_widget`.
+    /// Node id, used with `ui_click`, `ui_type_text`, and `ui_get_widget`.
     pub id: Id,
     pub role: String,
     pub label: Option<String>,
@@ -97,14 +97,14 @@ pub struct WidgetDetail {
     pub parent_id: Option<Id>,
 }
 
-/// A widget in `widget_tree`'s hierarchical result.
+/// A widget in `ui_widget_tree`'s hierarchical result.
 ///
 /// Only matching widgets appear; each one nests the matches found in its own subtree. A
 /// non-matching widget contributes its matches to its nearest matching ancestor, so a
 /// `children` entry is not necessarily a direct child in the app's tree.
 ///
 /// Deliberately leaner than [`WidgetDetail`]: a whole tree of `bounds` is a lot of numbers for an
-/// agent to read past, and actions take an `id` anyway. `get_widget` has the full detail.
+/// agent to read past, and actions take an `id` anyway. `ui_get_widget` has the full detail.
 ///
 /// A widget that says nothing — no children, no `label`, no `value` and no role — is dropped
 /// entirely, as is a `TextRun` that only repeats its parent's text.
@@ -113,7 +113,7 @@ pub struct WidgetDetail {
 /// [`TRUNCATION_MARKER`].
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct Widget {
-    /// Node id, used with `click`, `type_text`, and `get_widget`.
+    /// Node id, used with `ui_click`, `ui_type_text`, and `ui_get_widget`.
     pub id: Id,
 
     /// Omitted for a role of `Unknown`, which carries no information.
@@ -183,7 +183,7 @@ impl Widget {
     }
 
     /// A childless widget with no `label`, no `value` and no role says nothing an agent can act
-    /// on or read — it is layout scaffolding that survived the filter. `widget_tree` drops it.
+    /// on or read — it is layout scaffolding that survived the filter. `ui_widget_tree` drops it.
     fn is_noise(&self) -> bool {
         self.children.is_empty()
             && self.label.is_none()
@@ -231,7 +231,7 @@ impl RectF {
     }
 }
 
-/// The widget-matching constraints shared by `widget_tree`'s filter and the action `Target`s.
+/// The widget-matching constraints shared by `ui_widget_tree`'s filter and the action `Target`s.
 ///
 /// An optional `role` plus up to one text predicate. All are case-insensitive and combined with
 /// logical AND; an all-`None` `Query` matches every widget.
@@ -337,7 +337,7 @@ impl Exclusion {
     }
 }
 
-/// What subset of the tree `widget_tree` walks, and how much of it comes back.
+/// What subset of the tree `ui_widget_tree` walks, and how much of it comes back.
 ///
 /// A default filter — no constraints, no `root`, no `exclude` — returns the whole visible app,
 /// up to `limit`. Every field narrows the result further; they combine with logical AND.
@@ -570,7 +570,7 @@ pub fn count(nodes: &[Widget]) -> usize {
 /// Compared case-insensitively, the way `matches` compares. On failure the error lists the
 /// distinct roles actually present in `tree`, so the agent learns what it can filter by instead of
 /// getting a silent empty result. Validity is checked against *all* roles, not just those present,
-/// so polling tools like `wait_for` can still wait for a valid role that hasn't appeared yet.
+/// so polling tools like `ui_wait_for` can still wait for a valid role that hasn't appeared yet.
 ///
 /// # Errors
 /// If `role` is not a known `AccessKit` role name.
@@ -695,7 +695,7 @@ impl Locator {
 /// Like kittest's `get_by_*`, this is strict: an ambiguous locator is an error, not a silent
 /// "first match wins". A specific `id` resolves at most one node; a `role`/text match
 /// errors if it hits zero or more than one node, listing the candidates so the caller can narrow
-/// the filter or target a specific `id`. Use `widget_tree` (which returns all matches) when you
+/// the filter or target a specific `id`. Use `ui_widget_tree` (which returns all matches) when you
 /// genuinely expect several.
 ///
 /// # Errors

@@ -97,7 +97,7 @@ fn instant_sleep(_: Duration) -> BoxFuture<'static, ()> {
     Box::pin(std::future::ready(()))
 }
 
-/// A timer whose short waits end at once and whose long ones never do: `wait_for` polls freely
+/// A timer whose short waits end at once and whose long ones never do: `ui_wait_for` polls freely
 /// and never times out.
 fn sleep_forever_on_long_waits(duration: Duration) -> BoxFuture<'static, ()> {
     if duration < Duration::from_secs(1) {
@@ -158,10 +158,15 @@ fn only_the_observing_tools_are_read_only() {
         .collect();
     assert_eq!(
         read_only,
-        ["widget_tree", "get_widget", "screenshot", "wait_for"]
+        [
+            "ui_widget_tree",
+            "ui_get_widget",
+            "ui_screenshot",
+            "ui_wait_for"
+        ]
     );
     assert_eq!(
-        tool("batch").map(|def| def.effect),
+        tool("ui_batch").map(|def| def.effect),
         Some(Effect::Destructive)
     );
 }
@@ -178,7 +183,7 @@ fn an_unknown_tool_is_an_error_and_reaches_nothing() {
 #[test]
 fn a_misspelled_argument_is_rejected_before_reaching_the_app() {
     let app = FakeApp::new();
-    let output = run(&app, "click", &json!({ "content_contain": "Save" }));
+    let output = run(&app, "ui_click", &json!({ "content_contain": "Save" }));
     assert!(output.is_error);
     assert!(
         text(&output).starts_with("unknown argument `content_contain`"),
@@ -191,7 +196,7 @@ fn a_misspelled_argument_is_rejected_before_reaching_the_app() {
 fn a_wrongly_typed_argument_is_an_error() {
     let output = run(
         &FakeApp::new(),
-        "resize",
+        "ui_resize",
         &json!({ "width": "wide", "height": 1 }),
     );
     assert!(output.is_error);
@@ -203,7 +208,7 @@ fn a_wrongly_typed_argument_is_an_error() {
 
 #[test]
 fn a_transport_failure_is_an_error_result() {
-    let output = run(&Unreachable, "widget_tree", &json!({}));
+    let output = run(&Unreachable, "ui_widget_tree", &json!({}));
     assert!(output.is_error);
     assert_eq!(text(&output), "connection reset");
 }
@@ -211,7 +216,7 @@ fn a_transport_failure_is_an_error_result() {
 #[test]
 fn a_click_on_a_raw_pos_needs_no_tree() {
     let app = FakeApp::new();
-    let output = run(&app, "click", &json!({ "pos": { "x": 1.0, "y": 2.0 } }));
+    let output = run(&app, "ui_click", &json!({ "pos": { "x": 1.0, "y": 2.0 } }));
     assert!(!output.is_error, "{output:?}");
     assert_eq!(app.tree_fetches(), 0);
 }
@@ -220,7 +225,7 @@ fn a_click_on_a_raw_pos_needs_no_tree() {
 fn a_click_by_text_lands_on_the_center_in_logical_points() {
     let output = run(
         &FakeApp::new(),
-        "click",
+        "ui_click",
         &json!({ "content_contains": "save" }),
     );
     let result = output.structured.expect("a structured result");
@@ -239,7 +244,7 @@ fn modifiers_are_released_even_when_the_key_press_fails() {
     });
     let output = run(
         &app,
-        "press_key",
+        "ui_press_key",
         &json!({ "key": "S", "modifiers": { "ctrl": true } }),
     );
     assert!(output.is_error);
@@ -258,11 +263,11 @@ fn a_batch_stops_at_the_first_error_and_keeps_images_after_their_step() {
     let app = FakeApp::new();
     let output = run(
         &app,
-        "batch",
+        "ui_batch",
         &json!({ "actions": [
-            { "name": "screenshot" },
-            { "name": "click", "args": {} },
-            { "name": "resize", "args": { "width": 1, "height": 1 } },
+            { "name": "ui_screenshot" },
+            { "name": "ui_click", "args": {} },
+            { "name": "ui_resize", "args": { "width": 1, "height": 1 } },
         ] }),
     );
     assert!(output.is_error);
@@ -276,10 +281,10 @@ fn a_batch_stops_at_the_first_error_and_keeps_images_after_their_step() {
     };
     assert_eq!(mime_type, "image/png");
     let first: Value = serde_json::from_str(first).expect("json");
-    assert_eq!(first["name"], "screenshot");
+    assert_eq!(first["name"], "ui_screenshot");
     assert_eq!(first["isError"], false);
     let second: Value = serde_json::from_str(second).expect("json");
-    assert_eq!(second["name"], "click");
+    assert_eq!(second["name"], "ui_click");
     assert_eq!(second["isError"], true);
     assert!(
         !app.requests()
@@ -294,24 +299,24 @@ fn a_nested_batch_is_rejected_before_anything_runs() {
     let app = FakeApp::new();
     let output = run(
         &app,
-        "batch",
+        "ui_batch",
         &json!({ "actions": [
-            { "name": "screenshot" },
-            { "name": "batch", "args": { "actions": [] } },
+            { "name": "ui_screenshot" },
+            { "name": "ui_batch", "args": { "actions": [] } },
         ] }),
     );
     assert!(output.is_error);
-    assert_eq!(text(&output), "nested `batch` is not allowed");
+    assert_eq!(text(&output), "nested `ui_batch` is not allowed");
     assert!(app.requests().is_empty());
 }
 
 #[test]
 fn wait_for_looks_once_before_a_timer_that_has_already_gone_off() {
     let app = FakeApp::new();
-    let output = run(&app, "wait_for", &json!({ "content_contains": "Load" }));
+    let output = run(&app, "ui_wait_for", &json!({ "content_contains": "Load" }));
     assert!(output.is_error);
     assert!(
-        text(&output).starts_with("wait_for timed out"),
+        text(&output).starts_with("ui_wait_for timed out"),
         "{output:?}"
     );
     assert_eq!(app.tree_fetches(), 1);
@@ -324,7 +329,12 @@ fn wait_for_polls_until_enough_frames_have_passed() {
         .as_object()
         .cloned()
         .expect("object");
-    let output = block_on(call(&app, &sleep_forever_on_long_waits, "wait_for", args));
+    let output = block_on(call(
+        &app,
+        &sleep_forever_on_long_waits,
+        "ui_wait_for",
+        args,
+    ));
     let result = output.structured.expect("a structured result");
     assert_eq!(result["steps_waited"], 3);
     assert_eq!(app.tree_fetches(), 4);
@@ -333,7 +343,7 @@ fn wait_for_polls_until_enough_frames_have_passed() {
 #[test]
 fn wait_for_needs_something_to_wait_for() {
     let app = FakeApp::new();
-    let output = run(&app, "wait_for", &json!({}));
+    let output = run(&app, "ui_wait_for", &json!({}));
     assert!(output.is_error);
     assert!(app.requests().is_empty());
 }

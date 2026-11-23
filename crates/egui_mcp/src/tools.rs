@@ -3,20 +3,20 @@
 //!
 //! The tools are split across two types so the app-driving half can be reused:
 //!
-//! - [`UiServer`] serves the UI/inspection tools (`click`, `type_text`, `screenshot`,
-//!   `widget_tree`, `batch`, …). It holds a single [`Bridge`] and nothing else — constructing
+//! - [`UiServer`] serves the UI/inspection tools (`ui_click`, `ui_type_text`, `ui_screenshot`,
+//!   `ui_widget_tree`, `ui_batch`, …). It holds a single [`Bridge`] and nothing else — constructing
 //!   one *is* the "connected" state. It is transport-agnostic: pair it with the router from
 //!   [`UiServer::router`] to list and dispatch the tools, so another MCP server can embed
 //!   it next to *its own* connection tools, driving whatever [`Bridge`] it built.
 //! - [`Server`] is egui-mcp's own server: it owns the UI tools' [`ToolRouter`] plus an
 //!   `Option<UiServer>` that is `Some` only while attached, and adds the TCP connection
-//!   lifecycle (`attach` / `disconnect` / `status`). Because the router lives on the server
+//!   lifecycle (`ui_attach` / `ui_disconnect` / `ui_status`). Because the router lives on the server
 //!   rather than the (absent) [`UiServer`], the app-driving tools are always listed — MCP
-//!   clients that cache the initial tool list discover them before `attach` — while calls made
-//!   before `attach` return `no app connected`.
+//!   clients that cache the initial tool list discover them before `ui_attach` — while calls made
+//!   before `ui_attach` return `no app connected`.
 //!
 //! The tools themselves live in [`egui_inspection_tools`]. MCP adds one thing to them:
-//! `screenshot` takes a `save_path` to also write the PNG to disk, on the machine running the
+//! `ui_screenshot` takes a `save_path` to also write the PNG to disk, on the machine running the
 //! server.
 //!
 //! Recoverable failures (no app connected, node not found, etc.) become a tool result with
@@ -60,8 +60,8 @@ pub use egui_inspection_tools::{
 // UiServer + Server
 // ---------------------------------------------------------------------------------------
 
-/// The reusable core: the egui UI/inspection tools (`click`, `type_text`, `screenshot`,
-/// `widget_tree`, `batch`, …) bound to one live [`Bridge`].
+/// The reusable core: the egui UI/inspection tools (`ui_click`, `ui_type_text`, `ui_screenshot`,
+/// `ui_widget_tree`, `ui_batch`, …) bound to one live [`Bridge`].
 ///
 /// It holds *only* the bridge — so a `UiServer` always has an app to drive, and its mere
 /// existence is the "connected" state (a host represents "disconnected" as the absence of a
@@ -116,13 +116,13 @@ impl UiServer {
         &self.bridge
     }
 
-    /// Run one UI tool by name. A `batch` step comes back through here too, so it reaches the
-    /// MCP-only `save_path` of `screenshot`.
+    /// Run one UI tool by name. A `ui_batch` step comes back through here too, so it reaches the
+    /// MCP-only `save_path` of `ui_screenshot`.
     async fn call(&self, name: &str, arguments: JsonObject) -> ToolOutput {
-        if name != "batch" {
+        if name != "ui_batch" {
             return self.call_one(name, arguments).await;
         }
-        let args: BatchArgs = match ui_tool("batch").parse_arguments(arguments) {
+        let args: BatchArgs = match ui_tool("ui_batch").parse_arguments(arguments) {
             Ok(args) => args,
             Err(err) => return ToolOutput::error(err),
         };
@@ -132,9 +132,9 @@ impl UiServer {
         .await
     }
 
-    /// [`Self::call`] for any tool but `batch`.
+    /// [`Self::call`] for any tool but `ui_batch`.
     async fn call_one(&self, name: &str, arguments: JsonObject) -> ToolOutput {
-        if name == "screenshot" {
+        if name == "ui_screenshot" {
             return self
                 .screenshot(arguments)
                 .await
@@ -143,9 +143,9 @@ impl UiServer {
         egui_inspection_tools::call(self.bridge.transport(), &tokio_sleep, name, arguments).await
     }
 
-    /// `screenshot`, plus writing the PNG to `save_path`.
+    /// `ui_screenshot`, plus writing the PNG to `save_path`.
     async fn screenshot(&self, arguments: JsonObject) -> Result<ToolOutput, String> {
-        let args: ScreenshotArgs = ui_tool("screenshot").parse_arguments(arguments)?;
+        let args: ScreenshotArgs = ui_tool("ui_screenshot").parse_arguments(arguments)?;
         let png = self.bridge.screenshot(args.pixels_per_point).await?;
         let saved = match &args.save_path {
             Some(path) => {
@@ -182,7 +182,7 @@ fn route_call(
     })
 }
 
-/// The timer `wait_for` polls with.
+/// The timer `ui_wait_for` polls with.
 fn tokio_sleep(duration: Duration) -> BoxFuture<'static, ()> {
     Box::pin(tokio::time::sleep(duration))
 }
@@ -191,7 +191,7 @@ fn tokio_sleep(duration: Duration) -> BoxFuture<'static, ()> {
 ///
 /// It owns the UI tools' [`ToolRouter`] directly and the attached [`UiServer`] (if any) behind
 /// a lock. The router is independent of the connection, so the app-driving tools stay
-/// discoverable while disconnected; calling one before `attach` returns a recoverable
+/// discoverable while disconnected; calling one before `ui_attach` returns a recoverable
 /// `no app connected` error.
 #[derive(Clone)]
 pub struct Server {
@@ -228,22 +228,22 @@ impl Default for Server {
 // The UI tools, as MCP sees them
 // ---------------------------------------------------------------------------------------
 
-/// The `screenshot` description, with the MCP-only `save_path`.
+/// The `ui_screenshot` description, with the MCP-only `save_path`.
 const SCREENSHOT_DESCRIPTION: &str = "Capture the current frame as a PNG screenshot.
-Defaults to logical-point resolution (`pixels_per_point: 1.0`) so pixels align with `click`/`widget_tree` coordinates; pass a higher `pixels_per_point` for detail, or `save_path` to also write it to disk.
+Defaults to logical-point resolution (`pixels_per_point: 1.0`) so pixels align with `ui_click`/`ui_widget_tree` coordinates; pass a higher `pixels_per_point` for detail, or `save_path` to also write it to disk.
 Requires the app window to be visible — a fully-occluded or minimized window can't render a frame to capture (notably on macOS), so the call times out; bring the window to the foreground first.";
 
-/// The `batch` description, which also says the connection tools can't be batched.
-const BATCH_DESCRIPTION: &str = "Execute a sequence of app-driving tool calls in one round trip (the connection tools `attach`/`disconnect`/`status` are not available here).
+/// The `ui_batch` description, which also says the connection tools can't be batched.
+const BATCH_DESCRIPTION: &str = "Execute a sequence of app-driving tool calls in one round trip (the connection tools `ui_attach`/`ui_disconnect`/`ui_status` are not available here).
 Stops on the first error.
 Results are emitted in execution order, interleaved: each step contributes one JSON text item followed by any image items it produced (e.g. screenshots).
-`batch` cannot be nested.
-Use this to act and observe in one call, e.g. a `click` then a `widget_tree` or `screenshot`.";
+`ui_batch` cannot be nested.
+Use this to act and observe in one call, e.g. a `ui_click` then a `ui_widget_tree` or `ui_screenshot`.";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ScreenshotArgs {
     /// Output resolution in pixels per logical point.
-    /// Defaults to `1.0`, which makes screenshot pixels line up 1:1 with the logical coordinates used by `click`/`widget_tree`.
+    /// Defaults to `1.0`, which makes screenshot pixels line up 1:1 with the logical coordinates used by `ui_click`/`ui_widget_tree`.
     /// Higher values give a sharper image, capped at the display's native scale (no upscaling).
     #[serde(default = "default_pixels_per_point")]
     pub pixels_per_point: f32,
@@ -257,20 +257,20 @@ fn default_pixels_per_point() -> f32 {
     1.0
 }
 
-/// The UI tools of [`egui_inspection_tools`], with `screenshot` and `batch` adapted to MCP.
+/// The UI tools of [`egui_inspection_tools`], with `ui_screenshot` and `ui_batch` adapted to MCP.
 fn ui_tools() -> &'static [ToolDef] {
     static TOOLS: LazyLock<Vec<ToolDef>> = LazyLock::new(|| {
         egui_inspection_tools::tools()
             .iter()
             .map(|def| match def.name {
-                "screenshot" => ToolDef {
+                "ui_screenshot" => ToolDef {
                     description: SCREENSHOT_DESCRIPTION,
                     input_schema: egui_inspection_tools::input_schema::<ScreenshotArgs>(),
                     // It writes a file when given `save_path`.
                     effect: Effect::Idempotent,
                     ..def.clone()
                 },
-                "batch" => ToolDef {
+                "ui_batch" => ToolDef {
                     description: BATCH_DESCRIPTION,
                     ..def.clone()
                 },
@@ -398,6 +398,7 @@ impl Server {
     /// Retries until `timeout_secs` elapses.
     /// On success the app-driving tools start working (they are always listed, but error until an app is attached).
     #[tool(
+        name = "ui_attach",
         title = "Attach to app",
         annotations(
             read_only_hint = false,
@@ -413,13 +414,13 @@ impl Server {
         let mut guard = self.ui.lock().await;
         if guard.is_some() {
             return Ok(text_error(
-                "already connected — call `disconnect` first before attaching again",
+                "already connected — call `ui_disconnect` first before attaching again",
             ));
         }
         let timeout = args.timeout_secs.map(Duration::from_secs);
         let bridge = match Bridge::connect(&args.host, args.port, timeout).await {
             Ok(b) => b,
-            Err(e) => return Ok(text_error(format!("attach failed: {e}"))),
+            Err(e) => return Ok(text_error(format!("ui_attach failed: {e}"))),
         };
         let info = bridge.peer_info.clone();
         *guard = Some(UiServer::new(bridge));
@@ -429,8 +430,9 @@ impl Server {
     }
 
     /// Disconnect from the attached app.
-    /// App-driving tools remain available but return an error until `attach` is called again.
+    /// App-driving tools remain available but return an error until `ui_attach` is called again.
     #[tool(
+        name = "ui_disconnect",
         title = "Disconnect",
         annotations(
             read_only_hint = false,
@@ -449,6 +451,7 @@ impl Server {
 
     /// Report whether an app is connected and its peer info.
     #[tool(
+        name = "ui_status",
         title = "Connection status",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
@@ -469,22 +472,22 @@ impl Server {
 const INSTRUCTIONS: &str = r#"This mcp drives a live egui app: it reads the app's accessibility tree and synthesizes real input events. Work in an observe → act → verify loop.
 
 Getting oriented:
-- Call `attach` first (check `status` if unsure); the app-driving tools return "no app connected" until then.
-- Start most tasks with `widget_tree` to discover widgets and their ids, and/or `screenshot` to see the rendered frame.
-- When a widget reports `omitted_children`, query `widget_tree` again with that widget's `id` as `root` to walk just that part of the app.
-- `widget_tree` returns an abridged tree: no `bounds`, and text over 100 characters cut short. A trailing ` […]` in a `label` or `value` means exactly that — the text goes on, and `get_widget` on that widget's `id` returns all of it, along with its `bounds` in logical points and its parent. Filters always match the full text, so searching for a phrase from past the cut still finds the widget.
+- Call `ui_attach` first (check `ui_status` if unsure); the app-driving tools return "no app connected" until then.
+- Start most tasks with `ui_widget_tree` to discover widgets and their ids, and/or `ui_screenshot` to see the rendered frame.
+- When a widget reports `omitted_children`, query `ui_widget_tree` again with that widget's `id` as `root` to walk just that part of the app.
+- `ui_widget_tree` returns an abridged tree: no `bounds`, and text over 100 characters cut short. A trailing ` […]` in a `label` or `value` means exactly that — the text goes on, and `ui_get_widget` on that widget's `id` returns all of it, along with its `bounds` in logical points and its parent. Filters always match the full text, so searching for a phrase from past the cut still finds the widget.
 
 Targeting widgets:
-- Prefer locators — an `id` from `widget_tree`, a `role`, or a text match — over a raw `pos`. Locators resolve to the widget's current position and survive layout changes; reach for `pos` only when nothing matches.
+- Prefer locators — an `id` from `ui_widget_tree`, a `role`, or a text match — over a raw `pos`. Locators resolve to the widget's current position and survive layout changes; reach for `pos` only when nothing matches.
 - For text matches prefer `content_contains`: it matches a widget's `label` (accessible name) OR its `value`. This matters because many widgets (`Label`, monospace text, counters) carry their text in `value` with an empty `label`, so `label_contains` alone silently misses them. Use `label_contains`/`value_contains` only when you specifically need to match one field.
-- A locator in an action must match exactly one widget. If it matches several, the call errors and lists the candidates — narrow the filter (add a `role`, or switch to a more specific text match) or target a specific `id`. Use `widget_tree` when you want every match.
+- A locator in an action must match exactly one widget. If it matches several, the call errors and lists the candidates — narrow the filter (add a `role`, or switch to a more specific text match) or target a specific `id`. Use `ui_widget_tree` when you want every match.
 
 Acting and verifying:
-- After an action that changes the UI, confirm it landed: `widget_tree` for the expected state, `screenshot` to look, or `wait_for` to poll until async or animated UI settles.
-- Use `batch` to act and observe in one round trip (e.g. `click` then `screenshot`), avoiding an extra turn.
+- After an action that changes the UI, confirm it landed: `ui_widget_tree` for the expected state, `ui_screenshot` to look, or `ui_wait_for` to poll until async or animated UI settles.
+- Use `ui_batch` to act and observe in one round trip (e.g. `ui_click` then `ui_screenshot`), avoiding an extra turn.
 
 Conventions:
-- Everything is in logical points, one shared coordinate frame: raw `pos`, `resize` dimensions, the `bounds` from `get_widget`, and a default (`pixels_per_point: 1.0`) `screenshot`. So a widget's `bounds` center is exactly where to `click`, and a pixel in the screenshot is a logical point. There is no fixed screen size; use `resize` to set the viewport."#;
+- Everything is in logical points, one shared coordinate frame: raw `pos`, `ui_resize` dimensions, the `bounds` from `ui_get_widget`, and a default (`pixels_per_point: 1.0`) `ui_screenshot`. So a widget's `bounds` center is exactly where to `ui_click`, and a pixel in the screenshot is a logical point. There is no fixed screen size; use `ui_resize` to set the viewport."#;
 
 /// How long a client may keep the tool list without asking again.
 const TOOL_LIST_TTL: Duration = Duration::from_mins(5);
@@ -535,7 +538,7 @@ impl ServerHandler for Server {
         }
         let guard = self.ui.lock().await;
         let Some(ui) = guard.as_ref() else {
-            return Ok(text_error("no app connected — call `attach` first").into());
+            return Ok(text_error("no app connected — call `ui_attach` first").into());
         };
         ui.dispatch(&self.ui_router, request, context)
             .await
@@ -571,7 +574,7 @@ mod tests {
         }
     }
 
-    /// `save_path` is MCP's own, so a batch must reach MCP's `screenshot`, not the core one.
+    /// `save_path` is MCP's own, so a batch must reach MCP's `ui_screenshot`, not the core one.
     #[tokio::test]
     async fn a_batched_screenshot_still_saves_to_disk() {
         let dir = tempfile::tempdir().expect("a temporary directory");
@@ -584,9 +587,9 @@ mod tests {
         };
         let ui = UiServer::new(Bridge::with_transport(ScreenshotApp, peer_info));
         let args =
-            json!({ "actions": [{ "name": "screenshot", "args": { "save_path": path_str } }] });
+            json!({ "actions": [{ "name": "ui_screenshot", "args": { "save_path": path_str } }] });
         let output = ui
-            .call("batch", args.as_object().expect("object").clone())
+            .call("ui_batch", args.as_object().expect("object").clone())
             .await;
         assert!(!output.is_error, "{output:?}");
         assert_eq!(std::fs::read(&path).expect("saved"), b"png");
