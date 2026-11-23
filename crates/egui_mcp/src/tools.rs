@@ -122,7 +122,8 @@ impl UiServer {
         if unprefixed_name(prefixed_name) != Some("batch") {
             return self.call_one(prefixed_name, arguments).await;
         }
-        let args: BatchArgs = match ui_tool("batch").parse_arguments(arguments) {
+        let args: BatchArgs = match ui_tool("batch").and_then(|def| def.parse_arguments(arguments))
+        {
             Ok(args) => args,
             Err(err) => return ToolOutput::error(err),
         };
@@ -151,7 +152,7 @@ impl UiServer {
 
     /// `screenshot`, plus writing the PNG to `save_path`.
     async fn screenshot(&self, arguments: JsonObject) -> Result<ToolOutput, String> {
-        let args: ScreenshotArgs = ui_tool("screenshot").parse_arguments(arguments)?;
+        let args: ScreenshotArgs = ui_tool("screenshot")?.parse_arguments(arguments)?;
         let png = self.bridge.screenshot(args.pixels_per_point).await?;
         let saved = match &args.save_path {
             Some(path) => {
@@ -287,13 +288,12 @@ fn ui_tools() -> &'static [ToolDef] {
     &TOOLS
 }
 
-/// One of [`ui_tools`], by an unprefixed name known to exist.
-fn ui_tool(unprefixed_name: &str) -> &'static ToolDef {
-    #[expect(clippy::unwrap_used)] // Only called with the names of tools that exist.
+/// One of [`ui_tools`], by its unprefixed name.
+fn ui_tool(unprefixed_name: &str) -> Result<&'static ToolDef, String> {
     ui_tools()
         .iter()
         .find(|def| def.unprefixed_name == unprefixed_name)
-        .unwrap()
+        .ok_or_else(|| format!("unknown tool `{unprefixed_name}`"))
 }
 
 /// The name without a prefix of the tool the agent calls `prefixed_name`, if there is one.
