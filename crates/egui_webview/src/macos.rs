@@ -358,6 +358,7 @@ impl Backend for WryBackend {
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
         // `AppKit` places views in window points. One ui point is `zoom` window points.
         let zoom = ctx.zoom_factor();
+        self.page.set_zoom(zoom);
         let last = self.last.as_ref().map(|(output, zoom)| (output, *zoom));
         if last == output.map(|output| (output, zoom)) {
             return;
