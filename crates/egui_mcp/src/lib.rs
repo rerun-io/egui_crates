@@ -2,7 +2,7 @@
 //! [`egui_inspection`] protocol, plus the building blocks to embed or extend it.
 //!
 //! The `egui-mcp` binary (`src/main.rs`) is a thin wrapper around [`server::run`], which serves
-//! [`Server`] — the TCP `attach` / `disconnect` lifecycle plus the egui UI tools.
+//! [`Server`] — the TCP `ui_attach` / `ui_disconnect` lifecycle plus the egui UI tools.
 //!
 //! The library surface exists so another MCP server can keep *its own* connection logic while
 //! reusing the egui UI/inspection tool set:

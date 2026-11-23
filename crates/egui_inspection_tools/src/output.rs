@@ -6,7 +6,7 @@ pub enum Content {
     /// Text for the agent to read. Often JSON.
     Text(String),
 
-    /// An encoded image, e.g. a `screenshot`.
+    /// An encoded image, e.g. a `ui_screenshot`.
     Image {
         /// The encoded image file, e.g. a PNG.
         bytes: Vec<u8>,

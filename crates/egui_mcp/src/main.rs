@@ -1,6 +1,6 @@
 //! `egui-mcp` — an MCP server that drives a live egui app.
 //!
-//! Speaks MCP JSON-RPC over stdio to an agent. Exposes an `attach` tool that connects to a
+//! Speaks MCP JSON-RPC over stdio to an agent. Exposes a `ui_attach` tool that connects to a
 //! running egui app's inspection port (an app built with `egui_inspection` / eframe's
 //! `inspection` feature, launched with `EGUI_INSPECTION` set), then drives it via the
 //! request/response inspection protocol.

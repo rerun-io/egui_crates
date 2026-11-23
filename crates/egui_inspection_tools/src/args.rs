@@ -14,11 +14,11 @@ use crate::tree::{Id, Locator, Query, Widget, WidgetDetail};
 
 #[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
 pub struct Target {
-    /// Widget id from `widget_tree`.
+    /// Widget id from `ui_widget_tree`.
     #[serde(default)]
     pub id: Option<Id>,
 
-    /// Widget-matching constraints (`role` and/or a text predicate); see `widget_tree`.
+    /// Widget-matching constraints (`role` and/or a text predicate); see `ui_widget_tree`.
     #[serde(flatten)]
     pub query: Query,
 
@@ -46,7 +46,7 @@ impl Target {
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema)]
 pub struct ScreenshotArgs {
     /// Output resolution in pixels per logical point.
-    /// Defaults to `1.0`, which makes screenshot pixels line up 1:1 with the logical coordinates used by `click`/`widget_tree`.
+    /// Defaults to `1.0`, which makes screenshot pixels line up 1:1 with the logical coordinates used by `ui_click`/`ui_widget_tree`.
     /// Higher values give a sharper image, capped at the display's native scale (no upscaling).
     #[serde(default = "default_pixels_per_point")]
     pub pixels_per_point: f32,
@@ -58,7 +58,7 @@ fn default_pixels_per_point() -> f32 {
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema)]
 pub struct GetWidgetArgs {
-    /// Widget id, as returned by `widget_tree`.
+    /// Widget id, as returned by `ui_widget_tree`.
     pub id: Id,
 }
 
@@ -90,7 +90,7 @@ impl PressKeyModifiers {
     }
 }
 
-/// Which mouse button a `click`/`drag` uses. `left`/`right` are accepted as aliases for
+/// Which mouse button a `ui_click`/`ui_drag` uses. `left`/`right` are accepted as aliases for
 /// `primary`/`secondary`.
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -178,7 +178,7 @@ pub struct ResizeArgs {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct WaitForArgs {
     /// Which widgets to wait for (`content_contains` and/or `role`/`label_contains`/`value_contains`);
-    /// see `widget_tree`. Omit every constraint to wait on `min_steps` alone.
+    /// see `ui_widget_tree`. Omit every constraint to wait on `min_steps` alone.
     #[serde(flatten)]
     pub query: Query,
     #[serde(default = "default_wait_timeout")]
@@ -187,7 +187,7 @@ pub struct WaitForArgs {
     pub min_matches: u32,
 
     /// Also wait until at least this many frames have rendered since the call began.
-    /// Use it to let animations, tooltips, or other time/frame-driven UI settle (e.g. after a `hover`); `0` means don't wait for frames.
+    /// Use it to let animations, tooltips, or other time/frame-driven UI settle (e.g. after a `ui_hover`); `0` means don't wait for frames.
     #[serde(default)]
     pub min_steps: u64,
 }
@@ -204,13 +204,13 @@ fn default_min_matches() -> u32 {
 pub struct TypeTextArgs {
     pub text: String,
 
-    /// Optional focus target: widget id from `widget_tree` to focus before typing.
+    /// Optional focus target: widget id from `ui_widget_tree` to focus before typing.
     /// Omit all locator fields to type into whatever is currently focused.
     #[serde(default)]
     pub id: Option<Id>,
 
     /// Optional focus target by match (`content_contains` and/or `role`/`label_contains`/`value_contains`);
-    /// see `widget_tree`. Omit all locator fields to type into whatever is currently focused.
+    /// see `ui_widget_tree`. Omit all locator fields to type into whatever is currently focused.
     #[serde(flatten)]
     pub query: Query,
 }
@@ -240,13 +240,13 @@ pub struct BatchAction {
 // collection/optional results are wrapped in a named field rather than returned bare.
 // ---------------------------------------------------------------------------------------
 
-/// `widget_tree` result: the matching widgets, nested by ancestry.
+/// `ui_widget_tree` result: the matching widgets, nested by ancestry.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct WidgetTreeResult {
     pub nodes: Vec<Widget>,
 }
 
-/// `get_widget` result: the resolved widget, or `null` if the id didn't match.
+/// `ui_get_widget` result: the resolved widget, or `null` if the id didn't match.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct GetWidgetResult {
     pub node: Option<WidgetDetail>,
