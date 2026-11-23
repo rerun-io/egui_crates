@@ -50,9 +50,13 @@ impl std::str::FromStr for Id {
     type Err = String;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        u64::from_str_radix(text.trim(), 16).map(Self).map_err(|err| {
-            format!("invalid widget id `{text}` ({err}) — pass an `id` exactly as `widget_tree` returned it")
-        })
+        u64::from_str_radix(text.trim(), 16)
+            .map(Self)
+            .map_err(|err| {
+                format!(
+                    "invalid widget id `{text}` ({err}) — pass an `id` exactly as it was returned"
+                )
+            })
     }
 }
 

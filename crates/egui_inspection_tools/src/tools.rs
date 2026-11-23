@@ -1,6 +1,7 @@
 //! The tool definitions and their dispatch.
 //!
 //! [`tools()`] lists every tool with its JSON Schema; [`call`] runs one by name.
+//! [`Toolbox`] does the same under a name prefix, e.g. `ui_click` for `click`.
 //!
 //! Locator resolution happens here, not in the app: a tool fetches a fresh `AccessKit` tree
 //! (`GetTree`), resolves the locator to a logical-point position, synthesizes the matching
@@ -61,14 +62,15 @@ impl Effect {
 /// A tool an agent can call: its name, what it does, and the arguments it takes.
 #[derive(Clone, Debug)]
 pub struct ToolDef {
-    /// The unique name to [`call`] it by, e.g. `click`.
-    pub name: &'static str,
+    /// The unique name to [`call`] it by, e.g. `click`, or `ui_click` in a [`Toolbox`] with the
+    /// prefix `ui_`.
+    pub name: String,
 
     /// A short human-readable name, e.g. `Click`.
     pub title: &'static str,
 
     /// What the tool does, for the agent. One sentence per line.
-    pub description: &'static str,
+    pub description: String,
 
     /// The JSON Schema (draft 2020-12) of the arguments: always an object.
     pub input_schema: JsonObject,
@@ -88,9 +90,9 @@ impl ToolDef {
         effect: Effect,
     ) -> Self {
         Self {
-            name,
+            name: name.to_owned(),
             title,
-            description,
+            description: description.to_owned(),
             input_schema: input_schema::<Args>(),
             output_schema: None,
             effect,
@@ -100,6 +102,30 @@ impl ToolDef {
     fn with_output<Output: JsonSchema>(mut self) -> Self {
         self.output_schema = Some(output_schema::<Output>());
         self
+    }
+
+    /// This tool in a [`Toolbox`] with `prefix`: its name, and the tool names that its
+    /// description and schemas mention, carry the prefix.
+    fn with_prefix(&self, prefix: &str) -> Self {
+        let prefix_names = |text: &str| prefix_tool_names(prefix, text);
+        let Self {
+            name,
+            title,
+            description,
+            input_schema,
+            output_schema,
+            effect,
+        } = self;
+        Self {
+            name: format!("{prefix}{name}"),
+            title,
+            description: prefix_names(description),
+            input_schema: map_strings(input_schema, &prefix_names),
+            output_schema: output_schema
+                .as_ref()
+                .map(|schema| map_strings(schema, &prefix_names)),
+            effect: *effect,
+        }
     }
 
     /// Check `arguments` against [`Self::input_schema`], then deserialize them.
@@ -138,8 +164,44 @@ fn schema_object<T: JsonSchema>(settings: SchemaSettings) -> JsonObject {
     object
 }
 
+/// `text`, with every tool name it mentions in backticks (`` `click` ``) prefixed.
+fn prefix_tool_names(prefix: &str, text: &str) -> String {
+    if prefix.is_empty() {
+        return text.to_owned();
+    }
+    unprefixed_tools()
+        .iter()
+        .fold(text.to_owned(), |text, tool| {
+            let name = &tool.name;
+            text.replace(&format!("`{name}`"), &format!("`{prefix}{name}`"))
+        })
+}
+
+/// `object`, with `map` applied to every string in it, however deeply nested.
+fn map_strings(object: &JsonObject, map: &impl Fn(&str) -> String) -> JsonObject {
+    fn map_value(value: &Value, map: &impl Fn(&str) -> String) -> Value {
+        match value {
+            Value::String(text) => Value::String(map(text)),
+            Value::Array(items) => items.iter().map(|item| map_value(item, map)).collect(),
+            Value::Object(object) => Value::Object(map_strings(object, map)),
+            Value::Null | Value::Bool(_) | Value::Number(_) => value.clone(),
+        }
+    }
+    object
+        .iter()
+        .map(|(key, value)| (key.clone(), map_value(value, map)))
+        .collect()
+}
+
 /// Every tool, in a stable order.
+///
+/// The same as the [`Toolbox`] with no prefix.
 pub fn tools() -> &'static [ToolDef] {
+    UNPREFIXED.tools()
+}
+
+/// The tools without a prefix, which every [`Toolbox`] is built from.
+fn unprefixed_tools() -> &'static [ToolDef] {
     static TOOLS: LazyLock<Vec<ToolDef>> = LazyLock::new(|| {
         vec![
             ToolDef::new::<QueryFilter>(
@@ -190,19 +252,161 @@ pub fn tools() -> &'static [ToolDef] {
                 RESIZE_DESCRIPTION,
                 Effect::Idempotent,
             ),
-            BATCH.clone(),
+            ToolDef::new::<BatchArgs>(BATCH_NAME, "Batch", BATCH_DESCRIPTION, Effect::Destructive),
         ]
     });
     &TOOLS
 }
 
-static BATCH: LazyLock<ToolDef> = LazyLock::new(|| {
-    ToolDef::new::<BatchArgs>("batch", "Batch", BATCH_DESCRIPTION, Effect::Destructive)
-});
+/// The name of the `batch` tool, without a prefix.
+const BATCH_NAME: &str = "batch";
 
 /// The tool called `name`, if there is one.
 pub fn tool(name: &str) -> Option<&'static ToolDef> {
-    tools().iter().find(|tool| tool.name == name)
+    UNPREFIXED.tool(name)
+}
+
+/// The [`Toolbox`] with no prefix, behind the free functions.
+static UNPREFIXED: LazyLock<Toolbox> = LazyLock::new(|| Toolbox::new(""));
+
+/// The tools under one name prefix, e.g. `ui_` to call `click` as `ui_click`.
+///
+/// The prefix goes on every tool name, and on every tool name that the descriptions, the
+/// schemas, and the error messages mention, so an agent only ever sees the prefixed names. It
+/// tells these tools apart from a host's other tools.
+///
+/// [`tools()`], [`tool`], [`call`], and [`run_batch`] are the toolbox with no prefix.
+#[derive(Clone, Debug)]
+pub struct Toolbox {
+    prefix: String,
+    tools: Vec<ToolDef>,
+}
+
+impl Toolbox {
+    /// The tools, with `prefix` in front of every tool name. `""` for the plain names.
+    pub fn new(prefix: impl Into<String>) -> Self {
+        let prefix = prefix.into();
+        let tools = unprefixed_tools()
+            .iter()
+            .map(|tool| tool.with_prefix(&prefix))
+            .collect();
+        Self { prefix, tools }
+    }
+
+    /// What goes in front of every tool name, e.g. `ui_`.
+    pub fn prefix(&self) -> &str {
+        &self.prefix
+    }
+
+    /// Every tool, in a stable order.
+    pub fn tools(&self) -> &[ToolDef] {
+        &self.tools
+    }
+
+    /// The tool called `name`, prefix included, if there is one.
+    pub fn tool(&self, name: &str) -> Option<&ToolDef> {
+        self.tools.iter().find(|tool| tool.name == name)
+    }
+
+    /// Run the tool called `name`, prefix included, against the app behind `transport`.
+    ///
+    /// Failures the agent can recover from — an unknown tool or argument, a widget that isn't
+    /// there, a transport error — come back as a [`ToolOutput`] with `is_error` set.
+    pub async fn call(
+        &self,
+        transport: &dyn Transport,
+        sleep: &dyn Sleep,
+        name: &str,
+        arguments: JsonObject,
+    ) -> ToolOutput {
+        let Some(def) = self.tool(name) else {
+            return ToolOutput::error(format!("unknown tool `{name}`"));
+        };
+        if self.unprefixed(name) == BATCH_NAME {
+            let args = match def.parse_arguments(arguments) {
+                Ok(args) => args,
+                Err(err) => return ToolOutput::error(err),
+            };
+            // Each step is a call of its own, by name: the same path as a top-level call, so it
+            // checks and parses its arguments exactly like one.
+            return self
+                .run_batch(args, |name, arguments| {
+                    Box::pin(async move { self.call_one(transport, sleep, &name, arguments).await })
+                })
+                .await;
+        }
+        self.call_one(transport, sleep, name, arguments).await
+    }
+
+    /// [`Self::call`] for any tool but `batch`, which can't be nested.
+    async fn call_one(
+        &self,
+        transport: &dyn Transport,
+        sleep: &dyn Sleep,
+        name: &str,
+        arguments: JsonObject,
+    ) -> ToolOutput {
+        let Some(def) = self.tool(name) else {
+            return ToolOutput::error(format!("unknown tool `{name}`"));
+        };
+        run(transport, sleep, self.unprefixed(name), def, arguments)
+            .await
+            .unwrap_or_else(ToolOutput::error)
+    }
+
+    /// Run a `batch`: call `step` for each action, by its tool name with the prefix, until one
+    /// fails.
+    ///
+    /// [`Self::call`] runs each step as a call of its own. A host that serves more tools, or
+    /// overrides some, passes its own dispatch as `step`, so a batch reaches those too.
+    pub async fn run_batch<'a>(
+        &self,
+        args: BatchArgs,
+        mut step: impl FnMut(String, JsonObject) -> BoxFuture<'a, ToolOutput>,
+    ) -> ToolOutput {
+        let batch = format!("{}{BATCH_NAME}", self.prefix);
+        if args.actions.iter().any(|action| action.name == batch) {
+            return ToolOutput::error(format!("nested `{batch}` is not allowed"));
+        }
+        let mut content = Vec::new();
+        let mut any_error = false;
+        for action in args.actions {
+            let arguments = match action.args {
+                Value::Object(map) => map,
+                _ => JsonObject::new(),
+            };
+            let result = step(action.name.clone(), arguments).await;
+            let mut step_texts = Vec::new();
+            let mut step_images = Vec::new();
+            for item in result.content {
+                match item {
+                    Content::Text(text) => step_texts.push(text),
+                    image @ Content::Image { .. } => step_images.push(image),
+                }
+            }
+            let entry = json!({
+                "name": action.name,
+                "isError": result.is_error,
+                "content": step_texts,
+            });
+            content.push(Content::Text(entry.to_string()));
+            content.extend(step_images);
+            if result.is_error {
+                any_error = true;
+                break;
+            }
+        }
+        ToolOutput {
+            content,
+            structured: None,
+            is_error: any_error,
+        }
+    }
+
+    /// `name` without the prefix, if it has it.
+    fn unprefixed<'n>(&self, name: &'n str) -> &'n str {
+        name.strip_prefix(self.prefix.as_str()).unwrap_or(name)
+    }
 }
 
 const WIDGET_TREE_DESCRIPTION: &str = "Walk the app's widget tree and return the widgets matching the filter, nested by ancestry: each one carries the matches from its own subtree in `children`.
@@ -265,49 +469,26 @@ Use this to act and observe in one call, e.g. a `click` then a `widget_tree` or 
 ///
 /// Failures the agent can recover from — an unknown tool or argument, a widget that isn't
 /// there, a transport error — come back as a [`ToolOutput`] with `is_error` set.
+///
+/// The same as [`Toolbox::call`] with no prefix.
 pub async fn call(
     transport: &dyn Transport,
     sleep: &dyn Sleep,
     name: &str,
     arguments: JsonObject,
 ) -> ToolOutput {
-    if name == "batch" {
-        let args = match BATCH.parse_arguments(arguments) {
-            Ok(args) => args,
-            Err(err) => return ToolOutput::error(err),
-        };
-        // Each step is a call of its own, by name: the same path as a top-level call, so it
-        // checks and parses its arguments exactly like one.
-        return run_batch(args, |name, arguments| {
-            Box::pin(async move { call_one(transport, sleep, &name, arguments).await })
-        })
-        .await;
-    }
-    call_one(transport, sleep, name, arguments).await
+    UNPREFIXED.call(transport, sleep, name, arguments).await
 }
 
-/// [`call`] for any tool but `batch`, which can't be nested.
-async fn call_one(
-    transport: &dyn Transport,
-    sleep: &dyn Sleep,
-    name: &str,
-    arguments: JsonObject,
-) -> ToolOutput {
-    let Some(def) = tool(name) else {
-        return ToolOutput::error(format!("unknown tool `{name}`"));
-    };
-    run(transport, sleep, def, arguments)
-        .await
-        .unwrap_or_else(ToolOutput::error)
-}
-
+/// Run the tool `def`, whose name without the prefix is `name`.
 async fn run(
     transport: &dyn Transport,
     sleep: &dyn Sleep,
+    name: &str,
     def: &ToolDef,
     arguments: JsonObject,
 ) -> Result<ToolOutput, String> {
-    match def.name {
+    match name {
         "widget_tree" => widget_tree(transport, def.parse_arguments(arguments)?).await,
         "get_widget" => get_widget(transport, def.parse_arguments(arguments)?).await,
         "screenshot" => screenshot(transport, def.parse_arguments(arguments)?).await,
@@ -319,54 +500,21 @@ async fn run(
         "type_text" => type_text(transport, def.parse_arguments(arguments)?).await,
         "press_key" => press_key(transport, def.parse_arguments(arguments)?).await,
         "resize" => resize(transport, def.parse_arguments(arguments)?).await,
-        name => Err(format!("unknown tool `{name}`")),
+        _ => Err(format!("unknown tool `{}`", def.name)),
     }
 }
 
-/// Run a `batch`: call `step` for each action, by its unprefixed tool name, until one fails.
+/// Run a `batch`: call `step` for each action, by its tool name, until one fails.
 ///
 /// [`call`] runs each step as a call of its own. A host that serves more tools, or overrides
 /// some, passes its own dispatch as `step`, so a batch reaches those too.
+///
+/// The same as [`Toolbox::run_batch`] with no prefix.
 pub async fn run_batch<'a>(
     args: BatchArgs,
-    mut step: impl FnMut(String, JsonObject) -> BoxFuture<'a, ToolOutput>,
+    step: impl FnMut(String, JsonObject) -> BoxFuture<'a, ToolOutput>,
 ) -> ToolOutput {
-    if args.actions.iter().any(|action| action.name == "batch") {
-        return ToolOutput::error("nested `batch` is not allowed");
-    }
-    let mut content = Vec::new();
-    let mut any_error = false;
-    for action in args.actions {
-        let arguments = match action.args {
-            Value::Object(map) => map,
-            _ => JsonObject::new(),
-        };
-        let result = step(action.name.clone(), arguments).await;
-        let mut step_texts = Vec::new();
-        let mut step_images = Vec::new();
-        for item in result.content {
-            match item {
-                Content::Text(text) => step_texts.push(text),
-                image @ Content::Image { .. } => step_images.push(image),
-            }
-        }
-        let entry = json!({
-            "name": action.name,
-            "isError": result.is_error,
-            "content": step_texts,
-        });
-        content.push(Content::Text(entry.to_string()));
-        content.extend(step_images);
-        if result.is_error {
-            any_error = true;
-            break;
-        }
-    }
-    ToolOutput {
-        content,
-        structured: None,
-        is_error: any_error,
-    }
+    UNPREFIXED.run_batch(args, step).await
 }
 
 /// Reject an argument the tool's schema doesn't declare.

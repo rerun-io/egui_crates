@@ -262,16 +262,16 @@ fn ui_tools() -> &'static [ToolDef] {
     static TOOLS: LazyLock<Vec<ToolDef>> = LazyLock::new(|| {
         egui_inspection_tools::tools()
             .iter()
-            .map(|def| match def.name {
+            .map(|def| match def.name.as_str() {
                 "screenshot" => ToolDef {
-                    description: SCREENSHOT_DESCRIPTION,
+                    description: SCREENSHOT_DESCRIPTION.to_owned(),
                     input_schema: egui_inspection_tools::input_schema::<ScreenshotArgs>(),
                     // It writes a file when given `save_path`.
                     effect: Effect::Idempotent,
                     ..def.clone()
                 },
                 "batch" => ToolDef {
-                    description: BATCH_DESCRIPTION,
+                    description: BATCH_DESCRIPTION.to_owned(),
                     ..def.clone()
                 },
                 _ => def.clone(),
@@ -306,9 +306,13 @@ fn mcp_tool(def: &ToolDef) -> Tool {
             .idempotent(*effect == Effect::Idempotent)
             .open_world(false)
     };
-    let mut tool = Tool::new(*name, *description, Arc::new(input_schema.clone()))
-        .with_title(*title)
-        .with_annotations(annotations);
+    let mut tool = Tool::new(
+        name.clone(),
+        description.clone(),
+        Arc::new(input_schema.clone()),
+    )
+    .with_title(*title)
+    .with_annotations(annotations);
     if let Some(output_schema) = output_schema {
         tool = tool.with_raw_output_schema(Arc::new(output_schema.clone()));
     }
