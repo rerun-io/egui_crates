@@ -85,6 +85,7 @@ Conventions:
             "type": "object"
           },
           "name": {
+            "description": "The tool to call, by the name the agent knows it by.",
             "type": "string"
           }
         },

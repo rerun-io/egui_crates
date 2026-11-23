@@ -118,29 +118,35 @@ impl UiServer {
 
     /// Run one UI tool by name. A `batch` step comes back through here too, so it reaches the
     /// MCP-only `save_path` of `screenshot`.
-    async fn call(&self, name: &str, arguments: JsonObject) -> ToolOutput {
-        if name != "batch" {
-            return self.call_one(name, arguments).await;
+    async fn call(&self, prefixed_name: &str, arguments: JsonObject) -> ToolOutput {
+        if prefixed_name != "batch" {
+            return self.call_one(prefixed_name, arguments).await;
         }
         let args: BatchArgs = match ui_tool("batch").parse_arguments(arguments) {
             Ok(args) => args,
             Err(err) => return ToolOutput::error(err),
         };
-        egui_inspection_tools::run_batch(args, |name, arguments| {
-            Box::pin(async move { self.call_one(&name, arguments).await })
+        egui_inspection_tools::run_batch(args, |prefixed_name, arguments| {
+            Box::pin(async move { self.call_one(&prefixed_name, arguments).await })
         })
         .await
     }
 
     /// [`Self::call`] for any tool but `batch`.
-    async fn call_one(&self, name: &str, arguments: JsonObject) -> ToolOutput {
-        if name == "screenshot" {
+    async fn call_one(&self, prefixed_name: &str, arguments: JsonObject) -> ToolOutput {
+        if prefixed_name == "screenshot" {
             return self
                 .screenshot(arguments)
                 .await
                 .unwrap_or_else(ToolOutput::error);
         }
-        egui_inspection_tools::call(self.bridge.transport(), &tokio_sleep, name, arguments).await
+        egui_inspection_tools::call(
+            self.bridge.transport(),
+            &tokio_sleep,
+            prefixed_name,
+            arguments,
+        )
+        .await
     }
 
     /// `screenshot`, plus writing the PNG to `save_path`.
@@ -262,7 +268,7 @@ fn ui_tools() -> &'static [ToolDef] {
     static TOOLS: LazyLock<Vec<ToolDef>> = LazyLock::new(|| {
         egui_inspection_tools::tools()
             .iter()
-            .map(|def| match def.name.as_str() {
+            .map(|def| match def.unprefixed_name {
                 "screenshot" => ToolDef {
                     description: SCREENSHOT_DESCRIPTION.to_owned(),
                     input_schema: egui_inspection_tools::input_schema::<ScreenshotArgs>(),
@@ -282,15 +288,19 @@ fn ui_tools() -> &'static [ToolDef] {
 }
 
 /// One of [`ui_tools`], by a name known to exist.
-fn ui_tool(name: &str) -> &'static ToolDef {
+fn ui_tool(prefixed_name: &str) -> &'static ToolDef {
     #[expect(clippy::unwrap_used)] // Only called with the names of tools that exist.
-    ui_tools().iter().find(|def| def.name == name).unwrap()
+    ui_tools()
+        .iter()
+        .find(|def| def.prefixed_name == prefixed_name)
+        .unwrap()
 }
 
 /// The MCP description of a tool.
 fn mcp_tool(def: &ToolDef) -> Tool {
     let ToolDef {
-        name,
+        unprefixed_name: _,
+        prefixed_name,
         title,
         description,
         input_schema,
@@ -307,7 +317,7 @@ fn mcp_tool(def: &ToolDef) -> Tool {
             .open_world(false)
     };
     let mut tool = Tool::new(
-        name.clone(),
+        prefixed_name.clone(),
         description.clone(),
         Arc::new(input_schema.clone()),
     )

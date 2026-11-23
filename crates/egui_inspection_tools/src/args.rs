@@ -229,7 +229,9 @@ pub struct BatchArgs {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct BatchAction {
-    pub name: String,
+    /// The tool to call, by the name the agent knows it by.
+    #[serde(rename = "name")]
+    pub prefixed_name: String,
     #[serde(default)]
     #[schemars(with = "serde_json::Map<String, serde_json::Value>")]
     pub args: Value,

@@ -119,9 +119,9 @@ fn block_on<T>(future: impl Future<Output = T>) -> T {
     panic!("the future never finished");
 }
 
-fn run(app: &dyn Transport, name: &str, args: &Value) -> ToolOutput {
+fn run(app: &dyn Transport, prefixed_name: &str, args: &Value) -> ToolOutput {
     let args = args.as_object().expect("an object").clone();
-    block_on(call(app, &instant_sleep, name, args))
+    block_on(call(app, &instant_sleep, prefixed_name, args))
 }
 
 fn text(output: &ToolOutput) -> &str {
@@ -133,18 +133,21 @@ fn text(output: &ToolOutput) -> &str {
 
 #[test]
 fn every_tool_is_dispatched_and_takes_an_object() {
-    let mut names: Vec<_> = tools().iter().map(|def| def.name.as_str()).collect();
+    let mut names: Vec<_> = tools()
+        .iter()
+        .map(|def| def.prefixed_name.as_str())
+        .collect();
     names.sort_unstable();
     names.dedup();
     assert_eq!(names.len(), tools().len(), "tool names are unique");
 
     for def in tools() {
-        assert_eq!(def.input_schema["type"], "object", "{}", def.name);
-        let output = run(&FakeApp::new(), &def.name, &json!({}));
+        assert_eq!(def.input_schema["type"], "object", "{}", def.prefixed_name);
+        let output = run(&FakeApp::new(), &def.prefixed_name, &json!({}));
         assert!(
             !text(&output).starts_with("unknown tool"),
             "`{}` is listed but not dispatched",
-            def.name
+            def.prefixed_name
         );
     }
 }
@@ -154,7 +157,7 @@ fn only_the_observing_tools_are_read_only() {
     let read_only: Vec<_> = tools()
         .iter()
         .filter(|def| def.effect.is_read_only())
-        .map(|def| def.name.as_str())
+        .map(|def| def.prefixed_name.as_str())
         .collect();
     assert_eq!(
         read_only,
@@ -338,9 +341,14 @@ fn wait_for_needs_something_to_wait_for() {
     assert!(app.requests().is_empty());
 }
 
-fn run_prefixed(toolbox: &Toolbox, app: &dyn Transport, name: &str, args: &Value) -> ToolOutput {
+fn run_prefixed(
+    toolbox: &Toolbox,
+    app: &dyn Transport,
+    prefixed_name: &str,
+    args: &Value,
+) -> ToolOutput {
     let args = args.as_object().expect("an object").clone();
-    block_on(toolbox.call(app, &instant_sleep, name, args))
+    block_on(toolbox.call(app, &instant_sleep, prefixed_name, args))
 }
 
 #[test]
@@ -374,7 +382,7 @@ fn a_prefixed_toolbox_mentions_its_tools_by_their_prefixed_names() {
             .iter()
             .map(|def| {
                 (
-                    &def.name,
+                    &def.prefixed_name,
                     &def.description,
                     &def.input_schema,
                     &def.output_schema,
@@ -384,7 +392,7 @@ fn a_prefixed_toolbox_mentions_its_tools_by_their_prefixed_names() {
     )
     .expect("serialize");
     for def in tools() {
-        let bare = format!("`{}`", def.name);
+        let bare = format!("`{}`", def.unprefixed_name);
         assert!(
             !everything.contains(&bare),
             "{bare} is mentioned without the prefix"
