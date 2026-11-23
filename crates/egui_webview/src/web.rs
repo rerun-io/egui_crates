@@ -319,17 +319,21 @@ impl IframeBackend {
         // background, so a dark app doesn't flash white. A page that only supports the other
         // scheme gets an opaque background from the browser in its own scheme, so a light-only
         // page stays readable in a dark app.
+        //
+        // One CSS pixel of the page is one ui point, so that the page zooms together with egui:
+        // the `<iframe>` is laid out in ui points, and scaled up to CSS pixels.
         let offset = rect.min - visible.min;
         let color_scheme = if visuals.dark_mode { "dark" } else { "light" };
         let [r, g, b, a] = visuals.panel_fill.to_srgba_unmultiplied();
         let iframe = format!(
             "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; \
+             transform: scale({scale}); transform-origin: 0 0; \
              border: none; color-scheme: {color_scheme}; \
              background: rgba({r}, {g}, {b}, {}); pointer-events: auto;",
             offset.x,
             offset.y,
-            rect.width(),
-            rect.height(),
+            output.rect.width(),
+            output.rect.height(),
             f32::from(a) / 255.0,
         );
         Styles { container, iframe }
