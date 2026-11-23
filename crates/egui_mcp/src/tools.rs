@@ -119,7 +119,7 @@ impl UiServer {
     /// Run one UI tool by name. A `batch` step comes back through here too, so it reaches the
     /// MCP-only `save_path` of `screenshot`.
     async fn call(&self, prefixed_name: &str, arguments: JsonObject) -> ToolOutput {
-        if prefixed_name != "batch" {
+        if unprefixed_name(prefixed_name) != Some("batch") {
             return self.call_one(prefixed_name, arguments).await;
         }
         let args: BatchArgs = match ui_tool("batch").parse_arguments(arguments) {
@@ -134,7 +134,7 @@ impl UiServer {
 
     /// [`Self::call`] for any tool but `batch`.
     async fn call_one(&self, prefixed_name: &str, arguments: JsonObject) -> ToolOutput {
-        if prefixed_name == "screenshot" {
+        if unprefixed_name(prefixed_name) == Some("screenshot") {
             return self
                 .screenshot(arguments)
                 .await
@@ -287,13 +287,21 @@ fn ui_tools() -> &'static [ToolDef] {
     &TOOLS
 }
 
-/// One of [`ui_tools`], by a name known to exist.
-fn ui_tool(prefixed_name: &str) -> &'static ToolDef {
+/// One of [`ui_tools`], by an unprefixed name known to exist.
+fn ui_tool(unprefixed_name: &str) -> &'static ToolDef {
     #[expect(clippy::unwrap_used)] // Only called with the names of tools that exist.
     ui_tools()
         .iter()
-        .find(|def| def.prefixed_name == prefixed_name)
+        .find(|def| def.unprefixed_name == unprefixed_name)
         .unwrap()
+}
+
+/// The name without a prefix of the tool the agent calls `prefixed_name`, if there is one.
+fn unprefixed_name(prefixed_name: &str) -> Option<&'static str> {
+    ui_tools()
+        .iter()
+        .find(|def| def.prefixed_name == prefixed_name)
+        .map(|def| def.unprefixed_name)
 }
 
 /// The MCP description of a tool.
