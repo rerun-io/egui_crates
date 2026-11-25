@@ -175,23 +175,27 @@ impl Browser {
     fn page(&mut self, ui: &mut egui::Ui, log: &mut Vec<String>) {
         let response = self.webview.ui(ui, ui.available_size());
         for event in response.events {
-            log.push(format!(
-                "{}: {}",
-                self.name,
-                match event {
-                    WebViewEvent::Loading { url } => format!("Loading {}", short_url(&url)),
-                    WebViewEvent::Loaded { url } => {
-                        // Don't show the URL of a page given as HTML (`about:srcdoc`,
-                        // `about:blank` or a `data:` URL) in the URL field.
-                        if !url.starts_with("about:") && !url.starts_with("data:") {
-                            self.url.clone_from(&url);
-                        }
-                        format!("Loaded {}", short_url(&url))
+            let line = match event {
+                WebViewEvent::Loading { url } => format!("Loading {}", short_url(&url)),
+                WebViewEvent::Loaded { url } => {
+                    // Don't show the URL of a page given as HTML (`about:srcdoc`,
+                    // `about:blank` or a `data:` URL) in the URL field.
+                    if !url.starts_with("about:") && !url.starts_with("data:") {
+                        self.url.clone_from(&url);
                     }
-                    WebViewEvent::Message(message) => format!("Message: {message}"),
-                    other => format!("{other:?}"),
+                    format!("Loaded {}", short_url(&url))
                 }
-            ));
+                WebViewEvent::NewWindowRequested { url, user_gesture } => {
+                    // Open the page here, unless it is a popup that no click asked for.
+                    if user_gesture {
+                        report(log, self.webview.load_url(url.clone()));
+                    }
+                    format!("New window requested: {}", short_url(&url))
+                }
+                WebViewEvent::Message(message) => format!("Message: {message}"),
+                other => format!("{other:?}"),
+            };
+            log.push(format!("{}: {line}", self.name));
         }
     }
 }

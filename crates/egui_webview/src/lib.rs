@@ -90,6 +90,21 @@ pub enum WebViewEvent {
         url: String,
     },
 
+    /// The page asked for a new window, with `window.open` or a link with `target="_blank"`.
+    ///
+    /// The webview opens no window and doesn't navigate. The app decides what to do, for example
+    /// load the URL with [`WebViewInstance::load_url`] or open it in the system browser.
+    ///
+    /// Only the CEF backend sends this. On the web, the browser handles new windows itself.
+    NewWindowRequested {
+        /// The URL that the page wants to open.
+        url: String,
+
+        /// Whether the page asked in response to a user action, such as a click. A page that
+        /// asks without one is often showing an unwanted popup.
+        user_gesture: bool,
+    },
+
     /// A string that the page sent with `window.ipc.postMessage(text)`.
     ///
     /// On the web, a page loaded from a URL has no `window.ipc`. It sends messages with
