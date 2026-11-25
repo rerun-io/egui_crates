@@ -363,6 +363,10 @@ fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
     let mut settings = cef::Settings {
         windowless_rendering_enabled: 1,
         external_message_pump: 1,
+        // CEF's SIGINT and SIGTERM handlers terminate `NSApp` from inside
+        // `cef::do_message_loop_work`, which makes winit panic on its re-entered event handler.
+        // Signals belong to the app.
+        disable_signal_handlers: 1,
         no_sandbox: i32::from(!options.sandbox),
         log_severity: sys::cef_log_severity_t::LOGSEVERITY_WARNING.into(),
         ..Default::default()
