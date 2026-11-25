@@ -29,7 +29,7 @@ impl std::fmt::Debug for Context {
         f.debug_struct("Context")
             .field("egui_ctx", &self.egui_ctx)
             .field("events", &self.events)
-            // TODO(alan): should we lock the mutex just for this Debug impl?
+            // Leaves out `state`, because locking it here could deadlock with a CEF handler.
             .finish_non_exhaustive()
     }
 }
