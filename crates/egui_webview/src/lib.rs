@@ -23,7 +23,7 @@
 //! }
 //!
 //! fn main() -> eframe::Result {
-//!     egui_webview::init(); // Must come first, see `init`.
+//!     let _guard = egui_webview::init(); // Must come first, see `init`.
 //!
 //!     eframe::run_native(
 //!         "My app",
@@ -32,7 +32,7 @@
 //!             let source = WebViewSource::Url("https://www.egui.rs".parse()?);
 //!             let webview = WebViewInstance::new(
 //!                 &cc.egui_ctx,
-//!                 egui::Id::new("page"),
+//!                 egui::Id::unique("page"),
 //!                 &source,
 //!                 cc.embedded_views(),
 //!             )?;
