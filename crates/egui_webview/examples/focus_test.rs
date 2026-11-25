@@ -13,7 +13,7 @@
 //! EGUI_WEBVIEW_BACKEND=cef cargo run -p egui_webview --features cef --example focus_test
 //! ```
 
-#![expect(clippy::print_stdout, clippy::unwrap_used)] // A test.
+#![expect(clippy::print_stdout)] // A test.
 
 use std::sync::Arc;
 
@@ -150,7 +150,7 @@ impl eframe::App for Test {
                     Action::PageTab { shift } if cef => queue.lock().extend(tab(shift)),
                     Action::PageTab { shift } => native::press_tab(frame, shift),
                     Action::ClickPage if cef => queue.lock().extend(click(page.rect.min + FIELD_B)),
-                    Action::ClickPage => native::click(frame, &ctx, page.rect.min + FIELD_B),
+                    Action::ClickPage => native::click(frame, page.rect.min + FIELD_B),
                     Action::ClickAfter => queue.lock().extend(click(after.rect.center())),
                 }
                 *step_started = Some(now);
@@ -231,7 +231,7 @@ fn main() -> eframe::Result {
 /// Key presses and clicks sent through `AppKit`, for a page in an embedded view.
 #[cfg(target_os = "macos")]
 mod native {
-    #![expect(unsafe_code)]
+    #![expect(unsafe_code, clippy::unwrap_used)]
 
     use objc2_app_kit::{NSEvent, NSEventModifierFlags, NSEventType, NSView};
     use objc2_foundation::{NSPoint, NSString};
@@ -274,7 +274,7 @@ mod native {
         }
     }
 
-    pub fn click(frame: &eframe::Frame, _ctx: &egui::Context, pos: egui::Pos2) {
+    pub fn click(frame: &eframe::Frame, pos: egui::Pos2) {
         let window = window(frame);
         // `AppKit` window coordinates have their origin at the bottom left, egui's at the top left.
         let height = window.contentLayoutRect().size.height;
@@ -303,7 +303,7 @@ mod native {
         unreachable!("Only CEF here");
     }
 
-    pub fn click(_frame: &eframe::Frame, _ctx: &egui::Context, _pos: egui::Pos2) {
+    pub fn click(_frame: &eframe::Frame, _pos: egui::Pos2) {
         unreachable!("Only CEF here");
     }
 }
