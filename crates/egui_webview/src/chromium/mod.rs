@@ -193,8 +193,8 @@ impl PageWidget for Context {
                 state.shown_pass = Some(pass);
             }
             // CEF asks for this size when it renders. The backend tells CEF after the pass that
-            // it changed.
-            state.size = (rect.size(), ctx.pixels_per_point());
+            // it changed. CEF takes whole points, so a change of less isn't one.
+            state.size = (rect.size().round(), ctx.pixels_per_point());
             (state.context_menu.is_some(), state.popup_placement)
         };
 

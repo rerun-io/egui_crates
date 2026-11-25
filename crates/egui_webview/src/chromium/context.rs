@@ -69,7 +69,7 @@ impl PopupPlacement {
 /// Everything about a page that changes while it lives.
 #[derive(Debug)]
 pub struct State {
-    /// The size of the view in points, and the pixels per point.
+    /// The size of the view in whole points, and the pixels per point.
     ///
     /// CEF's view coordinates (DIPs) are egui points, with the origin at the view's top-left.
     pub size: (Vec2, f32),

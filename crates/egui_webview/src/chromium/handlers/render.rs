@@ -21,7 +21,6 @@ wrap_render_handler! {
             if let Some(rect) = rect {
                 let mut state = self.context.state.lock();
                 let (size, scale) = state.size;
-                let size = size.round();
                 state.asked_pixels = Some(size.max(egui::Vec2::splat(1.0)) * scale);
                 drop(state);
                 // CEF requires a view rect that isn't empty.
