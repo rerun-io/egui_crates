@@ -207,17 +207,15 @@ fn main() -> eframe::Result {
     #[cfg(all(feature = "wry", target_os = "windows"))]
     let viewport = viewport.with_transparent(true);
 
-    let options = eframe::NativeOptions {
+    #[cfg_attr(not(all(feature = "wry", target_os = "windows")), expect(unused_mut))]
+    let mut options = eframe::NativeOptions {
         viewport,
         renderer: eframe::Renderer::Wgpu,
-        #[cfg(all(feature = "wry", target_os = "windows"))]
-        wgpu_options: {
-            let mut options = eframe::egui_wgpu::WgpuConfiguration::default();
-            egui_webview::wgpu_configuration(&mut options);
-            options
-        },
         ..Default::default()
     };
+    #[cfg(all(feature = "wry", target_os = "windows"))]
+    egui_webview::platform::win32::apply_wgpu_configuration(&mut options.wgpu_options);
+
     eframe::run_native(
         "focus_test",
         options,

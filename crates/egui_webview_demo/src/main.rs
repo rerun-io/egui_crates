@@ -440,7 +440,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     #[cfg(target_os = "windows")]
-    egui_webview::wgpu_configuration(&mut options.wgpu_options);
+    egui_webview::platform::win32::apply_wgpu_configuration(&mut options.wgpu_options);
 
     eframe::run_native(
         "egui_webview demo",

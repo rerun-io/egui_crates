@@ -90,8 +90,13 @@ pub use backend::{Backend, EmbeddedWidget, PageWidget};
 pub use chromium::{CefOptions, init as cef_init, run_subprocess as run_cef_subprocess};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
-#[cfg(all(feature = "wry", target_os = "windows"))]
-pub use win32::wgpu_configuration;
+
+pub mod platform {
+    #[cfg(all(feature = "wry", target_os = "windows"))]
+    pub mod win32 {
+        pub use crate::win32::apply_wgpu_configuration;
+    }
+}
 
 pub use url::{self, Url};
 

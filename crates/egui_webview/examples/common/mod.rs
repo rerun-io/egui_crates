@@ -23,7 +23,7 @@ pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
     };
     // On Windows, egui has to draw above the page's child window.
     #[cfg(all(feature = "wry", target_os = "windows"))]
-    egui_webview::wgpu_configuration(&mut options.wgpu_options);
+    egui_webview::platform::win32::apply_wgpu_configuration(&mut options.wgpu_options);
 
     eframe::run_native(title, options, create)
 }

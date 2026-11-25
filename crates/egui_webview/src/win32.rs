@@ -47,7 +47,7 @@ use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
 ///
 /// The window must also be transparent (`ViewportBuilder::with_transparent(true)`), so that the
 /// pages show where egui clears its surface.
-pub fn wgpu_configuration(config: &mut egui_wgpu::WgpuConfiguration) {
+pub fn apply_wgpu_configuration(config: &mut egui_wgpu::WgpuConfiguration) {
     if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut config.wgpu_setup {
         let descriptor = &mut setup.instance_descriptor;
         descriptor.backends = wgpu::Backends::DX12;
