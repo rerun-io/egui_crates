@@ -29,7 +29,7 @@
 //!         "My app",
 //!         eframe::NativeOptions::default(),
 //!         Box::new(|cc| {
-//!             let source = WebViewSource::Url("https://www.egui.rs".to_owned());
+//!             let source = WebViewSource::Url("https://www.egui.rs".parse()?);
 //!             let webview = WebViewInstance::new(
 //!                 &cc.egui_ctx,
 //!                 egui::Id::new("page"),
