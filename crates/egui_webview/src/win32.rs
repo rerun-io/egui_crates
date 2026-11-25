@@ -2,7 +2,7 @@
 //!
 //! wry shows the page in a child window of egui's window. Child windows are drawn over their
 //! parent's client area, so egui presents into a `DirectComposition` visual that wgpu places
-//! above them ([`wgpu_configuration`]). egui clears the visible rect of each webview to
+//! above them ([`apply_wgpu_configuration`]). egui clears the visible rect of each webview to
 //! transparent ([`egui::Shape::Clear`]), so the page shows through egui's surface, and the egui
 //! layers above the webview, such as windows and popups, blend over it.
 //!

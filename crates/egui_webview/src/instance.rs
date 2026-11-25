@@ -159,8 +159,8 @@ impl WebViewInstance {
     /// - On macOS with the `wry` feature: a `WKWebView` below egui's surface. It needs eframe's
     ///   wgpu renderer. It wins over the `cef` feature if both are enabled.
     /// - On Windows with the `wry` feature: a `WebView2` below egui's surface. It needs eframe's
-    ///   wgpu renderer, configured with [`crate::wgpu_configuration`], and a transparent window.
-    ///   It wins over the `cef` feature if both are enabled.
+    ///   wgpu renderer, configured with `platform::win32::apply_wgpu_configuration`, and a
+    ///   transparent window. It wins over the `cef` feature if both are enabled.
     /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
     ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///

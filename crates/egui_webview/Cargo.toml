@@ -41,7 +41,8 @@ cef = ["dep:cef", "dep:winit"]
 ## Show pages in the system webview, through [wry](https://github.com/tauri-apps/wry).
 ## There are backends for macOS (`WKWebView`) and Windows (`WebView2`): the feature has no effect
 ## on other platforms. It needs eframe's wgpu renderer. On Windows, the window must also be
-## transparent, and eframe's wgpu options must come from `egui_webview::wgpu_configuration`.
+## transparent, and eframe's wgpu options must be set up with
+## `egui_webview::platform::win32::apply_wgpu_configuration`.
 wry = [
   "dep:egui-wgpu",
   "dep:objc2",
