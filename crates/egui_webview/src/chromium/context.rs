@@ -98,6 +98,9 @@ pub struct State {
     /// Which way Tab left the page, until [`crate::Backend::poll_focus_left`] picks it up.
     pub took_focus_away: Option<FocusDirection>,
 
+    /// See [`crate::Backend::set_document_start_script`].
+    pub document_start_script: Option<String>,
+
     /// What the widget wrote down in its passes, until the backend acts on it after the pass.
     pub inbox: Inbox,
     /// The root viewport's pass (see [`egui::Context::cumulative_pass_nr_for`]) that last showed
@@ -162,6 +165,7 @@ impl Context {
             text_cursor: None,
             context_menu: None,
             took_focus_away: None,
+            document_start_script: None,
             inbox: Inbox::default(),
             shown_pass: None,
         };

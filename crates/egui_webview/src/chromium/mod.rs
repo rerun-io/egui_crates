@@ -498,6 +498,10 @@ impl Backend for CefBackend {
         Arc::<Context>::clone(&self.context)
     }
 
+    fn set_document_start_script(&mut self, script: Option<&str>) {
+        self.context.state.lock().document_start_script = script.map(str::to_owned);
+    }
+
     fn set_theme(&mut self, theme: Theme) {
         // A windowless browser ignores CEF's color scheme setting, so emulate the media feature
         // through DevTools instead. The emulation stays when the page navigates.
