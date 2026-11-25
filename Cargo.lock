@@ -1705,6 +1705,7 @@ name = "egui_tiles"
 version = "0.18.0"
 dependencies = [
  "ahash",
+ "document-features",
  "eframe 0.37.0",
  "egui 0.37.0",
  "egui_kittest 0.37.0",

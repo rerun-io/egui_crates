@@ -98,6 +98,10 @@
 //! * Easy per-tab close-buttons
 //! * Scrolling of tab-bar
 //! * Vertical tab bar
+//!
+//! ## Feature flags
+#![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
+#![forbid(unsafe_code)]
 
 // ## Implementation notes
 // In many places we want to recursively visit all tiles, while also mutating them.
@@ -115,8 +119,6 @@
 // Everything is quite dynamic, so we have a bunch of defensive coding that call `warn!` on failure.
 // These situations should not happen in normal use, but could happen if the user messes with
 // the internals of the tree, putting it in an invalid state.
-
-#![forbid(unsafe_code)]
 
 use egui::{Pos2, Rect};
 

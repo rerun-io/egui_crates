@@ -38,6 +38,7 @@ accesskit_consumer = "0.39.0" # Must match the accesskit version egui uses
 arboard = { version = "3.6.1", default-features = false }
 base64 = "0.23.1"
 cef = { version = "156.3.0", default-features = false }
+document-features = "0.2.12"
 env_logger = { version = "0.11.8", default-features = false, features = [
   "auto-color",
   "humantime",

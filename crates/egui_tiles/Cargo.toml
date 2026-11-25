@@ -22,6 +22,8 @@ all-features = true
 
 [features]
 default = ["serde"]
+
+## Implement [`serde::Serialize`] and [`serde::Deserialize`] for the [`Tree`] and its parts.
 serde = ["dep:serde", "egui/serde"]
 
 
@@ -30,6 +32,7 @@ ahash = { version = "0.8.12", default-features = false, features = [
   "no-rng", # we don't need DOS-protection for what we use ahash for
   "std",
 ] }
+document-features = { workspace = true, optional = true }
 egui = { version = "0.37.0", default-features = false }
 itertools = "0.15.0"
 log = { version = "0.4.28", features = ["std"] }
