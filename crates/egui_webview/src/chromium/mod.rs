@@ -514,7 +514,7 @@ fn source_url(source: &WebViewSource) -> String {
     use base64::Engine as _;
 
     match source {
-        WebViewSource::Url(url) => url.clone(),
+        WebViewSource::Url(url) => url.as_str().to_owned(),
         WebViewSource::Html(html) => {
             let mut url = String::from("data:text/html;charset=utf-8;base64,");
             base64::engine::general_purpose::STANDARD.encode_string(html, &mut url);
@@ -536,9 +536,9 @@ mod tests {
     }
 
     #[test]
-    fn source_urls() {
-        let url = "https://example.com/a b?c=d";
-        assert_eq!(source_url(&WebViewSource::Url(url.to_owned())), url);
+    fn source_urls() -> Result<(), crate::url::ParseError> {
+        let url = "https://example.com/a?c=d";
+        assert_eq!(source_url(&WebViewSource::Url(url.parse()?)), url);
         assert_eq!(
             source_url(&WebViewSource::Html("<a>é%#".to_owned())),
             "data:text/html;charset=utf-8;base64,PGE+w6klIw=="
@@ -547,5 +547,6 @@ mod tests {
             source_url(&WebViewSource::Html(String::new())),
             "data:text/html;charset=utf-8;base64,"
         );
+        Ok(())
     }
 }

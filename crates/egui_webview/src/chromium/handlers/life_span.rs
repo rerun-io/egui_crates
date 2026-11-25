@@ -9,8 +9,8 @@ use cef::{
     WrapLifeSpanHandler, wrap_life_span_handler,
 };
 
-use crate::WebViewEvent;
 use crate::chromium::context::Context;
+use crate::{WebViewEvent, reported_url};
 
 wrap_life_span_handler! {
     pub struct EguiLifeSpanHandler {
@@ -37,9 +37,9 @@ wrap_life_span_handler! {
             _extra_info: Option<&mut Option<cef::DictionaryValue>>,
             _no_javascript_access: Option<&mut ::std::os::raw::c_int>,
         ) -> ::std::os::raw::c_int {
-            if let Some(url) = target_url {
+            if let Some(url) = target_url.and_then(|url| reported_url(&url.to_string())) {
                 self.context.send(WebViewEvent::NewWindowRequested {
-                    url: url.to_string(),
+                    url,
                     user_gesture: user_gesture != 0,
                 });
             }
