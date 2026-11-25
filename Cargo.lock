@@ -1720,6 +1720,7 @@ dependencies = [
 name = "egui_webview"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "cef",
  "eframe 0.37.0",
  "egui 0.37.0",
