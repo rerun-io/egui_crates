@@ -198,6 +198,20 @@ impl PageWidget for Context {
             state.context_menu.is_some()
         };
 
+        if visible {
+            self.paint(ui, rect);
+        }
+        if !response.enabled() {
+            response.surrender_focus();
+            let mut state = self.state.lock();
+            state.inbox.batches.clear();
+            state.inbox.release_pointer = true;
+            if let Some(menu) = state.context_menu.take() {
+                state.inbox.menu_done = Some((menu, None));
+            }
+            return;
+        }
+
         // Keep egui's focus on the webview while its context menu is open, also when the menu is
         // clicked. CEF runs a menu command such as Copy or Paste only in a focused page.
         let keep_focus = menu_open && {
@@ -244,9 +258,6 @@ impl PageWidget for Context {
             }
         }
 
-        if visible {
-            self.paint(ui, rect);
-        }
         self.show_context_menu(ui, response);
 
         let state = self.state.lock();
@@ -456,6 +467,9 @@ impl Backend for CefBackend {
             }
         }
 
+        if inbox.release_pointer {
+            self.input.release(&host);
+        }
         for batch in &inbox.batches {
             self.input.replay(&self.browser, batch);
         }
@@ -540,6 +554,27 @@ fn source_url(source: &WebViewSource) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disabled_page_releases_capture_and_ignores_input() {
+        let ctx = egui::Context::default();
+        let (page, _events) = Context::new(&ctx);
+        let input = egui::RawInput {
+            events: vec![egui::Event::PointerMoved(pos2(10.0, 10.0))],
+            ..Default::default()
+        };
+        let mut output = ctx.run_ui(input, |ui| {
+            ui.disable();
+            let response = page.allocate(ui, ui.make_persistent_id("page"), Vec2::splat(100.0));
+            page.show(ui, &response);
+        });
+        output.textures_delta.clear();
+
+        let state = page.state.lock();
+        assert!(state.inbox.batches.is_empty());
+        assert!(state.inbox.release_pointer);
+        assert!(state.shown_pass.is_some());
+    }
 
     #[test]
     fn cef_colors() {

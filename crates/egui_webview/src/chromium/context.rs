@@ -87,6 +87,9 @@ impl State {
 /// tells the browser after the pass.
 #[derive(Debug, Default)]
 pub struct Inbox {
+    /// Release any pointer capture before replaying input after the widget was disabled.
+    pub release_pointer: bool,
+
     /// The input of each pass that showed the page, oldest first.
     pub batches: Vec<super::input::Batch>,
 
