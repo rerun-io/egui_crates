@@ -310,7 +310,10 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
         // app has shown that its `main` handles being one.
         State::Unchecked | State::Ready(_) => "call `egui_webview::init` first in `main`",
         State::Failed(err) => err.as_str(),
-        State::ShutDown => "CEF has shut down",
+        State::ShutDown => {
+            "CEF has shut down, because the guard returned by `egui_webview::init` was dropped. \
+             Keep it until `eframe::run_native` returns"
+        }
     };
     Err(Error::backend(format!("CEF: {err}")))
 }
