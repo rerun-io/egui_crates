@@ -85,20 +85,20 @@
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 
 mod backend;
-#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+#[cfg(cef_backend)]
 mod chromium;
 mod instance;
-#[cfg(all(feature = "wry", target_os = "macos"))]
+#[cfg(wry_backend)]
 mod macos;
 mod mailbox;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod webviews;
-#[cfg(all(feature = "wry", target_os = "macos"))]
+#[cfg(wry_backend)]
 mod wry_page;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
-#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+#[cfg(cef_backend)]
 pub use chromium::{
     CefInitOptions, CefOptions, CefProcess, init as cef_init, init_with as cef_init_with,
     run_subprocess as run_cef_subprocess,
@@ -122,7 +122,7 @@ pub use url::{self, Url};
 /// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
 pub fn init() -> ShutdownGuard {
     cfg_select! {
-        all(feature = "cef", not(target_arch = "wasm32")) => { cef_init() }
+        cef_backend => { cef_init() }
         _ => { ShutdownGuard { _runtime: None } }
     }
 }
@@ -143,7 +143,7 @@ struct Shutdown;
 
 impl Drop for Shutdown {
     fn drop(&mut self) {
-        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        #[cfg(cef_backend)]
         chromium::shutdown();
     }
 }

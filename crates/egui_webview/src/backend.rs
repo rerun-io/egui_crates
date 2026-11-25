@@ -175,7 +175,7 @@ pub trait Backend: std::fmt::Debug {
 ///
 /// [`FocusDirection::Next`]: egui::FocusDirection::Next
 /// [`FocusDirection::Previous`]: egui::FocusDirection::Previous
-#[cfg(any(target_arch = "wasm32", feature = "cef"))]
+#[cfg(any(target_arch = "wasm32", cef_backend))]
 pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     let index = match direction {
         egui::FocusDirection::Next => 0,
@@ -205,7 +205,7 @@ pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
 ///
 /// Unlike an HTML string loaded directly, such a URL gets a session history entry that
 /// `WebKit` can navigate back to.
-#[cfg(any(feature = "cef", all(feature = "wry", target_os = "macos")))]
+#[cfg(any(cef_backend, wry_backend))]
 pub(crate) fn html_data_url(html: &str) -> String {
     use base64::Engine as _;
 

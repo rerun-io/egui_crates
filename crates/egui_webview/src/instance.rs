@@ -8,7 +8,7 @@ use egui::{
 use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
 
 cfg_select! {
-    all(feature = "wry", target_os = "macos") => {
+    wry_backend => {
         use crate::macos::WryBackend as PlatformBackend;
     }
     target_arch = "wasm32" => {
@@ -115,10 +115,7 @@ impl DefaultBackend {
 
     /// The backend of the target platform, chosen at compile time: CEF where there is no system
     /// webview.
-    const FOR_TARGET: Self = if cfg!(any(
-        target_arch = "wasm32",
-        all(feature = "wry", target_os = "macos")
-    )) {
+    const FOR_TARGET: Self = if cfg!(platform_backend) {
         Self::Platform
     } else {
         Self::Cef
@@ -172,11 +169,11 @@ impl WebViewInstance {
         match DefaultBackend::pick() {
             DefaultBackend::Cef => {
                 _ = embedded_views;
-                #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+                #[cfg(cef_backend)]
                 {
                     Self::new_cef(ctx, id, source)
                 }
-                #[cfg(not(all(feature = "cef", not(target_arch = "wasm32"))))]
+                #[cfg(not(cef_backend))]
                 {
                     _ = (ctx, id, source);
                     Err(Error::Unsupported)
@@ -184,7 +181,7 @@ impl WebViewInstance {
             }
             DefaultBackend::Platform => {
                 cfg_select! {
-                    any(target_arch = "wasm32", all(feature = "wry", target_os = "macos")) => {
+                    platform_backend => {
                         let backend = PlatformBackend::new(ctx, source, embedded_views)?;
                         Ok(Self::with_backend(id, backend).with_theme_of(ctx))
                     }
@@ -220,7 +217,7 @@ impl WebViewInstance {
     /// # Errors
     /// [`Error::Backend`] if [`crate::init`] hasn't run, or if CEF fails to initialize or to
     /// create the browser.
-    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    #[cfg(cef_backend)]
     pub fn new_cef(
         ctx: &Context,
         id: impl Into<Id>,
@@ -236,7 +233,7 @@ impl WebViewInstance {
     ///
     /// # Errors
     /// See [`Self::new_cef`].
-    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    #[cfg(cef_backend)]
     pub fn new_cef_with_options(
         ctx: &Context,
         id: impl Into<Id>,
@@ -261,11 +258,7 @@ impl WebViewInstance {
     }
 
     /// Gives a newly created page egui's theme before its first paint.
-    #[cfg(any(
-        target_arch = "wasm32",
-        all(feature = "wry", target_os = "macos"),
-        feature = "cef"
-    ))]
+    #[cfg(any(target_arch = "wasm32", wry_backend, feature = "cef"))]
     fn with_theme_of(mut self, ctx: &Context) -> Self {
         self.update_theme(ctx);
         self

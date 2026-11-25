@@ -58,6 +58,9 @@ wry = [
 ]
 
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 document-features = { workspace = true, optional = true }
 eframe = { workspace = true, default-features = false }

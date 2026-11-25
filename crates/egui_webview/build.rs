@@ -1,4 +1,5 @@
-//! Checks for the build tools that the `cef` feature needs.
+//! Defines the cfg aliases that say which backends this build has, and checks for the build
+//! tools that the `cef` feature needs.
 //!
 //! On Windows and macOS, `cef-dll-sys` builds CEF's C++ wrapper with `CMake` and Ninja. Without
 //! them it fails with an opaque `CMake` error, so we report the missing tool and how to install
@@ -47,6 +48,17 @@ const TOOLS: &[Tool] = &[
 ];
 
 fn main() {
+    cfg_aliases::cfg_aliases! {
+        // CEF renders the page off screen, on any native platform.
+        cef_backend: { all(feature = "cef", not(target_arch = "wasm32")) },
+
+        // The platforms that have a backend built on wry.
+        wry_backend: { all(feature = "wry", target_os = "macos") },
+
+        // The page is an embedded view of the platform: an `<iframe>` or a system webview.
+        platform_backend: { any(target_arch = "wasm32", wry_backend) },
+    }
+
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-env-changed=DOCS_RS");
     println!("cargo::rerun-if-env-changed=PATH");

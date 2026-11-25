@@ -202,7 +202,7 @@ cfg_select! {
         fn main() -> eframe::Result {
             let _guard = egui_webview::init();
             let cef = cfg!(feature = "cef")
-                && (cfg!(not(all(feature = "wry", target_os = "macos")))
+                && (cfg!(not(wry_backend))
                     || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
 
             let options = eframe::NativeOptions {
@@ -238,7 +238,7 @@ cfg_select! {
 }
 
 /// Key presses and clicks sent through `AppKit`, for a page in an embedded view.
-#[cfg(all(feature = "wry", target_os = "macos"))]
+#[cfg(wry_backend)]
 mod native {
     #![expect(unsafe_code, clippy::unwrap_used)]
 
@@ -306,7 +306,7 @@ mod native {
     }
 }
 
-#[cfg(not(all(feature = "wry", target_os = "macos")))]
+#[cfg(not(wry_backend))]
 mod native {
     pub fn press_tab(_frame: &eframe::Frame, _shift: bool) {
         unreachable!("Only CEF here");
