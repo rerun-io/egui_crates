@@ -260,7 +260,7 @@ mod tests {
         assert_eq!(css_string("a\"b\\c\nd"), r#""a\"b\\c\a d""#);
         assert_eq!(
             js_string("</script>\"\\\n\u{2028}"),
-            r#""</script>\"\\\u000a ""#
+            r#""\u003c/script>\"\\\u000a\u2028""#
         );
     }
 
@@ -309,6 +309,6 @@ mod tests {
     #[test]
     fn no_style_removes_the_element() {
         assert!(script(None).contains("remove()"));
-        assert!(script(Some("</style>")).contains(r"</style>"));
+        assert!(script(Some("</style>")).contains(r"\u003c/style>"));
     }
 }
