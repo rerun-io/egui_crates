@@ -171,6 +171,7 @@ pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
 /// Parses a URL that a backend's engine reported for a [`WebViewEvent`].
 ///
 /// Engines report valid URLs, so this only logs a warning for one that doesn't parse.
+#[cfg(any(target_arch = "wasm32", feature = "cef"))]
 pub(crate) fn reported_url(url: &str) -> Option<Url> {
     Url::parse(url)
         .inspect_err(|err| {
