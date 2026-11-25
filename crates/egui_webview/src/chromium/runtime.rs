@@ -228,6 +228,12 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
 }
 
 /// Whether Chromium launched this executable as a helper.
+///
+/// This is the test that `cef::execute_process` does itself: a process with a `--type` switch
+/// is a helper, and one without is the browser process. See `CefMainRunner::RunAsHelperProcess`:
+/// <https://github.com/chromiumembedded/cef/blob/8078/libcef/browser/main_runner.cc#L198-L202>
+///
+/// So an app can't take a `--type=…` argument of its own, with or without this function.
 fn is_helper() -> bool {
     std::env::args_os().any(|arg| arg.as_encoded_bytes().starts_with(b"--type="))
 }
