@@ -420,10 +420,10 @@ fn report(log: &mut Vec<String>, result: Result<(), egui_webview::Error>) {
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+
     // With CEF, its helper processes run from this executable. A helper process ends here.
     egui_webview::init();
-
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]),
