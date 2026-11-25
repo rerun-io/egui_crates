@@ -72,7 +72,7 @@ wrap_context_menu_handler! {
         }
 
         /// Hands the menu to egui, because a windowless browser can't show CEF's native context
-        /// menu. A menu that is still open is cancelled.
+        /// menu. A menu that is still open is canceled.
         fn run_context_menu(
             &self,
             _browser: Option<&mut Browser>,

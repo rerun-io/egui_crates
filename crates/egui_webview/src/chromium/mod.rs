@@ -114,11 +114,11 @@ impl std::fmt::Debug for CefBackend {
 }
 
 impl CefBackend {
-    /// Creates a windowless browser that loads `source`, and initialises CEF if this is the first
+    /// Creates a windowless browser that loads `source`, and initializes CEF if this is the first
     /// browser in the process.
     ///
     /// # Errors
-    /// If CEF can't be initialised, or if it fails to create the browser.
+    /// If CEF can't be initialized, or if it fails to create the browser.
     pub fn new(
         ctx: &egui::Context,
         source: &WebViewSource,
