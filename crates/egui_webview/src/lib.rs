@@ -71,32 +71,25 @@ pub use url::{self, Url};
 pub fn init() -> ShutdownGuard {
     cfg_select! {
         all(feature = "cef", not(target_arch = "wasm32")) => { cef_init() }
-        _ => { ShutdownGuard::new() }
+        _ => { ShutdownGuard { _runtime: None } }
     }
 }
 
-/// Shuts down what [`init`] started, when dropped.
+/// Keeps the webview runtime alive on the thread that initialized it.
 ///
-/// Drop it at the end of `main`, after `eframe::run_native` has returned and the webviews are
-/// gone. With CEF, that waits until CEF has closed its browsers, shuts CEF down, and deletes its
-/// temporary files. CEF can't start again in the same process.
-///
-/// It isn't `Send`, because CEF shuts down on the thread that initialized it.
-#[must_use = "dropping the guard shuts down the webviews' runtime"]
+/// Keep the guard until `eframe::run_native` returns. Repeated calls to [`init`] on that
+/// thread share the runtime. Each CEF webview also holds it until dropped. After the last
+/// owner is dropped, CEF shuts down once its browsers finish closing.
+#[must_use = "keep the guard while using webviews"]
 #[derive(Debug)]
 pub struct ShutdownGuard {
-    _not_send: std::marker::PhantomData<*const ()>,
+    _runtime: Option<std::rc::Rc<Shutdown>>,
 }
 
-impl ShutdownGuard {
-    pub(crate) fn new() -> Self {
-        Self {
-            _not_send: std::marker::PhantomData,
-        }
-    }
-}
+#[derive(Debug)]
+struct Shutdown;
 
-impl Drop for ShutdownGuard {
+impl Drop for Shutdown {
     fn drop(&mut self) {
         #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
         chromium::shutdown();

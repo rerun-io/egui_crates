@@ -33,7 +33,7 @@ fn main() -> eframe::Result {
 }
 ```
 
-Dropping the guard shuts the backend down. With CEF, it waits until CEF has closed its browsers, shuts CEF down, and deletes its temporary files.
+The first call sets the process-wide options. Guards on the initialization thread and live webviews share the runtime. After the last owner is dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
 
 ## Showing a page without keeping it
 

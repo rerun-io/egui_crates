@@ -1,7 +1,9 @@
 //! CEF's process-wide initialization, the entry point of its helper processes, and the external
 //! message pump that egui's passes drive.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Weak};
 use std::thread::ThreadId;
@@ -22,7 +24,7 @@ use cef::{
 use egui::Ui;
 
 use super::context::Context;
-use crate::{Error, ShutdownGuard};
+use crate::{Error, Shutdown, ShutdownGuard};
 
 /// The name of the process message that brings the text of a page's
 /// `window.ipc.postMessage(text)` from the render process to the browser process.
@@ -44,6 +46,14 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 /// Where CEF is in its life, which happens once per process.
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
 static STATE: std::sync::Mutex<State> = std::sync::Mutex::new(State::Unchecked);
+
+thread_local! {
+    /// Guards and backends on the initialization thread share one shutdown owner.
+    static OWNER: RefCell<std::rc::Weak<Shutdown>> = const { RefCell::new(std::rc::Weak::new()) };
+}
+
+/// Whether the last owner timed out waiting for an asynchronous browser close.
+static SHUTDOWN_PENDING: AtomicBool = AtomicBool::new(false);
 
 /// Whether CEF is initialized and not shut down, so that egui's passes may pump its message loop.
 static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -129,6 +139,8 @@ pub fn init() -> ShutdownGuard {
 
 /// Like [`init`], with `options` for when the first webview starts CEF.
 ///
+/// The first call sets the process-wide options.
+///
 /// It runs this process as a CEF helper process and exits, if Chromium started it as one.
 /// Otherwise it returns a guard that shuts CEF down when dropped.
 ///
@@ -168,6 +180,14 @@ pub fn init_with(options: CefInitOptions) -> ShutdownGuard {
 /// // … run the app
 /// ```
 pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
+    let mut state = lock_state();
+    if !matches!(*state, State::Unchecked) {
+        let runtime = OWNER.with_borrow(std::rc::Weak::upgrade);
+        if runtime.is_none() {
+            log::warn!("egui_webview: init must run on the original thread before shutdown");
+        }
+        return CefProcess::App(ShutdownGuard { _runtime: runtime });
+    }
     let args = cef::args::Args::new();
     // macOS helpers must enter the sandbox before loading the CEF framework.
     #[cfg(all(target_os = "macos", feature = "cef-sandbox"))]
@@ -198,14 +218,12 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
         }
     }
 
-    let mut state = lock_state();
-    match &*state {
-        State::Unchecked | State::Ready(_) => *state = State::Ready(options),
-        State::Running { .. } | State::Failed(_) | State::ShutDown => {
-            log::warn!("egui_webview: CEF has already started, so its new options are ignored");
-        }
-    }
-    CefProcess::App(ShutdownGuard::new())
+    let runtime = Rc::new(Shutdown);
+    OWNER.with_borrow_mut(|owner| *owner = Rc::downgrade(&runtime));
+    *state = State::Ready(options);
+    CefProcess::App(ShutdownGuard {
+        _runtime: Some(runtime),
+    })
 }
 
 /// Whether Chromium launched this executable as a helper.
@@ -296,8 +314,14 @@ fn load_framework() -> Result<(), String> {
 /// If [`run_subprocess`] hasn't run, if the CEF library can't be loaded, if CEF fails to
 /// initialize, or if CEF has shut down. The first failure is kept, so later calls fail in the
 /// same way.
-pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
+pub fn initialize(ctx: &egui::Context) -> Result<ShutdownGuard, Error> {
     let mut state = lock_state();
+    let owner = OWNER.with_borrow(std::rc::Weak::upgrade);
+    if matches!(*state, State::Ready(_) | State::Running { .. }) && owner.is_none() {
+        return Err(Error::backend(
+            "CEF needs a live guard on the initialization thread",
+        ));
+    }
     if let State::Ready(options) = &*state {
         let options = options.clone();
         *state = match start(&options) {
@@ -315,7 +339,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
         State::Running { .. } => {
             // egui ignores a second plugin of the same type.
             ctx.add_plugin(CefPlugin);
-            return Ok(());
+            return Ok(ShutdownGuard { _runtime: owner });
         }
         // CEF starts its helper processes from this executable. Refuse to start them before the
         // app has shown that its `main` handles being one.
@@ -413,8 +437,8 @@ fn in_app_bundle(exe: &Path) -> bool {
 
 /// Shuts CEF down, if it runs. Called when the [`ShutdownGuard`] is dropped.
 ///
-/// It waits until every browser has closed, for at most [`SHUTDOWN_TIMEOUT`], and then deletes
-/// the temporary cache directory. CEF can't start again in this process.
+/// If closing takes longer than [`SHUTDOWN_TIMEOUT`], a later message pump finishes shutdown.
+/// The temporary cache directory is deleted after shutdown. CEF can't start again in this process.
 pub fn shutdown() {
     let mut state = lock_state();
     let State::Running { thread, temp_dir } = &*state else {
@@ -429,21 +453,22 @@ pub fn shutdown() {
         return;
     }
     let temp_dir = temp_dir.clone();
-    RUNNING.store(false, Ordering::Relaxed);
 
     // Closing a browser takes a few turns of the message loop.
     let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
     while 0 < OPEN_BROWSERS.load(Ordering::Relaxed) {
         if deadline < Instant::now() {
             log::warn!(
-                "egui_webview: shutting CEF down with {} open browsers. Drop the webviews first.",
+                "egui_webview: deferring CEF shutdown until {} browsers finish closing",
                 OPEN_BROWSERS.load(Ordering::Relaxed)
             );
-            break;
+            SHUTDOWN_PENDING.store(true, Ordering::Relaxed);
+            return;
         }
         cef::do_message_loop_work();
         std::thread::sleep(Duration::from_millis(5));
     }
+    RUNNING.store(false, Ordering::Relaxed);
     cef::shutdown();
     *state = State::ShutDown;
 
@@ -524,6 +549,12 @@ impl egui::Plugin for CefPlugin {
     fn on_begin_pass(&mut self, _ui: &mut Ui) {
         if RUNNING.load(Ordering::Relaxed) {
             cef::do_message_loop_work();
+            if SHUTDOWN_PENDING.load(Ordering::Relaxed)
+                && OPEN_BROWSERS.load(Ordering::Relaxed) == 0
+            {
+                SHUTDOWN_PENDING.store(false, Ordering::Relaxed);
+                shutdown();
+            }
         }
     }
 }

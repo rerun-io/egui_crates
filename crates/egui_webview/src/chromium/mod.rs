@@ -98,6 +98,9 @@ pub struct CefBackend {
 
     /// The view's size in points and the pixels per point that the browser was last told.
     told_size: Option<(Vec2, f32)>,
+
+    // Drop after the browser and its callbacks have released their CEF references.
+    _runtime: crate::ShutdownGuard,
 }
 
 impl std::fmt::Debug for CefBackend {
@@ -123,7 +126,7 @@ impl CefBackend {
         source: &WebViewSource,
         options: CefOptions,
     ) -> Result<Self, Error> {
-        runtime::initialize(ctx)?;
+        let runtime = runtime::initialize(ctx)?;
 
         let (context, events) = Context::new(ctx);
         let window_info = WindowInfo {
@@ -157,6 +160,7 @@ impl CefBackend {
             input: input::Input::default(),
             hidden: false,
             told_size: None,
+            _runtime: runtime,
         })
     }
 
@@ -499,10 +503,12 @@ impl Backend for CefBackend {
 
 impl Drop for CefBackend {
     fn drop(&mut self) {
-        // A context menu that egui closed in the last pass still waits for its answer. Unlock
-        // the state before the call into CEF.
-        let menu_done = self.context.state.lock().inbox.menu_done.take();
-        if let Some((menu, _)) = menu_done {
+        // The widget can outlive the browser. Release its CEF callbacks before shutdown.
+        let (open, done) = {
+            let mut state = self.context.state.lock();
+            (state.context_menu.take(), state.inbox.menu_done.take())
+        };
+        for menu in open.into_iter().chain(done.map(|(menu, _)| menu)) {
             menu.callback.cancel();
         }
         if let Some(host) = self.browser.host() {
