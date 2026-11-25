@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use eframe::EmbeddedViews;
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Ui, Vec2};
+use egui::{
+    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
+};
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 
@@ -26,6 +28,10 @@ pub struct WebViewInstance {
     /// Set when egui's focus moves to the webview, or when the backend reports that the page
     /// took the focus itself. Cleared when the focus leaves the page or the webview.
     page_focused: bool,
+
+    /// The theme last given to [`Backend::set_theme`], or `None` before the first
+    /// [`Self::place`].
+    theme: Option<Theme>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -243,6 +249,7 @@ impl WebViewInstance {
             widget: backend.widget(),
             backend: Box::new(backend),
             page_focused: false,
+            theme: None,
         }
     }
 
@@ -254,7 +261,15 @@ impl WebViewInstance {
     ///
     /// Call it for a backend that renders into a texture too. It has no view to place, but it
     /// uses the call to stop rendering a page that isn't shown.
+    ///
+    /// This also gives the page egui's theme, the first time and whenever it changes.
     pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
+        let theme = ctx.theme();
+        if self.theme != Some(theme) {
+            self.backend.set_theme(theme);
+            self.theme = Some(theme);
+        }
+
         // egui also reports a view that only touches the clip rect, with nothing to see.
         let output = outputs
             .iter()
