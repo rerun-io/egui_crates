@@ -377,7 +377,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -1366,7 +1366,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1578,7 +1578,7 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "web-time",
- "wgpu 30.0.2",
+ "wgpu 30.0.1",
  "windows-sys 0.61.2",
  "winit",
 ]
@@ -1656,7 +1656,7 @@ dependencies = [
  "thiserror 2.0.21",
  "type-map",
  "web-time",
- "wgpu 30.0.2",
+ "wgpu 30.0.1",
  "winit",
 ]
 
@@ -1825,7 +1825,7 @@ dependencies = [
  "serde",
  "tempfile",
  "toml",
- "wgpu 30.0.2",
+ "wgpu 30.0.1",
 ]
 
 [[package]]
@@ -1908,7 +1908,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "webview2-com",
- "wgpu 30.0.2",
+ "wgpu 30.0.1",
  "windows",
  "winit",
  "wry",
@@ -2112,7 +2112,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3443,9 +3443,8 @@ dependencies = [
 
 [[package]]
 name = "naga"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd0dd362bf26c0ffdd143df6da66a25d287e196eff482f117771010b207ad163"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -3469,9 +3468,8 @@ dependencies = [
 
 [[package]]
 name = "naga-types"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14474170feb673cfb18b3565111a9869797cc1d290fb9ec969c53f5e1e231c6d"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
@@ -3536,7 +3534,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3996,7 +3994,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -4808,7 +4806,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5399,10 +5397,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6356,9 +6354,8 @@ dependencies = [
 
 [[package]]
 name = "wgpu"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "146fc3d654250e6207921a66c87534c621bc886c70df83dcf466c1d66813810e"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
  "arrayvec",
  "bitflags 2.13.2",
@@ -6369,7 +6366,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "js-sys",
  "log",
- "naga 30.0.2",
+ "naga 30.0.1",
  "parking_lot",
  "portable-atomic",
  "profiling",
@@ -6379,9 +6376,9 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core 30.0.2",
- "wgpu-hal 30.0.2",
- "wgpu-types 30.0.2",
+ "wgpu-core 30.0.1",
+ "wgpu-hal 30.0.1",
+ "wgpu-types 30.0.1",
 ]
 
 [[package]]
@@ -6420,9 +6417,8 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad661da2ee99f208c30090b585284b2ab5b8bf2358ddf2d2215592808ec62f1a"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -6434,7 +6430,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "log",
- "naga 30.0.2",
+ "naga 30.0.1",
  "naga-types",
  "once_cell",
  "parking_lot",
@@ -6444,13 +6440,13 @@ dependencies = [
  "rustc-hash 1.1.0",
  "smallvec",
  "thiserror 2.0.21",
- "wgpu-core-deps-apple 30.0.2",
- "wgpu-core-deps-emscripten 30.0.2",
- "wgpu-core-deps-wasm 30.0.2",
- "wgpu-core-deps-windows-linux-android 30.0.2",
- "wgpu-hal 30.0.2",
- "wgpu-naga-bridge 30.0.2",
- "wgpu-types 30.0.2",
+ "wgpu-core-deps-apple 30.0.1",
+ "wgpu-core-deps-emscripten 30.0.1",
+ "wgpu-core-deps-wasm 30.0.1",
+ "wgpu-core-deps-windows-linux-android 30.0.1",
+ "wgpu-hal 30.0.1",
+ "wgpu-naga-bridge 30.0.1",
+ "wgpu-types 30.0.1",
 ]
 
 [[package]]
@@ -6464,11 +6460,10 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-apple"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d3f2f24aee039ffe9ef527300daf6b7428c58edeefdaa1700f4fa0fd754df16"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
- "wgpu-hal 30.0.2",
+ "wgpu-hal 30.0.1",
 ]
 
 [[package]]
@@ -6482,11 +6477,10 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-emscripten"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55ccf093bd215ae9dc4f96df293e675513ac1f2569f8293a2911cc34ca3505d1"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
- "wgpu-hal 30.0.2",
+ "wgpu-hal 30.0.1",
 ]
 
 [[package]]
@@ -6500,11 +6494,10 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-wasm"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b20f43aeb9962d05e61e3ccb717e2e27ba1b04e979d4ca7e361384f8ee03db56"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
- "wgpu-hal 30.0.2",
+ "wgpu-hal 30.0.1",
 ]
 
 [[package]]
@@ -6518,11 +6511,10 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1331b08fa2362c5d454eccc4448e6e4f01eccfea569a00e310adbfc4415f2bdc"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
- "wgpu-hal 30.0.2",
+ "wgpu-hal 30.0.1",
 ]
 
 [[package]]
@@ -6581,9 +6573,8 @@ dependencies = [
 
 [[package]]
 name = "wgpu-hal"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a57452fe453658e141aafdb09de1028afa498805fab518238ddf372a518813ff"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -6603,7 +6594,7 @@ dependencies = [
  "libc",
  "libloading 0.8.9",
  "log",
- "naga 30.0.2",
+ "naga 30.0.1",
  "naga-types",
  "ndk-sys",
  "objc2 0.6.5",
@@ -6628,8 +6619,8 @@ dependencies = [
  "wasm-bindgen",
  "wayland-sys",
  "web-sys",
- "wgpu-naga-bridge 30.0.2",
- "wgpu-types 30.0.2",
+ "wgpu-naga-bridge 30.0.1",
+ "wgpu-types 30.0.1",
  "windows",
  "windows-core",
  "windows-result",
@@ -6647,12 +6638,11 @@ dependencies = [
 
 [[package]]
 name = "wgpu-naga-bridge"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44a62ead68aad7cd40ac9e2cd2b8ec64f32dfbad2765f429b9fb74b8b735869f"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
- "naga 30.0.2",
- "wgpu-types 30.0.2",
+ "naga 30.0.1",
+ "wgpu-types 30.0.1",
 ]
 
 [[package]]
@@ -6671,9 +6661,8 @@ dependencies = [
 
 [[package]]
 name = "wgpu-types"
-version = "30.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9f6ee0bd50f5ab79fb8c25e3f33afb27126f034af4ba5909c7a0967058659e6"
+version = "30.0.1"
+source = "git+https://github.com/lucasmerlin/wgpu.git?branch=lucas%2Fdcomp-topmost#754df687807cdc617cf3e11c3c0dcdb10850f905"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -6691,7 +6680,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

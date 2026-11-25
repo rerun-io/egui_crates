@@ -111,6 +111,20 @@ emath = { git = "https://github.com/emilk/egui.git", branch = "main" }
 epaint = { git = "https://github.com/emilk/egui.git", branch = "main" }
 epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "main" }
 
+# `egui_webview` on Windows needs `wgpu::Dx12SwapchainKind::DxgiFromTopmostVisual`, which isn't
+# in a wgpu release yet. Switch to the wgpu release that has it once it is out.
+naga = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+naga-types = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-core = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-core-deps-apple = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-core-deps-emscripten = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-core-deps-wasm = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-core-deps-windows-linux-android = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-hal = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-naga-bridge = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+wgpu-types = { git = "https://github.com/lucasmerlin/wgpu.git", branch = "lucas/dcomp-topmost" }
+
 
 # ----------------------------------------------------------------------------------------
 # Lints:
