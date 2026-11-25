@@ -71,15 +71,15 @@ web-sys = { workspace = true, features = [
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cef = { version = "156.3.0", default-features = false, optional = true }
+cef = { workspace = true, optional = true }
 # Converts egui keys to the platform scancodes that CEF expects, which egui's key events don't
-# carry. Keep it at egui-winit's version, so the dependency tree has a single winit.
-winit = { version = "0.30.13", default-features = false, optional = true }
+# carry.
+winit = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend
 # feature such as `x11`.
-winit = { version = "0.30.13", default-features = false, features = ["x11"], optional = true }
+winit = { workspace = true, features = ["x11"], optional = true }
 
 [[example]]
 name = "cef_input_test"

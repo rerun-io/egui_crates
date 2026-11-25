@@ -37,6 +37,7 @@ accesskit = { version = "0.25.0", features = ["enumn"] } # Must match the access
 accesskit_consumer = "0.39.0" # Must match the accesskit version egui uses
 arboard = { version = "3.6.1", default-features = false }
 base64 = "0.23.1"
+cef = { version = "156.3.0", default-features = false }
 env_logger = { version = "0.11.8", default-features = false, features = [
   "auto-color",
   "humantime",
@@ -64,6 +65,8 @@ vec1 = { version = "1.12.1", default-features = false }
 wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.64"
 web-sys = "0.3.91"
+# Keep it at egui-winit's version, so the dependency tree has a single winit.
+winit = { version = "0.30.13", default-features = false }
 
 
 [profile.release]
