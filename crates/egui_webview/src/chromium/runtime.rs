@@ -22,6 +22,7 @@ use cef::{
     ImplV8Handler, ImplV8Value as _, V8Handler, V8Value, WrapV8Handler, wrap_v8_handler,
 };
 use egui::Ui;
+use tempfile::TempDir;
 
 use super::context::Context;
 use crate::{Error, Shutdown, ShutdownGuard};
@@ -119,7 +120,7 @@ enum State {
         thread: ThreadId,
 
         /// The cache directory that [`shutdown`] deletes, if it was made for this process.
-        temp_dir: Option<PathBuf>,
+        temp_dir: Option<TempDir>,
     },
 
     /// CEF failed to start, and can't be started again.
@@ -354,7 +355,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<ShutdownGuard, Error> {
 }
 
 /// Initializes CEF with `options`. Returns the cache directory to delete at shutdown, if any.
-fn start(options: &CefInitOptions) -> Result<Option<PathBuf>, String> {
+fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
     let exe = std::env::current_exe().map_err(|err| err.to_string())?;
     check_sandbox(options.sandbox, &exe)?;
     load_library()?;
@@ -378,8 +379,8 @@ fn start(options: &CefInitOptions) -> Result<Option<PathBuf>, String> {
         None
     } else {
         // Without a `cache_path`, the profile lives in memory.
-        let dir = temp_cache_dir();
-        settings.root_cache_path = dir.to_string_lossy().as_ref().into();
+        let dir = temp_cache_dir().map_err(|err| format!("failed to create CEF cache: {err}"))?;
+        settings.root_cache_path = dir.path().to_string_lossy().as_ref().into();
         Some(dir)
     };
     resource_paths(&exe, &mut settings);
@@ -441,7 +442,7 @@ fn in_app_bundle(exe: &Path) -> bool {
 /// The temporary cache directory is deleted after shutdown. CEF can't start again in this process.
 pub fn shutdown() {
     let mut state = lock_state();
-    let State::Running { thread, temp_dir } = &*state else {
+    let State::Running { thread, temp_dir } = &mut *state else {
         *state = State::ShutDown;
         return;
     };
@@ -452,7 +453,6 @@ pub fn shutdown() {
         );
         return;
     }
-    let temp_dir = temp_dir.clone();
 
     // Closing a browser takes a few turns of the message loop.
     let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
@@ -470,12 +470,13 @@ pub fn shutdown() {
     }
     RUNNING.store(false, Ordering::Relaxed);
     cef::shutdown();
+    let temp_dir = temp_dir.take();
     *state = State::ShutDown;
 
     if let Some(dir) = temp_dir
-        && let Err(err) = std::fs::remove_dir_all(&dir)
+        && let Err(err) = dir.close()
     {
-        log::warn!("egui_webview: failed to delete {}: {err}", dir.display());
+        log::warn!("egui_webview: failed to delete temporary CEF cache: {err}");
     }
 }
 
@@ -504,9 +505,15 @@ fn lock_pages() -> std::sync::MutexGuard<'static, Vec<Weak<Context>>> {
 
 /// A new cache directory for this process, so that two running instances of an app don't share
 /// one. [`shutdown`] deletes it.
-#[expect(clippy::disallowed_methods)] // A `tempdir` would be deleted while CEF still uses it.
-fn temp_cache_dir() -> PathBuf {
-    std::env::temp_dir().join(format!("egui_webview_{}", std::process::id()))
+fn temp_cache_dir() -> std::io::Result<TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("egui_webview_");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    builder.tempdir()
 }
 
 /// Points CEF at the resources the `cef` crate downloaded at build time, unless they are next to
