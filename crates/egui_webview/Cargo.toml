@@ -32,9 +32,8 @@ default = []
 ## The build downloads CEF (about 1 GB) and requires CMake and Ninja.
 cef = ["dep:base64", "dep:cef", "dep:winit"]
 
-## Run CEF's helper processes in Chromium's sandbox. On Linux, that needs unprivileged user
-## namespaces or CEF's SUID `chrome-sandbox`. On macOS, the app must run from an app bundle with
-## CEF's helper apps. Windows isn't supported: there, CEF fails to start with this feature.
+## Make Chromium's sandbox available to CEF's helper processes. On its own, it changes nothing:
+## the app turns the sandbox on with `CefInitOptions::sandbox`.
 cef-sandbox = ["cef", "cef/sandbox"]
 
 

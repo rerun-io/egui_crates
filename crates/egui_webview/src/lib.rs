@@ -28,8 +28,9 @@
 //!
 //! - Process-wide options, such as a persistent profile directory, go in `CefInitOptions`, passed
 //!   to `cef_init_with`. By default, nothing persists.
-//! - CEF's helper processes run without Chromium's sandbox, unless the `cef-sandbox` feature is
-//!   on. Without the sandbox, only show pages you trust.
+//! - CEF's helper processes run without Chromium's sandbox, unless `CefInitOptions::sandbox` is
+//!   `true`, which needs the `cef-sandbox` feature. Without the sandbox, only show pages you
+//!   trust.
 //! - A page that asks for a new window sends [`WebViewEvent::NewWindowRequested`] and opens
 //!   nothing.
 //! - While a CEF webview exists, egui repaints at least every 100 ms, because CEF's message loop

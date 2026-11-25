@@ -111,16 +111,11 @@ With the `cef` feature it calls `egui_webview::cef_init`: in a helper process th
 
 ### Sandbox
 
-By default, CEF's helper processes run without Chromium's sandbox. A page that exploits a bug in Chromium's renderer then runs with the rights of the app's user, so only show pages you trust, or turn the sandbox on. The `cef-sandbox` feature turns it on:
+By default, CEF's helper processes run without Chromium's sandbox. A page that exploits a bug in Chromium's renderer then runs with the rights of the app's user, so only show pages you trust, or turn the sandbox on: enable the `cef-sandbox` feature and set `CefInitOptions::sandbox` to `true`. The feature alone changes nothing. Where the sandbox can't work, CEF fails to start:
 
 * Linux: needs unprivileged user namespaces, or CEF's SUID `chrome-sandbox` helper.
-* macOS: needs an app bundle with CEF's helper apps. Without one, CEF fails to start.
-* Windows: not supported. CEF fails to start.
-
-* Linux and Windows: the build copies CEF's files next to the binaries in `target/<profile>`.
-  A packaged app ships them next to its executable.
-* macOS: during development, the app loads CEF from where the build put it.
-  A packaged app needs CEF in its app bundle, together with CEF's helper apps.
+* macOS: needs an app bundle with CEF's helper apps.
+* Windows: not supported.
 
 ### Known limitations
 
