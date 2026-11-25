@@ -33,13 +33,6 @@ use self::focus_edge::FocusEdge;
 use crate::wry_page::WryPage;
 use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
 
-/// The offset that puts every page's layer below egui's `CAMetalLayer`, whose `zPosition` is 0.
-///
-/// A clip view's layer gets [`EmbeddedViewOutput::z_index`] minus this offset as its
-/// `zPosition`, but at most -1. The pages thus stay below egui's layer, and stack in egui's
-/// paint order among each other as long as egui has at most 1000 layers.
-const BELOW_EGUI: f64 = 1000.0;
-
 /// The output last applied to the views.
 #[derive(Debug, PartialEq)]
 struct Placement {
@@ -305,7 +298,8 @@ impl Backend for WryBackend {
             .setFrame(cg_rect(rect.translate(-origin)));
         if let Some(layer) = self.clip.layer() {
             #[expect(clippy::cast_precision_loss)]
-            layer.setZPosition((output.z_index as f64 - BELOW_EGUI).min(-1.0));
+            // Higher indices approach egui's Metal layer at zero from below.
+            layer.setZPosition(-1.0 / (output.z_index as f64 + 1.0));
         }
 
         self.clip.setHidden(false);
