@@ -275,6 +275,11 @@ impl WebViewInstance {
         }
     }
 
+    /// See [`Self::set_page_style`].
+    pub fn page_style(&self) -> &PageStyle {
+        &self.page_style
+    }
+
     fn update_style_sheet(&mut self, ctx: &Context) {
         if self.page_style == PageStyle::Browser && self.style_sheet.is_none() {
             return;
