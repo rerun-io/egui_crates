@@ -53,6 +53,7 @@ wasm-bindgen-futures.workspace = true
 js-sys.workspace = true
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = [
+  "CssStyleDeclaration",
   "Document",
   "DomRect",
   "Element",
