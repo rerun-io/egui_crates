@@ -63,7 +63,7 @@ const UNSTYLED_PAGE: &str = r#"<!DOCTYPE html>
 </head>
 <body>
 <h1>A page without CSS</h1>
-<p>This page sets no style of its own. With <b>Demo → Follow egui's style</b> it takes its font, text size and colors from egui, and follows them when they change. Without it, you see the browser's defaults.</p>
+<p>This page sets no style of its own. With <b>Follow egui's style</b> in the toolbar it takes its font, text size and colors from egui, and follows them when they change. Without it, you see the browser's defaults.</p>
 <p>A <a href="https://example.com">link</a>, some <code>inline code</code>, and a block of it:</p>
 <pre>fn main() {
     println!("Hello from the page");
@@ -344,18 +344,6 @@ impl eframe::App for DemoApp {
                         *show_modal = true;
                     }
                     ui.checkbox(show_log, "Show log");
-                    let mut follow = *page_style == PageStyle::Egui;
-                    if ui.checkbox(&mut follow, "Follow egui's style").changed() {
-                        *page_style = if follow {
-                            PageStyle::Egui
-                        } else {
-                            PageStyle::Browser
-                        };
-                        let browsers = windows.iter_mut().map(|(_, browser)| browser);
-                        for browser in std::iter::once(&mut *main).chain(browsers) {
-                            browser.webview.set_page_style(ui.ctx(), page_style.clone());
-                        }
-                    }
                     ui.menu_button("Text size", text_size_ui);
                     ui.menu_button("Theme", |ui| {
                         let current = ui.ctx().theme();
@@ -371,6 +359,25 @@ impl eframe::App for DemoApp {
                 // the windows instead.
                 ui.scope(|ui| {
                     ui.reset_style();
+                    ui.separator();
+                    let mut follow = *page_style == PageStyle::Egui;
+                    let checkbox = ui
+                        .checkbox(&mut follow, "Follow egui's style")
+                        .on_hover_text(
+                            "Pages take egui's font, text size and colors where they set no \
+                             style of their own. Try it with the unstyled page.",
+                        );
+                    if checkbox.changed() {
+                        *page_style = if follow {
+                            PageStyle::Egui
+                        } else {
+                            PageStyle::Browser
+                        };
+                        let browsers = windows.iter_mut().map(|(_, browser)| browser);
+                        for browser in std::iter::once(&mut *main).chain(browsers) {
+                            browser.webview.set_page_style(ui.ctx(), page_style.clone());
+                        }
+                    }
                     ui.separator();
                     main.nav_buttons(ui);
                     main.url_field(ui, log);
