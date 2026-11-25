@@ -24,14 +24,16 @@ Tab and Shift-Tab move the keyboard focus between egui widgets and the page's el
 
 ## Initialization
 
-Call `egui_webview::init` first in `main`:
+Call `egui_webview::init` first in `main`, and keep the guard it returns until `eframe::run_native` has returned:
 
 ```rust,ignore
-fn main() {
+fn main() -> eframe::Result {
     let _guard = egui_webview::init();
-    // …
+    eframe::run_native(/* … */)
 }
 ```
+
+Dropping the guard shuts the backend down. With CEF, it waits until CEF has closed its browsers, shuts CEF down, and deletes its temporary files.
 
 ## Showing a page without keeping it
 
@@ -90,6 +92,8 @@ trunk serve --example minimal_instance
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
 
 
+When a page asks for a new window (`window.open`, or a link with `target="_blank"`), the CEF backend opens nothing and sends `WebViewEvent::NewWindowRequested` instead. The app decides what to do with the URL, for example load it with `load_url` or open it in the system browser. On the web, the browser handles new windows itself.
+
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
 So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
 
@@ -99,14 +103,27 @@ The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the f
 Set `CEF_PATH` to share one download between projects.
 
 CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
-With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns right away.
+With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns the shutdown guard.
 
-`egui_webview::run_cef_subprocess` does the same as `cef_init` without exiting, and returns the helper's exit code.
+`egui_webview::cef_init_with` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
+
+`egui_webview::run_cef_subprocess` does the same as `cef_init_with` without exiting. It returns `CefProcess::Helper` with the helper's exit code, or `CefProcess::App` with the guard.
+
+### Sandbox
+
+By default, CEF's helper processes run without Chromium's sandbox. A page that exploits a bug in Chromium's renderer then runs with the rights of the app's user, so only show pages you trust, or turn the sandbox on. The `cef-sandbox` feature turns it on:
+
+* Linux: needs unprivileged user namespaces, or CEF's SUID `chrome-sandbox` helper.
+* macOS: needs an app bundle with CEF's helper apps. Without one, CEF fails to start.
+* Windows: not supported. CEF fails to start.
 
 * Linux and Windows: the build copies CEF's files next to the binaries in `target/<profile>`.
   A packaged app ships them next to its executable.
 * macOS: during development, the app loads CEF from where the build put it.
   A packaged app needs CEF in its app bundle, together with CEF's helper apps.
 
-Pages are rendered on the CPU and uploaded as textures.
-JavaScript dialogs, file pickers and drag and drop aren't supported yet.
+### Known limitations
+
+* Pages are rendered on the CPU and uploaded as textures.
+* JavaScript dialogs, file pickers and drag and drop aren't supported yet.
+* While a CEF webview exists, egui repaints at least every 100 ms, because CEF's message loop runs in egui's passes.

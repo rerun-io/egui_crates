@@ -20,6 +20,20 @@
 //! A [`WebViewInstance`] isn't `Send`. If the code that shows the page can't keep one, use
 //! [`WebView`]. It shows a page with one call, and the pages live in a [`WebViews`] that the app
 //! owns.
+//!
+//! Call [`init`] first in `main`, and keep the [`ShutdownGuard`] it returns until
+//! `eframe::run_native` has returned.
+//!
+//! ## CEF
+//!
+//! - Process-wide options, such as a persistent profile directory, go in `CefInitOptions`, passed
+//!   to `cef_init_with`. By default, nothing persists.
+//! - CEF's helper processes run without Chromium's sandbox, unless the `cef-sandbox` feature is
+//!   on. Without the sandbox, only show pages you trust.
+//! - A page that asks for a new window sends [`WebViewEvent::NewWindowRequested`] and opens
+//!   nothing.
+//! - While a CEF webview exists, egui repaints at least every 100 ms, because CEF's message loop
+//!   runs in egui's passes.
 
 mod backend;
 #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
@@ -50,8 +64,8 @@ pub use url::{self, Url};
 /// ```
 ///
 /// Currently, it only does something natively with the `cef` feature, where it calls
-/// [`cef_init`](`crate::cef_init`): CEF starts its helper processes (renderer, GPU, …) from the
-/// app's own executable, and in such a process this function runs the helper and then exits the
+/// `egui_webview::cef_init`: CEF starts its helper processes (renderer, GPU, …) from the app's
+/// own executable, and in such a process this function runs the helper and then exits the
 /// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
 pub fn init() -> ShutdownGuard {
     cfg_select! {
