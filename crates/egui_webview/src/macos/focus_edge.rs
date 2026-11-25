@@ -1,3 +1,5 @@
+//! [`FocusEdge`], which detects when Tab moves the focus out of a `WKWebView`.
+
 use std::cell::Cell;
 use std::rc::Rc;
 

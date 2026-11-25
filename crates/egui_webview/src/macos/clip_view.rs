@@ -1,3 +1,5 @@
+//! [`ClipView`], which clips a `WKWebView` to its visible area.
+
 use std::cell::RefCell;
 
 use egui::Rect;
@@ -15,7 +17,7 @@ pub(super) struct ClipIvars {
 }
 
 define_class!(
-    /// A view that contains a `WKWebView` and clips it to [`EmbeddedViewOutput::visible`].
+    /// A view that contains a `WKWebView` and clips it to [`egui::EmbeddedViewOutput::visible`].
     #[derive(Debug)]
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]

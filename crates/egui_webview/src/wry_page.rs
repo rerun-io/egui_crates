@@ -121,19 +121,21 @@ impl WryPage {
 }
 
 /// Prevent wry from panicking when `NSURL` cannot parse a URL.
-#[cfg(target_os = "macos")]
 fn check_url(source: &WebViewSource) -> Result<(), Error> {
-    use objc2_foundation::{NSString, NSURL};
+    cfg_select! {
+        target_os = "macos" => {
+            use objc2_foundation::{NSString, NSURL};
 
-    if let WebViewSource::Url(url) = source
-        && NSURL::URLWithString(&NSString::from_str(url)).is_none()
-    {
-        return Err(Error::backend(format!("Not a URL: {url:?}")));
+            if let WebViewSource::Url(url) = source
+                && NSURL::URLWithString(&NSString::from_str(url)).is_none()
+            {
+                return Err(Error::backend(format!("Not a URL: {url:?}")));
+            }
+            Ok(())
+        }
+        _ => {
+            _ = source;
+            Ok(())
+        }
     }
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn check_url(_source: &WebViewSource) -> Result<(), Error> {
-    Ok(())
 }

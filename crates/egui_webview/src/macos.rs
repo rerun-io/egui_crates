@@ -9,13 +9,16 @@
 
 #![expect(unsafe_code)] // AppKit
 
+mod clip_view;
+mod focus_edge;
+
 use std::cell::Cell;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection, Pos2, Rect, Theme};
-use objc2::MainThreadMarker;
 use objc2::rc::Retained;
+use objc2::{DefinedClass as _, MainThreadMarker};
 use objc2_app_kit::{
     NSAppearance, NSAppearanceCustomization as _, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSAutoresizingMaskOptions, NSResponder, NSView,
@@ -25,6 +28,8 @@ use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{AppKitWindowHandle, HandleError, HasWindowHandle, RawWindowHandle};
 use wry::WebViewExtMacOS as _;
 
+use self::clip_view::ClipView;
+use self::focus_edge::FocusEdge;
 use crate::wry_page::WryPage;
 use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
 
@@ -72,13 +77,6 @@ fn window_view(window: &impl HasWindowHandle) -> Result<Retained<NSView>, Error>
     }
     Ok(view)
 }
-
-mod clip_view;
-mod focus_edge;
-
-use clip_view::ClipView;
-use focus_edge::FocusEdge;
-use objc2::DefinedClass as _;
 
 /// Exposes an `NSView` as a window handle, so that wry adds its `WKWebView` as a subview of it.
 struct ViewHandle<'a>(&'a NSView);
