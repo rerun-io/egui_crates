@@ -98,6 +98,11 @@ When a page asks for a new window (`window.open`, or a link with `target="_blank
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
 So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
 
+A page can also take egui's style as its default look: `WebViewInstance::set_page_style` with `PageStyle::Egui` (or `WebView::style`).
+The page then gets egui's background, text, link and selection colors, and the font families and sizes of the body and monospace text styles, and it follows changes to them.
+The style has the lowest priority in the page, so it only shows where the page sets no style of its own.
+The page gets the names of egui's fonts, not the font files.
+
 ## CEF
 
 The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built.
