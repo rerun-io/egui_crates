@@ -184,6 +184,29 @@ impl Input {
         }
     }
 
+    /// Lets go of a page that wasn't shown in the last pass. It gets the release of the buttons
+    /// held on it, and the pointer leaves it.
+    ///
+    /// Its widget records no input while it isn't shown, so the page would otherwise keep the
+    /// pointer captured, or stay hovered.
+    pub fn release(&mut self, host: &BrowserHost) {
+        let buttons = [
+            PointerButton::Primary,
+            PointerButton::Secondary,
+            PointerButton::Middle,
+        ];
+        let click_count = self.last_click.map_or(1, |click| click.count);
+        for button in buttons.into_iter().filter_map(MouseButton::from_egui) {
+            if self.buttons_down & button.flag != 0 {
+                self.buttons_down &= !button.flag;
+                host.mouse_up(&outside_page(self.buttons_down), button, click_count);
+            }
+        }
+        if std::mem::take(&mut self.pointer_inside) {
+            host.mouse_leave(&outside_page(NO_BUTTONS));
+        }
+    }
+
     fn pointer_moved(&mut self, host: &BrowserHost, batch: &Batch, pos: Pos2) {
         // A held button keeps the pointer captured by the page.
         if batch.hovered || self.buttons_down != NO_BUTTONS {
@@ -283,6 +306,15 @@ impl Input {
             count,
         });
         count
+    }
+}
+
+/// A mouse event just outside the page's top-left corner, with the event flags `buttons_down`.
+fn outside_page(buttons_down: u32) -> MouseEvent {
+    MouseEvent {
+        x: -1,
+        y: -1,
+        modifiers: buttons_down,
     }
 }
 

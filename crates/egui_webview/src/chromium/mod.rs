@@ -457,10 +457,12 @@ impl Backend for CefBackend {
             }
         }
 
-        // Let CEF stop rendering a page that isn't shown. It is told when the page is back.
-        if !shown && !self.hidden {
-            host.was_hidden(1);
-            self.hidden = true;
+        if !shown {
+            self.input.release(&host);
+            // Let CEF stop rendering the page. It is told when the page is back.
+            if !std::mem::replace(&mut self.hidden, true) {
+                host.was_hidden(1);
+            }
         }
     }
 
