@@ -10,8 +10,8 @@ a live [egui](https://github.com/emilk/egui) app.
 
 `egui-mcp` connects to a running app over the
 [`egui_inspection`](https://crates.io/crates/egui_inspection) protocol and exposes it as MCP
-tools: read the **AccessKit widget tree** (`widget_tree` / `get_widget`), **click / type / scroll /
-drag / press keys**, take a **screenshot**, `resize` the window, and `wait_for` async UI to
+tools: read the **AccessKit widget tree** (`ui_widget_tree` / `ui_get_widget`), **click / type / scroll /
+drag / press keys**, take a **screenshot**, `ui_resize` the window, and `ui_wait_for` async UI to
 settle.
 
 The tools themselves live in [`egui_inspection_tools`](https://crates.io/crates/egui_inspection_tools), for calling them in-process without MCP.
@@ -65,7 +65,7 @@ args = []
 
 ## Using it
 
-With the app running and the agent configured, ask the agent to `attach`, then
+With the app running and the agent configured, ask the agent to `ui_attach`, then
 drive the app. You could ask it to e.g. reproduce a bug, verify a new feature or just randomly use, 
 test and explore your app.
 

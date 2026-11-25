@@ -7,29 +7,29 @@ expression: surface
 This mcp drives a live egui app: it reads the app's accessibility tree and synthesizes real input events. Work in an observe → act → verify loop.
 
 Getting oriented:
-- Call `attach` first (check `status` if unsure); the app-driving tools return "no app connected" until then.
-- Start most tasks with `widget_tree` to discover widgets and their ids, and/or `screenshot` to see the rendered frame.
-- When a widget reports `omitted_children`, query `widget_tree` again with that widget's `id` as `root` to walk just that part of the app.
-- `widget_tree` returns an abridged tree: no `bounds`, and text over 100 characters cut short. A trailing ` […]` in a `label` or `value` means exactly that — the text goes on, and `get_widget` on that widget's `id` returns all of it, along with its `bounds` in logical points and its parent. Filters always match the full text, so searching for a phrase from past the cut still finds the widget.
+- Call `ui_attach` first (check `ui_status` if unsure); the app-driving tools return "no app connected" until then.
+- Start most tasks with `ui_widget_tree` to discover widgets and their ids, and/or `ui_screenshot` to see the rendered frame.
+- When a widget reports `omitted_children`, query `ui_widget_tree` again with that widget's `id` as `root` to walk just that part of the app.
+- `ui_widget_tree` returns an abridged tree: no `bounds`, and text over 100 characters cut short. A trailing ` […]` in a `label` or `value` means exactly that — the text goes on, and `ui_get_widget` on that widget's `id` returns all of it, along with its `bounds` in logical points and its parent. Filters always match the full text, so searching for a phrase from past the cut still finds the widget.
 
 Targeting widgets:
-- Prefer locators — an `id` from `widget_tree`, a `role`, or a text match — over a raw `pos`. Locators resolve to the widget's current position and survive layout changes; reach for `pos` only when nothing matches.
+- Prefer locators — an `id` from `ui_widget_tree`, a `role`, or a text match — over a raw `pos`. Locators resolve to the widget's current position and survive layout changes; reach for `pos` only when nothing matches.
 - For text matches prefer `content_contains`: it matches a widget's `label` (accessible name) OR its `value`. This matters because many widgets (`Label`, monospace text, counters) carry their text in `value` with an empty `label`, so `label_contains` alone silently misses them. Use `label_contains`/`value_contains` only when you specifically need to match one field.
-- A locator in an action must match exactly one widget. If it matches several, the call errors and lists the candidates — narrow the filter (add a `role`, or switch to a more specific text match) or target a specific `id`. Use `widget_tree` when you want every match.
+- A locator in an action must match exactly one widget. If it matches several, the call errors and lists the candidates — narrow the filter (add a `role`, or switch to a more specific text match) or target a specific `id`. Use `ui_widget_tree` when you want every match.
 
 Acting and verifying:
-- After an action that changes the UI, confirm it landed: `widget_tree` for the expected state, `screenshot` to look, or `wait_for` to poll until async or animated UI settles.
-- Use `batch` to act and observe in one round trip (e.g. `click` then `screenshot`), avoiding an extra turn.
+- After an action that changes the UI, confirm it landed: `ui_widget_tree` for the expected state, `ui_screenshot` to look, or `ui_wait_for` to poll until async or animated UI settles.
+- Use `ui_batch` to act and observe in one round trip (e.g. `ui_click` then `ui_screenshot`), avoiding an extra turn.
 
 Conventions:
-- Everything is in logical points, one shared coordinate frame: raw `pos`, `resize` dimensions, the `bounds` from `get_widget`, and a default (`pixels_per_point: 1.0`) `screenshot`. So a widget's `bounds` center is exactly where to `click`, and a pixel in the screenshot is a logical point. There is no fixed screen size; use `resize` to set the viewport.
+- Everything is in logical points, one shared coordinate frame: raw `pos`, `ui_resize` dimensions, the `bounds` from `ui_get_widget`, and a default (`pixels_per_point: 1.0`) `ui_screenshot`. So a widget's `bounds` center is exactly where to `ui_click`, and a pixel in the screenshot is a logical point. There is no fixed screen size; use `ui_resize` to set the viewport.
 
 # Tools
 
-## attach
+## ui_attach
 
 {
-  "name": "attach",
+  "name": "ui_attach",
   "title": "Attach to app",
   "description": "Connect to a running egui app's inspection port (an app built with eframe's `inspection` feature, launched with `EGUI_INSPECTION` set).\nDefaults to 127.0.0.1:5719.\nRetries until `timeout_secs` elapses.\nOn success the app-driving tools start working (they are always listed, but error until an app is attached).",
   "inputSchema": {
@@ -69,12 +69,12 @@ Conventions:
   }
 }
 
-## batch
+## ui_batch
 
 {
-  "name": "batch",
+  "name": "ui_batch",
   "title": "Batch",
-  "description": "Execute a sequence of app-driving tool calls in one round trip (the connection tools `attach`/`disconnect`/`status` are not available here).\nStops on the first error.\nResults are emitted in execution order, interleaved: each step contributes one JSON text item followed by any image items it produced (e.g. screenshots).\n`batch` cannot be nested.\nUse this to act and observe in one call, e.g. a `click` then a `widget_tree` or `screenshot`.",
+  "description": "Execute a sequence of app-driving tool calls in one round trip (the connection tools `ui_attach`/`ui_disconnect`/`ui_status` are not available here).\nStops on the first error.\nResults are emitted in execution order, interleaved: each step contributes one JSON text item followed by any image items it produced (e.g. screenshots).\n`ui_batch` cannot be nested.\nUse this to act and observe in one call, e.g. a `ui_click` then a `ui_widget_tree` or `ui_screenshot`.",
   "inputSchema": {
     "$defs": {
       "BatchAction": {
@@ -116,21 +116,21 @@ Conventions:
   }
 }
 
-## click
+## ui_click
 
 {
-  "name": "click",
+  "name": "ui_click",
   "title": "Click",
-  "description": "Click the center of a widget's bounding box, or a raw `pos` in logical points.\nSpecify either a locator (`id` from `widget_tree`, `role`, or a text match — prefer `content_contains`, which matches `label` or `value`; `label_contains`/`value_contains` match just one field) or `pos: { x, y }`.\n`button` defaults to `primary` (accepts `primary`/`secondary`/`middle`/`extra1`/`extra2`, or aliases `left`/`right`).\n`count: 2` → double-click, `3` → triple.",
+  "description": "Click the center of a widget's bounding box, or a raw `pos` in logical points.\nSpecify either a locator (`id` from `ui_widget_tree`, `role`, or a text match — prefer `content_contains`, which matches `label` or `value`; `label_contains`/`value_contains` match just one field) or `pos: { x, y }`.\n`button` defaults to `primary` (accepts `primary`/`secondary`/`middle`/`extra1`/`extra2`, or aliases `left`/`right`).\n`count: 2` → double-click, `3` → triple.",
   "inputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       },
       "PointerButtonArg": {
-        "description": "Which mouse button a `click`/`drag` uses. `left`/`right` are accepted as aliases for\n`primary`/`secondary`.",
+        "description": "Which mouse button a `ui_click`/`ui_drag` uses. `left`/`right` are accepted as aliases for\n`primary`/`secondary`.",
         "enum": [
           "primary",
           "secondary",
@@ -215,7 +215,7 @@ Conventions:
           }
         ],
         "default": null,
-        "description": "Widget id from `widget_tree`."
+        "description": "Widget id from `ui_widget_tree`."
       },
       "label_contains": {
         "description": "Case-insensitive substring match against the widget's `label` (its accessible name) only.\nNote that `Label`/monospace widgets carry their text in `value`, not `label` — for those,\nuse `content_contains` (or `value_contains`).",
@@ -263,12 +263,12 @@ Conventions:
   }
 }
 
-## disconnect
+## ui_disconnect
 
 {
-  "name": "disconnect",
+  "name": "ui_disconnect",
   "title": "Disconnect",
-  "description": "Disconnect from the attached app.\nApp-driving tools remain available but return an error until `attach` is called again.",
+  "description": "Disconnect from the attached app.\nApp-driving tools remain available but return an error until `ui_attach` is called again.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object"
@@ -281,16 +281,16 @@ Conventions:
   }
 }
 
-## drag
+## ui_drag
 
 {
-  "name": "drag",
+  "name": "ui_drag",
   "title": "Drag",
-  "description": "Primary-button drag from `start` to `end`.\nEach target accepts the same fields as `click`: locator (`id`/`content_contains`/`role`/`label_contains`/`value_contains`) or `pos: {x, y}`.\n`steps` controls how many intermediate pointer-move events are emitted between press and release.",
+  "description": "Primary-button drag from `start` to `end`.\nEach target accepts the same fields as `ui_click`: locator (`id`/`content_contains`/`role`/`label_contains`/`value_contains`) or `pos: {x, y}`.\n`steps` controls how many intermediate pointer-move events are emitted between press and release.",
   "inputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       },
@@ -338,7 +338,7 @@ Conventions:
         "type": "object"
       },
       "Target": {
-        "description": "The widget-matching constraints shared by `widget_tree`'s filter and the action `Target`s.\n\nAn optional `role` plus up to one text predicate. All are case-insensitive and combined with\nlogical AND; an all-`None` `Query` matches every widget.",
+        "description": "The widget-matching constraints shared by `ui_widget_tree`'s filter and the action `Target`s.\n\nAn optional `role` plus up to one text predicate. All are case-insensitive and combined with\nlogical AND; an all-`None` `Query` matches every widget.",
         "properties": {
           "content_contains": {
             "description": "Case-insensitive substring match against *either* `label` or `value`. Prefer this when you\njust want \"the widget showing this text\" and don't care which field holds it — it's the\nmost robust choice across widget kinds.",
@@ -357,7 +357,7 @@ Conventions:
               }
             ],
             "default": null,
-            "description": "Widget id from `widget_tree`."
+            "description": "Widget id from `ui_widget_tree`."
           },
           "label_contains": {
             "description": "Case-insensitive substring match against the widget's `label` (its accessible name) only.\nNote that `Label`/monospace widgets carry their text in `value`, not `label` — for those,\nuse `content_contains` (or `value_contains`).",
@@ -427,16 +427,16 @@ Conventions:
   }
 }
 
-## get_widget
+## ui_get_widget
 
 {
-  "name": "get_widget",
+  "name": "ui_get_widget",
   "title": "Widget details",
-  "description": "Return a single widget by id (from `widget_tree`), in full detail: its `bounds` in logical points, its `parent_id`, its state, and its `label`/`value` untruncated.\nThis is the follow-up to `widget_tree`, which omits `bounds` and cuts long text short to stay compact.",
+  "description": "Return a single widget by id (from `ui_widget_tree`), in full detail: its `bounds` in logical points, its `parent_id`, its state, and its `label`/`value` untruncated.\nThis is the follow-up to `ui_widget_tree`, which omits `bounds` and cuts long text short to stay compact.",
   "inputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       }
@@ -445,7 +445,7 @@ Conventions:
     "properties": {
       "id": {
         "$ref": "#/$defs/Id",
-        "description": "Widget id, as returned by `widget_tree`."
+        "description": "Widget id, as returned by `ui_widget_tree`."
       }
     },
     "required": [
@@ -456,7 +456,7 @@ Conventions:
   "outputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       },
@@ -510,7 +510,7 @@ Conventions:
           },
           "id": {
             "$ref": "#/$defs/Id",
-            "description": "Node id, used with `click`, `type_text`, and `get_widget`."
+            "description": "Node id, used with `ui_click`, `ui_type_text`, and `ui_get_widget`."
           },
           "label": {
             "type": [
@@ -576,16 +576,16 @@ Conventions:
   }
 }
 
-## hover
+## ui_hover
 
 {
-  "name": "hover",
+  "name": "ui_hover",
   "title": "Hover",
-  "description": "Move the pointer over a widget (or raw `pos`) without clicking.\nTooltips and hover popups only appear after a short delay — follow with `wait_for` (e.g. its `min_steps`) to let them settle before reading the tree or screenshotting.",
+  "description": "Move the pointer over a widget (or raw `pos`) without clicking.\nTooltips and hover popups only appear after a short delay — follow with `ui_wait_for` (e.g. its `min_steps`) to let them settle before reading the tree or screenshotting.",
   "inputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       },
@@ -626,7 +626,7 @@ Conventions:
           }
         ],
         "default": null,
-        "description": "Widget id from `widget_tree`."
+        "description": "Widget id from `ui_widget_tree`."
       },
       "label_contains": {
         "description": "Case-insensitive substring match against the widget's `label` (its accessible name) only.\nNote that `Label`/monospace widgets carry their text in `value`, not `label` — for those,\nuse `content_contains` (or `value_contains`).",
@@ -671,10 +671,10 @@ Conventions:
   }
 }
 
-## press_key
+## ui_press_key
 
 {
-  "name": "press_key",
+  "name": "ui_press_key",
   "title": "Press key",
   "description": "Send a key press (down + up) to the focused widget.\n`key` is an egui key name such as `Backspace`, `Delete`, `Enter`, `Tab`, `A`–`Z`, `ArrowLeft`, `ArrowRight`, `Home`, `End`, `Escape`.",
   "inputSchema": {
@@ -728,10 +728,10 @@ Conventions:
   }
 }
 
-## resize
+## ui_resize
 
 {
-  "name": "resize",
+  "name": "ui_resize",
   "title": "Resize viewport",
   "description": "Resize the app's viewport to the given logical-point dimensions.",
   "inputSchema": {
@@ -762,18 +762,18 @@ Conventions:
   }
 }
 
-## screenshot
+## ui_screenshot
 
 {
-  "name": "screenshot",
+  "name": "ui_screenshot",
   "title": "Screenshot",
-  "description": "Capture the current frame as a PNG screenshot.\nDefaults to logical-point resolution (`pixels_per_point: 1.0`) so pixels align with `click`/`widget_tree` coordinates; pass a higher `pixels_per_point` for detail, or `save_path` to also write it to disk.\nRequires the app window to be visible — a fully-occluded or minimized window can't render a frame to capture (notably on macOS), so the call times out; bring the window to the foreground first.",
+  "description": "Capture the current frame as a PNG screenshot.\nDefaults to logical-point resolution (`pixels_per_point: 1.0`) so pixels align with `ui_click`/`ui_widget_tree` coordinates; pass a higher `pixels_per_point` for detail, or `save_path` to also write it to disk.\nRequires the app window to be visible — a fully-occluded or minimized window can't render a frame to capture (notably on macOS), so the call times out; bring the window to the foreground first.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
       "pixels_per_point": {
         "default": 1.0,
-        "description": "Output resolution in pixels per logical point.\nDefaults to `1.0`, which makes screenshot pixels line up 1:1 with the logical coordinates used by `click`/`widget_tree`.\nHigher values give a sharper image, capped at the display's native scale (no upscaling).",
+        "description": "Output resolution in pixels per logical point.\nDefaults to `1.0`, which makes screenshot pixels line up 1:1 with the logical coordinates used by `ui_click`/`ui_widget_tree`.\nHigher values give a sharper image, capped at the display's native scale (no upscaling).",
         "format": "float",
         "type": "number"
       },
@@ -796,16 +796,16 @@ Conventions:
   }
 }
 
-## scroll
+## ui_scroll
 
 {
-  "name": "scroll",
+  "name": "ui_scroll",
   "title": "Scroll",
   "description": "Send a mouse wheel scroll over a widget (or raw `pos`).\n`delta` is in logical points: positive Y scrolls down (reveals content below); positive X scrolls right.",
   "inputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       },
@@ -876,7 +876,7 @@ Conventions:
           }
         ],
         "default": null,
-        "description": "Widget id from `widget_tree`."
+        "description": "Widget id from `ui_widget_tree`."
       },
       "label_contains": {
         "description": "Case-insensitive substring match against the widget's `label` (its accessible name) only.\nNote that `Label`/monospace widgets carry their text in `value`, not `label` — for those,\nuse `content_contains` (or `value_contains`).",
@@ -927,10 +927,10 @@ Conventions:
   }
 }
 
-## status
+## ui_status
 
 {
-  "name": "status",
+  "name": "ui_status",
   "title": "Connection status",
   "description": "Report whether an app is connected and its peer info.",
   "inputSchema": {
@@ -943,16 +943,16 @@ Conventions:
   }
 }
 
-## type_text
+## ui_type_text
 
 {
-  "name": "type_text",
+  "name": "ui_type_text",
   "title": "Type text",
   "description": "Type text into the currently focused widget.\nOptionally focus a widget first (by `id`, `role`, or a text match — `content_contains`/`label_contains`/`value_contains`) — this uses an `AccessKit` focus request, not a click, so it won't move the cursor or clear an existing text selection.",
   "inputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       }
@@ -976,7 +976,7 @@ Conventions:
           }
         ],
         "default": null,
-        "description": "Optional focus target: widget id from `widget_tree` to focus before typing.\nOmit all locator fields to type into whatever is currently focused."
+        "description": "Optional focus target: widget id from `ui_widget_tree` to focus before typing.\nOmit all locator fields to type into whatever is currently focused."
       },
       "label_contains": {
         "description": "Case-insensitive substring match against the widget's `label` (its accessible name) only.\nNote that `Label`/monospace widgets carry their text in `value`, not `label` — for those,\nuse `content_contains` (or `value_contains`).",
@@ -1016,10 +1016,10 @@ Conventions:
   }
 }
 
-## wait_for
+## ui_wait_for
 
 {
-  "name": "wait_for",
+  "name": "ui_wait_for",
   "title": "Wait for widgets",
   "description": "Poll the widget tree until its conditions hold, or until `timeout_secs` elapses.\nWaits until at least `min_matches` visible widgets match the filter (when one is given) *and* at least `min_steps` frames have rendered since the call began.\nThe text filter is `role` and/or one of `content_contains` (matches `label` or `value` — prefer this; e.g. monospace/`Label` text lives in `value`), `label_contains`, `value_contains`.\nRequires a filter (`content_contains`/`role`/`label_contains`/`value_contains`) or a non-zero `min_steps`.",
   "inputSchema": {
@@ -1047,7 +1047,7 @@ Conventions:
       },
       "min_steps": {
         "default": 0,
-        "description": "Also wait until at least this many frames have rendered since the call began.\nUse it to let animations, tooltips, or other time/frame-driven UI settle (e.g. after a `hover`); `0` means don't wait for frames.",
+        "description": "Also wait until at least this many frames have rendered since the call began.\nUse it to let animations, tooltips, or other time/frame-driven UI settle (e.g. after a `ui_hover`); `0` means don't wait for frames.",
         "format": "uint64",
         "minimum": 0,
         "type": "integer"
@@ -1081,12 +1081,12 @@ Conventions:
   }
 }
 
-## widget_tree
+## ui_widget_tree
 
 {
-  "name": "widget_tree",
+  "name": "ui_widget_tree",
   "title": "Widget tree",
-  "description": "Walk the app's widget tree and return the widgets matching the filter, nested by ancestry: each one carries the matches from its own subtree in `children`.\nWidgets in between that don't match are skipped, so a `children` entry is a descendant, not necessarily a direct child.\n`role`, if given, is a role name (e.g. `Button`, `Label`), matched case-insensitively; an unknown role errors with the roles present in the tree.\n`limit` (200 by default) caps how many widgets come back: whole levels are kept from the top down, so the app's structure survives and the leaves go first, and any widget whose children were cut reports how many in `omitted_children`.\n`root` starts the walk at one widget instead of the app's root — pass the `id` of a widget that reported `omitted_children` to see that part of the tree in full.\n`exclude` leaves a subtree out — pass a widget `id`, or the same constraints the filter takes — and takes everything below it with it; use it to skip a panel whose text would otherwise answer every query.\nUse the returned `id` with `click`, `type_text`, or `get_widget`.\nThe widgets are abridged — call `get_widget` with an `id` for one widget's full detail, including its `bounds` (logical points, its center is where `click` lands), its parent, and its text in full.\n`label` and `value` are cut short at 100 characters, marked with a trailing ` […]`; the filters still match against the whole text, so a phrase past the cut still finds its widget.\nEmpty scaffolding is dropped: a widget with no children, no `label`, no `value`, and no `role` (a `role` of `Unknown` is reported as none) never appears.",
+  "description": "Walk the app's widget tree and return the widgets matching the filter, nested by ancestry: each one carries the matches from its own subtree in `children`.\nWidgets in between that don't match are skipped, so a `children` entry is a descendant, not necessarily a direct child.\n`role`, if given, is a role name (e.g. `Button`, `Label`), matched case-insensitively; an unknown role errors with the roles present in the tree.\n`limit` (200 by default) caps how many widgets come back: whole levels are kept from the top down, so the app's structure survives and the leaves go first, and any widget whose children were cut reports how many in `omitted_children`.\n`root` starts the walk at one widget instead of the app's root — pass the `id` of a widget that reported `omitted_children` to see that part of the tree in full.\n`exclude` leaves a subtree out — pass a widget `id`, or the same constraints the filter takes — and takes everything below it with it; use it to skip a panel whose text would otherwise answer every query.\nUse the returned `id` with `ui_click`, `ui_type_text`, or `ui_get_widget`.\nThe widgets are abridged — call `ui_get_widget` with an `id` for one widget's full detail, including its `bounds` (logical points, its center is where `ui_click` lands), its parent, and its text in full.\n`label` and `value` are cut short at 100 characters, marked with a trailing ` […]`; the filters still match against the whole text, so a phrase past the cut still finds its widget.\nEmpty scaffolding is dropped: a widget with no children, no `label`, no `value`, and no `role` (a `role` of `Unknown` is reported as none) never appears.",
   "inputSchema": {
     "$defs": {
       "Exclusion": {
@@ -1136,7 +1136,7 @@ Conventions:
         "type": "object"
       },
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       }
@@ -1212,12 +1212,12 @@ Conventions:
   "outputSchema": {
     "$defs": {
       "Id": {
-        "description": "Widget id as `widget_tree` reports it: lower-case hex, no prefix.",
+        "description": "Widget id as `ui_widget_tree` reports it: lower-case hex, no prefix.",
         "pattern": "^[0-9a-fA-F]{1,16}$",
         "type": "string"
       },
       "Widget": {
-        "description": "A widget in `widget_tree`'s hierarchical result.\n\nOnly matching widgets appear; each one nests the matches found in its own subtree. A\nnon-matching widget contributes its matches to its nearest matching ancestor, so a\n`children` entry is not necessarily a direct child in the app's tree.\n\nDeliberately leaner than [`WidgetDetail`]: a whole tree of `bounds` is a lot of numbers for an\nagent to read past, and actions take an `id` anyway. `get_widget` has the full detail.\n\nA widget that says nothing — no children, no `label`, no `value` and no role — is dropped\nentirely, as is a `TextRun` that only repeats its parent's text.\n\n`label` and `value` are cut short at [`MAX_TEXT_CHARS`], marked with a trailing\n[`TRUNCATION_MARKER`].",
+        "description": "A widget in `ui_widget_tree`'s hierarchical result.\n\nOnly matching widgets appear; each one nests the matches found in its own subtree. A\nnon-matching widget contributes its matches to its nearest matching ancestor, so a\n`children` entry is not necessarily a direct child in the app's tree.\n\nDeliberately leaner than [`WidgetDetail`]: a whole tree of `bounds` is a lot of numbers for an\nagent to read past, and actions take an `id` anyway. `ui_get_widget` has the full detail.\n\nA widget that says nothing — no children, no `label`, no `value` and no role — is dropped\nentirely, as is a `TextRun` that only repeats its parent's text.\n\n`label` and `value` are cut short at [`MAX_TEXT_CHARS`], marked with a trailing\n[`TRUNCATION_MARKER`].",
         "properties": {
           "children": {
             "description": "`default` keeps the derived schema honest: a leaf omits the field entirely.",
@@ -1238,7 +1238,7 @@ Conventions:
           },
           "id": {
             "$ref": "#/$defs/Id",
-            "description": "Node id, used with `click`, `type_text`, and `get_widget`."
+            "description": "Node id, used with `ui_click`, `ui_type_text`, and `ui_get_widget`."
           },
           "label": {
             "type": [

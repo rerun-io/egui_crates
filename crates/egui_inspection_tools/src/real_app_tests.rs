@@ -1,4 +1,4 @@
-//! `widget_tree` run against a real egui frame.
+//! `ui_widget_tree` run against a real egui frame.
 //!
 //! The hand-built trees in [`crate::tree`]'s tests pin one rule each, on a tree of five nodes.
 //! This module builds a small but ordinary app — panels, a heading, buttons, a text field, a
@@ -143,7 +143,7 @@ fn the_demo_app_on_screen() {
     harness.snapshot("demo_app");
 }
 
-/// The whole app, the way `widget_tree` with no filter hands it to an agent.
+/// The whole app, the way `ui_widget_tree` with no filter hands it to an agent.
 ///
 /// Without a `limit`, so the snapshot stays the whole picture — what `limit` does to it is its
 /// own test.
@@ -214,8 +214,8 @@ fn a_long_label_is_cut_short_but_still_matchable() {
     );
 }
 
-/// The cut is not a loss: the tree hands out an `id`, and `get_widget` turns that `id` back
-/// into the whole text. This is the contract that lets `widget_tree` stay small.
+/// The cut is not a loss: the tree hands out an `id`, and `ui_get_widget` turns that `id` back
+/// into the whole text. This is the contract that lets `ui_widget_tree` stay small.
 #[test]
 fn get_widget_returns_the_text_the_tree_cut_short() {
     let app_tree = demo_app_tree();

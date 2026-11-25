@@ -52,7 +52,7 @@ pub trait Transport: MaybeSend + MaybeSync {
 
 /// Waits for a while, using whatever timer the host has.
 ///
-/// Only `wait_for` waits: between polls of the widget tree, and for its timeout.
+/// Only `ui_wait_for` waits: between polls of the widget tree, and for its timeout.
 /// Any `Fn(Duration) -> BoxFuture<'static, ()>` is a `Sleep`.
 pub trait Sleep: MaybeSend + MaybeSync {
     /// Resolve after `duration`.
