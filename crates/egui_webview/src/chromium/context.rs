@@ -102,6 +102,7 @@ impl Context {
             events,
             state: Mutex::new(state),
         });
+        super::runtime::register_page(&context);
         (context, receiver)
     }
 

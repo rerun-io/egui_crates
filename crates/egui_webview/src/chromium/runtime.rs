@@ -2,7 +2,7 @@
 //! message pump that egui's passes drive.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock, Weak};
 use std::time::Duration;
 
 // The `wrap_*` macros call `add_ref` from this trait.
@@ -19,6 +19,7 @@ use cef::{
 };
 use egui::Ui;
 
+use super::context::Context;
 use crate::Error;
 
 /// The name of the process message that brings the text of a page's
@@ -37,10 +38,11 @@ static INIT: OnceLock<Result<(), String>> = OnceLock::new();
 /// Whether [`run_subprocess`] has run. Without it, CEF's helper processes would run the app.
 static RAN_SUBPROCESS_CHECK: AtomicBool = AtomicBool::new(false);
 
-/// The contexts that run CEF's message loop work in their passes, and so are repainted when CEF
-/// schedules work.
+/// The live pages, whose egui contexts [`wake`] repaints when CEF schedules work.
+///
+/// Weak, so that an egui context isn't kept alive after its last page is gone.
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
-static CONTEXTS: std::sync::Mutex<Vec<egui::Context>> = std::sync::Mutex::new(Vec::new());
+static PAGES: std::sync::Mutex<Vec<Weak<Context>>> = std::sync::Mutex::new(Vec::new());
 
 /// Runs this process as a CEF helper process and exits, if Chromium started it as one. Otherwise
 /// it returns right away.
@@ -182,14 +184,22 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
         .clone()
         .map_err(|err| Error::backend(format!("CEF: {err}")))?;
 
-    let mut contexts = CONTEXTS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if !contexts.iter().any(|c| c == ctx) {
-        contexts.push(ctx.clone());
-        ctx.add_plugin(CefPlugin);
-    }
+    // egui ignores a second plugin of the same type.
+    ctx.add_plugin(CefPlugin);
     Ok(())
+}
+
+/// Has [`wake`] repaint the egui context of `page` while the page lives.
+pub fn register_page(page: &Arc<Context>) {
+    let mut pages = lock_pages();
+    pages.retain(|page| 0 < page.strong_count());
+    pages.push(Arc::downgrade(page));
+}
+
+fn lock_pages() -> std::sync::MutexGuard<'static, Vec<Weak<Context>>> {
+    PAGES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// CEF's root cache directory, which is unique to this process so that two running instances of
@@ -245,15 +255,16 @@ impl egui::Plugin for CefPlugin {
     }
 }
 
-/// Requests a repaint of every context in [`CONTEXTS`] after `delay`, so that its next pass runs
-/// CEF's message loop work.
+/// Requests a repaint of the egui context of every page in [`PAGES`] after `delay`, so that its
+/// next pass runs CEF's message loop work. Forgets the pages that are gone.
 fn wake(delay: Duration) {
-    let contexts = CONTEXTS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    for ctx in contexts.iter() {
-        ctx.request_repaint_after(delay);
-    }
+    lock_pages().retain(|page| {
+        let page = page.upgrade();
+        if let Some(page) = &page {
+            page.egui_ctx.request_repaint_after(delay);
+        }
+        page.is_some()
+    });
 }
 
 wrap_app! {
