@@ -1890,6 +1890,7 @@ name = "egui_webview"
 version = "0.1.0"
 dependencies = [
  "cef",
+ "document-features",
  "eframe 0.37.0",
  "egui 0.37.0",
  "js-sys",

@@ -8,7 +8,7 @@
 //!
 //! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
 //!   paints like any other image, and the widget forwards egui's input to the page.
-//! - An embedded view (`WKWebView` on macOS, an `<iframe>` on the web): the page lies below egui's
+//! - An embedded view (`WKWebView` on macOS with the `wry` feature, an `<iframe>` on the web): the page lies below egui's
 //!   surface. Its rect is an [`egui::EmbeddedView`], which clears the rect to
 //!   transparent so the page shows through. After every pass of the root viewport,
 //!   [`WebViewInstance::place`] moves the page to where egui put that rect, which egui reports
@@ -21,18 +21,21 @@
 //! A [`WebViewInstance`] isn't `Send`. If the code that shows the page can't keep one, use
 //! [`WebView`]. It shows a page with one call, and the pages live in a [`WebViews`] that the app
 //! owns.
+//!
+//! ## Feature flags
+#![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 
 mod backend;
 #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
 mod chromium;
 mod instance;
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "wry", target_os = "macos"))]
 mod macos;
 mod mailbox;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod webviews;
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "wry", target_os = "macos"))]
 mod wry_page;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};

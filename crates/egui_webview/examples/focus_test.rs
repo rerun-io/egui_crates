@@ -195,7 +195,7 @@ impl eframe::App for Test {
 fn main() -> eframe::Result {
     egui_webview::init();
     let cef = cfg!(feature = "cef")
-        && (cfg!(target_os = "linux")
+        && (cfg!(not(all(feature = "wry", target_os = "macos")))
             || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
 
     let options = eframe::NativeOptions {
@@ -229,7 +229,7 @@ fn main() -> eframe::Result {
 }
 
 /// Key presses and clicks sent through `AppKit`, for a page in an embedded view.
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "wry", target_os = "macos"))]
 mod native {
     #![expect(unsafe_code, clippy::unwrap_used)]
 
@@ -297,7 +297,7 @@ mod native {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(feature = "wry", target_os = "macos")))]
 mod native {
     pub fn press_tab(_frame: &eframe::Frame, _shift: bool) {
         unreachable!("Only CEF here");
