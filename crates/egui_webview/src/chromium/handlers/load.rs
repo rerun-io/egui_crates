@@ -25,6 +25,8 @@ wrap_load_handler! {
             _transition_type: cef::TransitionType,
         ) {
             if let Some(url) = main_frame_url(frame) {
+                // The render process may report no focus change when the focused page goes away.
+                self.context.state.lock().focused_node_editable = false;
                 self.context.send(WebViewEvent::Loading { url });
             }
         }

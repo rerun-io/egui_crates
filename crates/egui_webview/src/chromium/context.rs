@@ -49,8 +49,12 @@ pub struct State {
     pub popup_rect: Option<Rect>,
     pub cursor: CursorIcon,
     pub tooltip: Option<String>,
-    /// Whether an editable element of the page has focus.
-    pub editable: bool,
+    /// Whether CEF last asked for a virtual keyboard, which it does when an editable element
+    /// gains focus by a click or after one. See [`State::editable`].
+    pub keyboard_requested: bool,
+    /// Whether the element that last gained focus in any of the page's frames is editable, as
+    /// the render process reports it. See [`State::editable`].
+    pub focused_node_editable: bool,
     /// The text cursor at the end of the IME composition, in view points, for placing the IME's
     /// candidate window.
     pub text_cursor: Option<Rect>,
@@ -64,6 +68,17 @@ pub struct State {
     /// The root viewport's pass (see [`egui::Context::cumulative_pass_nr_for`]) that last showed
     /// the page.
     pub shown_pass: Option<u64>,
+}
+
+impl State {
+    /// Whether an editable element of the page has focus, so that the IME should be enabled.
+    ///
+    /// Either signal is enough. CEF doesn't ask for a virtual keyboard when an element gains
+    /// focus before the user has interacted with the page, such as with `autofocus`. The
+    /// render process reports every focus change.
+    pub fn editable(&self) -> bool {
+        self.keyboard_requested || self.focused_node_editable
+    }
 }
 
 /// What the page's widget saw and did in its passes, for the backend.
@@ -90,7 +105,8 @@ impl Context {
             popup_rect: None,
             cursor: CursorIcon::Default,
             tooltip: None,
-            editable: false,
+            keyboard_requested: false,
+            focused_node_editable: false,
             text_cursor: None,
             context_menu: None,
             took_focus_away: None,

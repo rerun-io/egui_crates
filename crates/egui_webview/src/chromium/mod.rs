@@ -255,7 +255,7 @@ impl PageWidget for Context {
 
         // Enable the IME while an editable element in the page has focus. The text cursor is
         // relative to the view, so it is moved into egui's screen space.
-        if response.has_focus() && state.editable {
+        if response.has_focus() && state.editable() {
             let cursor = state
                 .text_cursor
                 .map_or(rect, |cursor| cursor.translate(rect.min.to_vec2()));

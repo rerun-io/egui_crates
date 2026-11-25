@@ -107,7 +107,7 @@ wrap_render_handler! {
             // CEF asks for a virtual keyboard when an editable element gains focus, and passes
             // `CEF_TEXT_INPUT_MODE_NONE` when it loses it.
             let editable = *input_mode.as_ref() != sys::cef_text_input_mode_t::CEF_TEXT_INPUT_MODE_NONE;
-            self.context.state.lock().editable = editable;
+            self.context.state.lock().keyboard_requested = editable;
             self.context.request_repaint();
         }
 

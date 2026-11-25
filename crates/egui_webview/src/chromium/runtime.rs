@@ -16,8 +16,8 @@ use cef::{
     wrap_browser_process_handler, wrap_render_process_handler,
 };
 use cef::{
-    ImplListValue as _, ImplProcessMessage as _, ImplV8Context as _, ImplV8Handler,
-    ImplV8Value as _, V8Handler, V8Value, WrapV8Handler, wrap_v8_handler,
+    ImplDomnode as _, ImplListValue as _, ImplProcessMessage as _, ImplV8Context as _,
+    ImplV8Handler, ImplV8Value as _, V8Handler, V8Value, WrapV8Handler, wrap_v8_handler,
 };
 use egui::Ui;
 
@@ -27,6 +27,10 @@ use crate::{Error, ShutdownGuard};
 /// The name of the process message that brings the text of a page's
 /// `window.ipc.postMessage(text)` from the render process to the browser process.
 pub const IPC_MESSAGE: &str = "egui_webview_ipc";
+
+/// The name of the process message that tells the browser process whether the element that
+/// gained focus in a frame is editable. Its one argument is that bool.
+pub const FOCUSED_NODE_MESSAGE: &str = "egui_webview_focused_node";
 
 /// The longest time between two calls to `cef::do_message_loop_work` while a webview exists.
 ///
@@ -630,6 +634,27 @@ wrap_render_process_handler! {
             );
             ipc.set_value_bykey(Some(&"postMessage".into()), Some(&mut post_message), fixed.into());
             global.set_value_bykey(Some(&"ipc".into()), Some(&mut ipc), fixed.into());
+        }
+
+        /// Tells the browser process in a [`FOCUSED_NODE_MESSAGE`] whether the element that
+        /// gained focus in `frame` is editable. `node` is `None` when no element has focus.
+        fn on_focused_node_changed(
+            &self,
+            _browser: Option<&mut Browser>,
+            frame: Option<&mut cef::Frame>,
+            node: Option<&mut cef::Domnode>,
+        ) {
+            let editable = node.is_some_and(|node| node.is_editable() != 0);
+            let message = cef::process_message_create(Some(&FOCUSED_NODE_MESSAGE.into()));
+            if let (Some(frame), Some(mut message)) = (frame, message) {
+                if let Some(arguments) = message.argument_list() {
+                    arguments.set_bool(0, editable.into());
+                }
+                frame.send_process_message(
+                    sys::cef_process_id_t::PID_BROWSER.into(),
+                    Some(&mut message),
+                );
+            }
         }
     }
 }

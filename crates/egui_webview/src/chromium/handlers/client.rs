@@ -12,7 +12,7 @@ use cef::{
 
 use crate::WebViewEvent;
 use crate::chromium::context::Context;
-use crate::chromium::runtime::IPC_MESSAGE;
+use crate::chromium::runtime::{FOCUSED_NODE_MESSAGE, IPC_MESSAGE};
 
 wrap_client! {
     pub struct EguiClient {
@@ -51,7 +51,8 @@ wrap_client! {
         }
 
         /// Turns the text that the main frame passed to `window.ipc.postMessage(text)` into a
-        /// [`WebViewEvent::Message`].
+        /// [`WebViewEvent::Message`], and stores whether a frame's newly focused element is
+        /// editable.
         fn on_process_message_received(
             &self,
             _browser: Option<&mut Browser>,
@@ -59,21 +60,31 @@ wrap_client! {
             _source_process: cef::ProcessId,
             message: Option<&mut cef::ProcessMessage>,
         ) -> ::std::os::raw::c_int {
-            // Only the main frame defines `window.ipc`, but the sender is checked here too,
-            // since a compromised render process can send any message.
-            let Some(message) = message.filter(|_| frame.is_some_and(|frame| frame.is_main() != 0))
-            else {
+            let Some(message) = message else {
                 return 0;
             };
-            if CefString::from(&message.name()).to_string() != IPC_MESSAGE {
-                return 0;
+            match CefString::from(&message.name()).to_string().as_str() {
+                // Every frame reports its focus changes, and the message carries only a bool.
+                FOCUSED_NODE_MESSAGE => {
+                    let editable = message
+                        .argument_list()
+                        .is_some_and(|arguments| arguments.bool(0) != 0);
+                    self.context.state.lock().focused_node_editable = editable;
+                    self.context.request_repaint();
+                    1
+                }
+                // Only the main frame defines `window.ipc`, but the sender is checked here too,
+                // since a compromised render process can send any message.
+                IPC_MESSAGE if frame.is_some_and(|frame| frame.is_main() != 0) => {
+                    let text = message
+                        .argument_list()
+                        .map(|arguments| CefString::from(&arguments.string(0)).to_string())
+                        .unwrap_or_default();
+                    self.context.send(WebViewEvent::Message(text));
+                    1
+                }
+                _ => 0,
             }
-            let text = message
-                .argument_list()
-                .map(|arguments| CefString::from(&arguments.string(0)).to_string())
-                .unwrap_or_default();
-            self.context.send(WebViewEvent::Message(text));
-            1
         }
     }
 }
