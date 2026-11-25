@@ -1,5 +1,49 @@
 //! Web pages as [egui](https://www.egui.rs/) widgets.
 //!
+//! ## Example
+//! Create the page once, show it in `ui`, and place it in `output_hook`:
+//!
+//! ```no_run
+//! use egui_webview::{WebViewInstance, WebViewSource};
+//!
+//! struct MyApp {
+//!     webview: WebViewInstance,
+//! }
+//!
+//! impl eframe::App for MyApp {
+//!     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+//!         egui::CentralPanel::default().show(ui, |ui| {
+//!             self.webview.ui(ui, ui.available_size());
+//!         });
+//!     }
+//!
+//!     fn output_hook(&mut self, ctx: &egui::Context, output: &mut egui::FullOutput) {
+//!         self.webview.place(ctx, &output.platform_output.embedded_views);
+//!     }
+//! }
+//!
+//! fn main() -> eframe::Result {
+//!     egui_webview::init(); // Must come first, see `init`.
+//!
+//!     eframe::run_native(
+//!         "My app",
+//!         eframe::NativeOptions::default(),
+//!         Box::new(|cc| {
+//!             let source = WebViewSource::Url("https://www.egui.rs".to_owned());
+//!             let webview = WebViewInstance::new(
+//!                 &cc.egui_ctx,
+//!                 egui::Id::new("page"),
+//!                 &source,
+//!                 cc.embedded_views(),
+//!             )?;
+//!             Ok(Box::new(MyApp { webview }))
+//!         }),
+//!     )
+//! }
+//! ```
+//!
+//! ## How it works
+//!
 //! The app creates a [`WebViewInstance`] once, keeps it, calls [`WebViewInstance::ui`] in every
 //! pass in which the page should be shown, and [`WebViewInstance::place`] from
 //! [`eframe::App::output_hook`].
