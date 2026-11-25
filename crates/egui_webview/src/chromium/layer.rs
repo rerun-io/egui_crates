@@ -107,9 +107,13 @@ fn union([ax, ay, aw, ah]: [usize; 4], [bx, by, bw, bh]: [usize; 4]) -> [usize; 
 
 /// `rect` as `[x, y, width, height]`, clipped to a frame of `size`.
 fn clamp_rect(rect: &cef::Rect, size: [usize; 2]) -> [usize; 4] {
-    let x = usize::try_from(rect.x).unwrap_or(0).min(size[0]);
-    let y = usize::try_from(rect.y).unwrap_or(0).min(size[1]);
-    let w = usize::try_from(rect.width).unwrap_or(0).min(size[0] - x);
-    let h = usize::try_from(rect.height).unwrap_or(0).min(size[1] - y);
+    let clamp = |start: i32, len: i32, max: usize| {
+        let end = i64::from(start) + i64::from(len.max(0));
+        let to_index = |i: i64| usize::try_from(i).unwrap_or(0).min(max);
+        let (start, end) = (to_index(i64::from(start)), to_index(end));
+        (start, end - start)
+    };
+    let (x, w) = clamp(rect.x, rect.width, size[0]);
+    let (y, h) = clamp(rect.y, rect.height, size[1]);
     [x, y, w, h]
 }
