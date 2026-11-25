@@ -4,6 +4,9 @@ use eframe::EmbeddedViews;
 use egui::{
     Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
 };
+use egui::{
+    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
+};
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 
@@ -288,6 +291,8 @@ impl WebViewInstance {
     ///
     /// Call it for a backend that renders into a texture too. It has no view to place, but it
     /// uses the call to stop rendering a page that isn't shown.
+    ///
+    /// This also gives the page egui's current theme as its `prefers-color-scheme`.
     pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
         // egui also reports a view that only touches the clip rect, with nothing to see.
         let output = outputs

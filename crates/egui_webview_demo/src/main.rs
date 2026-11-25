@@ -428,11 +428,20 @@ fn main() -> eframe::Result {
     // With CEF, its helper processes run from this executable. A helper process ends here.
     egui_webview::init();
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]),
+    let viewport = egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]);
+    // On Windows, a page only shows through egui's surface in a transparent window.
+    #[cfg(target_os = "windows")]
+    let viewport = viewport.with_transparent(true);
+
+    #[cfg_attr(not(target_os = "windows"), expect(unused_mut))]
+    let mut options = eframe::NativeOptions {
+        viewport,
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
+    #[cfg(target_os = "windows")]
+    egui_webview::wgpu_configuration(&mut options.wgpu_options);
+
     eframe::run_native(
         "egui_webview demo",
         options,
