@@ -107,20 +107,20 @@ opt-level = 2
 # `egui_webview` needs egui changes that aren't released yet: `egui::EmbeddedView`,
 # `Response::focused_via`, and a surface that keeps its alpha while a view below egui is shown.
 # Switch to the next egui release once it is out.
-ecolor = { git = "https://github.com/emilk/egui.git", branch = "main" }
-eframe = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui-winit = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_glow = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "main" }
-emath = { git = "https://github.com/emilk/egui.git", branch = "main" }
-epaint = { git = "https://github.com/emilk/egui.git", branch = "main" }
-epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "main" }
+ecolor = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+eframe = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui-winit = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui_extras = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui_glow = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+emath = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+epaint = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
+epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "emilk/present-with-views-below" } # TODO(emilk/egui#8945): back to `main`
 
 
 # ----------------------------------------------------------------------------------------

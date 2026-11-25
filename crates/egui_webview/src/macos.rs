@@ -36,16 +36,24 @@ use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
 /// The offset that puts every page's layer below egui's `CAMetalLayer`, whose `zPosition` is 0.
 ///
 /// A clip view's layer gets [`EmbeddedViewOutput::z_index`] minus this offset as its
-/// `zPosition`. The pages thus stack in egui's paint order among each other, and stay below
-/// egui's layer as long as egui has fewer than 1000 layers.
+/// `zPosition`, but at most -1. The pages thus stay below egui's layer, and stack in egui's
+/// paint order among each other as long as egui has at most 1000 layers.
 const BELOW_EGUI: f64 = 1000.0;
 
-/// Returns winit's `NSView` of `window`, with egui's Metal layer set up for pages below it.
-///
-/// Logs a warning if egui doesn't render with Metal, since the pages then cover egui.
+/// The output last applied to the views.
+#[derive(Debug, PartialEq)]
+struct Placement {
+    output: EmbeddedViewOutput,
+
+    /// egui's zoom factor when `output` was applied.
+    zoom: f32,
+}
+
+/// Returns winit's `NSView` of `window`.
 ///
 /// # Errors
-/// If `window` has no `AppKit` window handle.
+/// If `window` has no `AppKit` window handle, or if egui doesn't render with Metal, since the
+/// pages would then cover egui.
 fn window_view(window: &impl HasWindowHandle) -> Result<Retained<NSView>, Error> {
     let handle = window.window_handle().map_err(Error::backend)?;
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
@@ -56,26 +64,23 @@ fn window_view(window: &impl HasWindowHandle) -> Result<Retained<NSView>, Error>
     let view = unsafe { Retained::retain(handle.ns_view.as_ptr().cast::<NSView>()) }
         .ok_or(Error::Unsupported)?;
 
+    // egui's Metal layer is a sublayer of the view's layer, so the pages can go below it.
     // OpenGL draws into the view's backing layer, below all sublayers.
     // SAFETY: `sublayers` returns an array of `CALayer`s, or nil.
-    let metal = unsafe { view.layer().and_then(|layer| layer.sublayers()) }.and_then(|layers| {
-        layers
-            .iter()
-            .find_map(|layer| layer.downcast::<CAMetalLayer>().ok())
-    });
-    if let Some(metal) = metal {
-        // Present egui's frames in the Core Animation transaction that also commits the frame
-        // changes `place` makes to the page views. Otherwise egui's frame appears after the
-        // page has moved, and the window background shows through the rect that the previous
-        // frame cleared.
-        metal.setPresentsWithTransaction(true);
+    let has_metal_layer =
+        unsafe { view.layer().and_then(|layer| layer.sublayers()) }.is_some_and(|layers| {
+            layers
+                .iter()
+                .any(|layer| layer.downcast::<CAMetalLayer>().is_ok())
+        });
+    if has_metal_layer {
+        Ok(view)
     } else {
-        log::warn!(
-            "egui_webview: egui doesn't draw with Metal, so the pages will cover egui. \
-             Use eframe's wgpu renderer."
-        );
+        Err(Error::backend(
+            "egui doesn't render with Metal, so the page would cover egui. \
+             Use eframe's wgpu renderer.",
+        ))
     }
-    Ok(view)
 }
 
 /// Exposes an `NSView` as a window handle, so that wry adds its `WKWebView` as a subview of it.
@@ -89,7 +94,7 @@ impl HasWindowHandle for ViewHandle<'_> {
     }
 }
 
-/// Shows a page in a `WKWebView` below egui's surface. See the module docs.
+/// Shows a page in a `WKWebView` below egui's surface.
 #[derive(Debug)]
 pub struct WryBackend {
     page: WryPage,
@@ -100,9 +105,8 @@ pub struct WryBackend {
     /// [`Backend::reload`] loads it again.
     html: Option<String>,
 
-    /// The output last applied to the views, and the zoom factor it was applied with. `None`
-    /// while hidden, which is how the page starts.
-    last: Option<(EmbeddedViewOutput, f32)>,
+    /// `None` while hidden, which is how the page starts.
+    last: Option<Placement>,
 
     /// The [`FocusEdge`]s before and after the `WKWebView` in the key view loop, in that order.
     focus_edges: [Retained<FocusEdge>; 2],
@@ -137,7 +141,7 @@ impl WryBackend {
         clip.setHidden(true);
         parent.addSubview(&clip);
 
-        let page = match WryPage::new(ctx, source, &ViewHandle(&clip), true) {
+        let page = match WryPage::new(ctx, source, &ViewHandle(&clip)) {
             Ok(page) => page,
             Err(err) => {
                 clip.removeFromSuperview();
@@ -173,22 +177,28 @@ impl WryBackend {
         })
     }
 
+    /// The window's first responder, if it is a view.
+    fn first_responder_view(&self) -> Option<Retained<NSView>> {
+        self.clip
+            .window()?
+            .firstResponder()?
+            .downcast::<NSView>()
+            .ok()
+    }
+
     /// Whether the window's first responder is the webview or one of its descendants.
     fn view_focused(&self) -> bool {
-        self.clip
-            .window()
-            .and_then(|window| window.firstResponder())
-            .and_then(|responder| responder.downcast::<NSView>().ok())
+        self.first_responder_view()
             .is_some_and(|view| view.isDescendantOf(&self.page.webview.webview()))
     }
 
-    /// Whether a focus edge briefly holds focus after Tab leaves the page.
-    fn edge_focused(&self) -> bool {
-        self.clip
-            .window()
-            .and_then(|window| window.firstResponder())
-            .and_then(|responder| responder.downcast::<NSView>().ok())
-            .is_some_and(|view| self.focus_edges.iter().any(|edge| *view == ***edge))
+    /// Whether the window's first responder is the webview, one of its descendants, or a
+    /// focus edge, which briefly holds the focus after Tab leaves the page.
+    fn view_or_edge_focused(&self) -> bool {
+        self.first_responder_view().is_some_and(|view| {
+            view.isDescendantOf(&self.page.webview.webview())
+                || self.focus_edges.iter().any(|edge| *view == ***edge)
+        })
     }
 }
 
@@ -249,16 +259,19 @@ impl Backend for WryBackend {
         // `AppKit` places views in window points. One ui point is `zoom` window points.
         let zoom = ctx.zoom_factor();
         self.page.set_zoom(zoom);
-        let last = self.last.as_ref().map(|(output, zoom)| (output, *zoom));
-        if last == output.map(|output| (output, zoom)) {
+        let placement = output.map(|output| Placement {
+            output: output.clone(),
+            zoom,
+        });
+        if self.last == placement {
             return;
         }
-        self.last = output.map(|output| (output.clone(), zoom));
+        self.last = placement;
 
         let Some(output) = output else {
             // A hidden view stays first responder and keeps receiving key events. Give the
             // focus to egui, and give it back to the page when the page is shown again.
-            if self.view_focused() || self.edge_focused() {
+            if self.view_or_edge_focused() {
                 self.blur();
                 self.pending_focus = Some(FocusDirection::None);
             }
@@ -282,9 +295,9 @@ impl Backend for WryBackend {
             vec![Rect::from_min_size(Pos2::ZERO, visible.size())]
         };
 
-        // These changes commit in the implicit Core Animation transaction that also presents
-        // egui's frame (see `window_view`), so don't open an explicit one. Layers that back
-        // views don't animate property changes.
+        // These changes commit in the implicit Core Animation transaction, in which eframe
+        // also presents egui's frame, so don't open an explicit one. Layers that back views
+        // don't animate property changes.
         self.clip.setFrame(cg_rect(visible));
         self.page
             .webview
@@ -292,7 +305,7 @@ impl Backend for WryBackend {
             .setFrame(cg_rect(rect.translate(-origin)));
         if let Some(layer) = self.clip.layer() {
             #[expect(clippy::cast_precision_loss)]
-            layer.setZPosition(output.z_index as f64 - BELOW_EGUI);
+            layer.setZPosition((output.z_index as f64 - BELOW_EGUI).min(-1.0));
         }
 
         self.clip.setHidden(false);
@@ -324,7 +337,7 @@ impl Backend for WryBackend {
 
     fn blur(&mut self) {
         self.pending_focus = None;
-        if (self.view_focused() || self.edge_focused())
+        if self.view_or_edge_focused()
             && let Some(window) = self.clip.window()
         {
             // SAFETY: `superview` returns an `NSView`, or nil.

@@ -78,7 +78,6 @@ web-sys = { workspace = true, features = [
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 base64 = { workspace = true, optional = true }
 cef = { workspace = true, optional = true }
-raw-window-handle = "0.6.2"
 tempfile = { workspace = true, optional = true }
 # Converts egui keys to the platform scancodes that CEF expects, which egui's key events don't
 # carry.
@@ -111,6 +110,7 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
   "CALayer",
   "CAMetalLayer",
 ] }
+raw-window-handle = "0.6.2"
 wry = { version = "0.57.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]

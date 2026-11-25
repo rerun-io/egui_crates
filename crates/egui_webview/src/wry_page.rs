@@ -1,10 +1,10 @@
-//! The parts of the macOS and Windows backends that are the same for both: a wry webview and
-//! the events it reports.
+//! A wry webview and the events it reports.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use egui::Context;
+use objc2_foundation::{NSString, NSURL};
 use raw_window_handle::HasWindowHandle;
 
 use crate::{Error, WebViewEvent, WebViewSource, warn};
@@ -12,7 +12,7 @@ use crate::{Error, WebViewEvent, WebViewSource, warn};
 /// A wry webview, together with the [`WebViewEvent`]s it reported since the last
 /// [`Self::take_events`].
 ///
-/// Each wry backend owns one and adds its platform's placement and focus handling around it.
+/// The backend that owns it adds the placement and focus handling around it.
 pub struct WryPage {
     pub webview: wry::WebView,
     events: Rc<RefCell<Vec<WebViewEvent>>>,
@@ -33,22 +33,17 @@ impl std::fmt::Debug for WryPage {
 impl WryPage {
     /// Creates a webview that loads `source`, as a child of `parent`.
     ///
-    /// The webview starts hidden unless `visible` is `true`.
-    ///
     /// # Errors
-    /// If wry fails to create the webview.
+    /// If `source` is a URL that `NSURL` can't parse, or if wry fails to create the webview.
     pub fn new(
         ctx: &Context,
         source: &WebViewSource,
         parent: &impl HasWindowHandle,
-        visible: bool,
     ) -> Result<Self, Error> {
         check_url(source)?;
         let events = Rc::new(RefCell::new(Vec::new()));
         let builder = wry::WebViewBuilder::new()
-            .with_visible(visible)
-            // Otherwise wry activates the app (macOS) or focuses the page (Windows) when it
-            // creates the webview.
+            // Otherwise wry activates the app when it creates the webview.
             .with_focused(false)
             .with_ipc_handler({
                 let (ctx, events) = (ctx.clone(), Rc::clone(&events));
@@ -120,22 +115,26 @@ impl WryPage {
     }
 }
 
-/// Prevent wry from panicking when `NSURL` cannot parse a URL.
+/// Returns an error for a URL that `NSURL` can't parse, on which wry panics.
 fn check_url(source: &WebViewSource) -> Result<(), Error> {
-    cfg_select! {
-        target_os = "macos" => {
-            use objc2_foundation::{NSString, NSURL};
+    if let WebViewSource::Url(url) = source
+        && NSURL::URLWithString(&NSString::from_str(url)).is_none()
+    {
+        return Err(Error::backend(format!("Not a URL: {url:?}")));
+    }
+    Ok(())
+}
 
-            if let WebViewSource::Url(url) = source
-                && NSURL::URLWithString(&NSString::from_str(url)).is_none()
-            {
-                return Err(Error::backend(format!("Not a URL: {url:?}")));
-            }
-            Ok(())
-        }
-        _ => {
-            _ = source;
-            Ok(())
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// wry panics on a URL that `NSURL` can't parse, so `check_url` must reject it first.
+    #[test]
+    fn check_url_rejects_what_nsurl_cannot_parse() {
+        let url = |url: &str| WebViewSource::Url(url.to_owned());
+        assert!(check_url(&url("http://[::1")).is_err());
+        assert!(check_url(&url("https://example.com/")).is_ok());
+        assert!(check_url(&WebViewSource::Html("http://[::1".to_owned())).is_ok());
     }
 }
