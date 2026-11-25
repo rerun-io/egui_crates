@@ -79,7 +79,10 @@ impl WryPage {
     pub fn load(&self, source: &WebViewSource) -> Result<(), Error> {
         check_url(source)?;
         match source {
-            WebViewSource::Html(html) => self.webview.load_html(html),
+            // `load_html` makes a history entry that `WebKit` can't go back to.
+            WebViewSource::Html(html) => {
+                self.webview.load_url(&crate::backend::html_data_url(html))
+            }
             WebViewSource::Url(url) => self.webview.load_url(url.as_str()),
         }
         .map_err(Error::backend)
@@ -108,6 +111,14 @@ impl WryPage {
 
     pub fn forward(&self) {
         warn(self.webview.go_forward());
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        self.webview.can_go_back().unwrap_or(true)
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        self.webview.can_go_forward().unwrap_or(true)
     }
 
     pub fn take_events(&self) -> Vec<WebViewEvent> {

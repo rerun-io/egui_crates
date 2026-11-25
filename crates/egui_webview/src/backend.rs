@@ -196,3 +196,16 @@ pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
 }})();"#
     ))
 }
+
+/// Returns a base64 `data:` URL of the HTML document `html`.
+///
+/// Unlike an HTML string loaded directly, such a URL gets a session history entry that
+/// `WebKit` can navigate back to.
+#[cfg(any(feature = "cef", all(feature = "wry", target_os = "macos")))]
+pub(crate) fn html_data_url(html: &str) -> String {
+    use base64::Engine as _;
+
+    let mut url = String::from("data:text/html;charset=utf-8;base64,");
+    base64::engine::general_purpose::STANDARD.encode_string(html, &mut url);
+    url
+}

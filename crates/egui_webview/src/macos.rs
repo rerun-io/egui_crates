@@ -33,7 +33,7 @@ use self::clip_view::ClipView;
 use self::focus_edge::FocusEdge;
 use self::focus_observer::FocusObserver;
 use crate::wry_page::WryPage;
-use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
+use crate::{Backend, Error, WebViewEvent, WebViewSource};
 
 /// The output last applied to the views.
 #[derive(Debug, PartialEq)]
@@ -94,11 +94,6 @@ impl HasWindowHandle for ViewHandle<'_> {
 pub struct WryBackend {
     page: WryPage,
     clip: Retained<ClipView>,
-
-    /// The HTML of the last loaded source, if it was [`WebViewSource::Html`].
-    ///
-    /// [`Backend::reload`] loads it again.
-    html: Option<String>,
 
     /// `None` while hidden, which is how the page starts.
     last: Option<Placement>,
@@ -168,7 +163,6 @@ impl WryBackend {
         Ok(Self {
             page,
             clip,
-            html: source.html().map(str::to_owned),
             last: None,
             focus_edges,
             _focus_observer: focus_observer,
@@ -204,9 +198,7 @@ impl WryBackend {
 
 impl Backend for WryBackend {
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
-        self.page.load(source)?;
-        self.html = source.html().map(str::to_owned);
-        Ok(())
+        self.page.load(source)
     }
 
     fn evaluate_script(&mut self, script: &str) -> Result<(), Error> {
@@ -214,21 +206,7 @@ impl Backend for WryBackend {
     }
 
     fn reload(&mut self) {
-        // `WebKit` reloads a page that was loaded from an HTML string as an empty
-        // `about:blank`, so load the HTML again instead.
-        // SAFETY: `URL` is a getter whose only requirement is the main thread, which every
-        // call on the webview runs on.
-        let url = unsafe { self.page.webview.webview().URL() }.and_then(|url| url.absoluteString());
-        if let Some(html) = &self.html
-            && url.is_some_and(|url| {
-                let url = url.to_string();
-                url == "about:blank" || url.starts_with("about:blank#")
-            })
-        {
-            warn(self.page.webview.load_html(html));
-        } else {
-            self.page.reload();
-        }
+        self.page.reload();
     }
 
     fn back(&mut self) {
@@ -237,6 +215,14 @@ impl Backend for WryBackend {
 
     fn forward(&mut self) {
         self.page.forward();
+    }
+
+    fn can_go_back(&self) -> bool {
+        self.page.can_go_back()
+    }
+
+    fn can_go_forward(&self) -> bool {
+        self.page.can_go_forward()
     }
 
     fn set_theme(&mut self, theme: Theme) {

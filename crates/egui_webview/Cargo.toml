@@ -46,6 +46,7 @@ cef-sandbox = ["cef", "cef/sandbox"]
 ## Only macOS (`WKWebView`) has a backend so far: the feature has no effect on other platforms.
 ## It needs eframe's wgpu renderer.
 wry = [
+  "dep:base64",
   "dep:objc2",
   "dep:objc2-app-kit",
   "dep:objc2-core-foundation",

@@ -540,15 +540,9 @@ fn context_menu_id(page: &egui::Response) -> egui::Id {
 
 /// The URL that loads `source`. CEF loads only URLs, so HTML becomes a base64 `data:` URL.
 fn source_url(source: &WebViewSource) -> String {
-    use base64::Engine as _;
-
     match source {
         WebViewSource::Url(url) => url.as_str().to_owned(),
-        WebViewSource::Html(html) => {
-            let mut url = String::from("data:text/html;charset=utf-8;base64,");
-            base64::engine::general_purpose::STANDARD.encode_string(html, &mut url);
-            url
-        }
+        WebViewSource::Html(html) => crate::backend::html_data_url(html),
     }
 }
 

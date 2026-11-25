@@ -181,7 +181,7 @@ pub enum WebViewEvent {
     /// A page started loading.
     Loading {
         /// The URL of the page. For a page given as [`WebViewSource::Html`], this is
-        /// `about:srcdoc`, `about:blank` or a `data:` URL, depending on the backend.
+        /// `about:srcdoc` on the web, and a `data:` URL elsewhere.
         url: Url,
     },
 

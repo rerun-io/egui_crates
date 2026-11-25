@@ -186,8 +186,8 @@ impl Browser {
             let line = match event {
                 WebViewEvent::Loading { url } => format!("Loading {}", short_url(&url)),
                 WebViewEvent::Loaded { url } => {
-                    // Don't show the URL of a page given as HTML (`about:srcdoc`,
-                    // `about:blank` or a `data:` URL) in the URL field.
+                    // Don't show the URL of a page given as HTML (`about:srcdoc` or a
+                    // `data:` URL) in the URL field.
                     if !matches!(url.scheme(), "about" | "data") {
                         self.url = url.to_string();
                     }
