@@ -1,15 +1,3 @@
-//! Types into a page that CEF renders, by injecting events into egui's input, and checks the
-//! values of the page's form fields after each step.
-//!
-//! A plugin adds the events to egui's input, as an integration would. The OS sees none of them,
-//! and the window opens inactive, so the test can run while you use the computer.
-//!
-//! Prints `PASS` and exits with code 0 if the page reports the expected values after every step.
-//!
-//! ```sh
-//! cargo run -p egui_webview --features cef --example cef_input_test
-//! ```
-
 #![expect(clippy::print_stdout, clippy::unwrap_used)] // A test.
 
 use std::sync::Arc;
@@ -17,9 +5,7 @@ use std::sync::Arc;
 use egui::{CentralPanel, Event, ImeEvent, Key, Modifiers, Pos2, vec2};
 use egui_webview::{WebViewEvent, WebViewInstance, WebViewSource};
 
-use synthetic::{Injector, Queue, click, key, key_with_text};
-
-mod synthetic;
+use super::synthetic::{Injector, Queue, click, key, key_with_text};
 
 /// A text field, a `<select>` and a text area. On load and on every change, the page posts their
 /// values as `field|select|area`, with the text area's newlines replaced by `/`.
@@ -198,7 +184,7 @@ impl eframe::App for Test {
     }
 }
 
-fn main() -> eframe::Result {
+pub(super) fn run() -> eframe::Result {
     let _guard = egui_webview::init();
 
     let options = eframe::NativeOptions {
