@@ -1,4 +1,4 @@
-//! CEF's process-wide initialisation, the entry point of its helper processes, and the external
+//! CEF's process-wide initialization, the entry point of its helper processes, and the external
 //! message pump that egui's passes drive.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,7 +32,7 @@ pub const IPC_MESSAGE: &str = "egui_webview_ipc";
 /// `on_schedule_message_pump_work`, but it can also have work pending that it didn't schedule.
 pub const MAX_PUMP_DELAY: Duration = Duration::from_millis(100);
 
-/// The result of initialising CEF, which can happen only once per process.
+/// The result of initializing CEF, which can happen only once per process.
 static INIT: OnceLock<Result<(), String>> = OnceLock::new();
 
 /// Whether [`run_subprocess`] has run. Without it, CEF's helper processes would run the app.
@@ -138,12 +138,12 @@ fn load_framework() -> Result<(), String> {
     }
 }
 
-/// Initialises CEF once per process, and has `ctx` run CEF's message loop work at the start of
+/// Initializes CEF once per process, and has `ctx` run CEF's message loop work at the start of
 /// each of its passes.
 ///
 /// # Errors
 /// If [`run_subprocess`] hasn't run, if the CEF library can't be loaded, or if CEF fails to
-/// initialise. The first result is kept, so later calls fail in the same way.
+/// initialize. The first result is kept, so later calls fail in the same way.
 pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
     let result = INIT.get_or_init(|| {
         // CEF starts its helper processes from this executable. Refuse to start them before the
