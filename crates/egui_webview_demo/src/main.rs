@@ -1,5 +1,12 @@
 //! A demo of [`egui_webview::WebViewInstance`]: one page in the central panel, and more in egui
 //! windows above it, each with a browser bar.
+//!
+//! The menu bar names the backend that shows the pages. The target platform picks it: the
+//! system webview on macOS, an `<iframe>` on the web, and CEF elsewhere. To use CEF on macOS:
+//!
+//! ```sh
+//! EGUI_WEBVIEW_BACKEND=cef cargo run -p egui_webview_demo --features cef
+//! ```
 
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -289,6 +296,8 @@ impl eframe::App for DemoApp {
             // The menu bar takes the whole row, so the browser controls go inside it.
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.strong("🌐 egui_webview");
+                ui.weak(main.webview.backend_name())
+                    .on_hover_text("The backend that shows the pages");
                 ui.menu_button("Windows", |ui| {
                     let new_window = egui::Button::new("New browser window")
                         .shortcut_text(ui.ctx().format_shortcut(&NEW_WINDOW));

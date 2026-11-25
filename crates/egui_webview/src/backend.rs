@@ -52,6 +52,10 @@ impl PageWidget for EmbeddedWidget {
 /// All methods are called on the thread that runs egui, so a backend doesn't need to be `Send`.
 #[expect(unused_variables)] // The default implementations ignore their arguments.
 pub trait Backend: std::fmt::Debug {
+    /// A short name of the engine that shows the page, such as `"CEF"`, for the app to show
+    /// to the user.
+    fn name(&self) -> &'static str;
+
     /// Load a page.
     ///
     /// # Errors

@@ -279,6 +279,11 @@ impl WebViewInstance {
         }
     }
 
+    /// A short name of the engine that shows the page, such as `"CEF (Chromium)"`.
+    pub fn backend_name(&self) -> &'static str {
+        self.backend.name()
+    }
+
     /// Places the page where the pass that produced `outputs` put its embedded view, or hides it
     /// if the view isn't in `outputs`.
     ///

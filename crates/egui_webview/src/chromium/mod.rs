@@ -378,6 +378,10 @@ impl Context {
 }
 
 impl Backend for CefBackend {
+    fn name(&self) -> &'static str {
+        "CEF (Chromium)"
+    }
+
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
         self.main_frame()?
             .load_url(Some(&source_url(source).as_str().into()));

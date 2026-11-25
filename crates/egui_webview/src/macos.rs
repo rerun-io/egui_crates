@@ -197,6 +197,10 @@ impl WryBackend {
 }
 
 impl Backend for WryBackend {
+    fn name(&self) -> &'static str {
+        "wry (WKWebView)"
+    }
+
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
         self.page.load(source)
     }

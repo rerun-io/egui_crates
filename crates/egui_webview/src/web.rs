@@ -356,6 +356,10 @@ impl IframeBackend {
 }
 
 impl Backend for IframeBackend {
+    fn name(&self) -> &'static str {
+        "iframe"
+    }
+
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
         self.loaded.set(false);
         // Scripts queued for the previous page must not run in the new one.
