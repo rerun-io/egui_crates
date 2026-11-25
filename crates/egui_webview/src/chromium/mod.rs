@@ -25,6 +25,7 @@ mod runtime;
 
 use std::sync::Arc;
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use cef::{
     BrowserSettings, ImplBrowser as _, ImplBrowserHost as _, ImplFrame as _,
@@ -45,6 +46,9 @@ pub use runtime::{CefInitOptions, CefProcess, init, init_with, run_subprocess, s
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CefOptions {
     /// The most frames per second that CEF paints of the page. The minimum is 1.
+    ///
+    /// While the page is resized, CEF paints it as fast as it can instead, so that the page
+    /// follows its widget closely.
     ///
     /// The default is 60.
     pub frame_rate: u32,
@@ -83,6 +87,15 @@ fn cef_color(color: Color32) -> u32 {
 /// height>`, in points, for each pass that shows the page.
 pub(crate) const FRAMES_LOG_TARGET: &str = "egui_webview::frames";
 
+/// The frame rate CEF gets while its page is resized: as fast as it can paint.
+///
+/// CEF needs a few frames to follow each resize, so the page's frame rate decides how far the
+/// page lags behind its widget. See the `resize_bench` example.
+const RESIZE_FRAME_RATE: i32 = 1000;
+
+/// How long CEF keeps [`RESIZE_FRAME_RATE`] after a resize.
+const RESIZE_FRAME_RATE_DURATION: Duration = Duration::from_millis(100);
+
 /// How many passes of input are kept for the backend. More than that only pile up if the app
 /// doesn't call [`crate::WebViewInstance::place`].
 const MAX_WAITING_BATCHES: usize = 64;
@@ -104,6 +117,12 @@ pub struct CefBackend {
     /// The view's size in points and the pixels per point that the browser was last told.
     told_size: Option<(Vec2, f32)>,
 
+    /// [`CefOptions::frame_rate`], as CEF takes it.
+    frame_rate: i32,
+
+    /// When the browser was last resized, while it still paints at [`RESIZE_FRAME_RATE`].
+    resized_at: Option<Instant>,
+
     // Drop after the browser and its callbacks have released their CEF references.
     _runtime: crate::ShutdownGuard,
 }
@@ -116,6 +135,8 @@ impl std::fmt::Debug for CefBackend {
             .field("input", &self.input)
             .field("hidden", &self.hidden)
             .field("told_size", &self.told_size)
+            .field("frame_rate", &self.frame_rate)
+            .field("resized_at", &self.resized_at)
             .finish_non_exhaustive()
     }
 }
@@ -138,8 +159,9 @@ impl CefBackend {
             windowless_rendering_enabled: 1,
             ..Default::default()
         };
+        let frame_rate = i32::try_from(options.frame_rate).unwrap_or(i32::MAX);
         let settings = BrowserSettings {
-            windowless_frame_rate: i32::try_from(options.frame_rate).unwrap_or(i32::MAX),
+            windowless_frame_rate: frame_rate,
             background_color: cef_color(options.background_color),
             ..Default::default()
         };
@@ -165,6 +187,8 @@ impl CefBackend {
             input: input::Input::default(),
             hidden: false,
             told_size: None,
+            frame_rate,
+            resized_at: None,
             _runtime: runtime,
         })
     }
@@ -477,6 +501,21 @@ impl Backend for CefBackend {
                 }
                 host.was_resized();
                 self.told_size = Some(size);
+
+                if self.resized_at.is_none() && self.frame_rate < RESIZE_FRAME_RATE {
+                    host.set_windowless_frame_rate(RESIZE_FRAME_RATE);
+                }
+                self.resized_at = Some(Instant::now());
+            }
+        }
+
+        if let Some(resized_at) = self.resized_at {
+            let left = RESIZE_FRAME_RATE_DURATION.saturating_sub(resized_at.elapsed());
+            if left.is_zero() {
+                self.resized_at = None;
+                host.set_windowless_frame_rate(self.frame_rate);
+            } else {
+                ctx.request_repaint_after(left);
             }
         }
 
