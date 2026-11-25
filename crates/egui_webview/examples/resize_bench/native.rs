@@ -243,10 +243,10 @@ pub fn run() -> eframe::Result {
         "egui_webview resize_bench",
         options,
         Box::new(move |cc| {
-            let mut options = CefOptions::default();
-            if let Some(fps) = args.fps {
-                options.frame_rate = fps;
-            }
+            let options = CefOptions {
+                frame_rate: args.fps,
+                ..Default::default()
+            };
             let animation = if args.animated { ANIMATION } else { "" };
             let webview = WebViewInstance::new_cef_with_options(
                 &cc.egui_ctx,
