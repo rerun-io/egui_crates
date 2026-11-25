@@ -7,11 +7,15 @@ use egui::{
 
 use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
 
-// The platform's embedded backend, which `WebViewInstance::new` uses unless CEF is the default.
-#[cfg(target_os = "macos")]
-use crate::macos::WryBackend as PlatformBackend;
-#[cfg(target_arch = "wasm32")]
-use crate::web::IframeBackend as PlatformBackend;
+cfg_select! {
+    target_os = "macos" => {
+        use crate::macos::WryBackend as PlatformBackend;
+    }
+    target_arch = "wasm32" => {
+        use crate::web::IframeBackend as PlatformBackend;
+    }
+    _ => {}
+}
 
 /// A web page shown as an egui widget.
 ///
@@ -98,7 +102,8 @@ pub struct WebViewResponse {
 /// The backends that [`WebViewInstance::new`] chooses from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
-    /// The platform's own webview in an embedded view: an `<iframe>` on the web.
+    /// The platform's own webview in an embedded view: an `<iframe>` on the web, and a
+    /// `WKWebView` on macOS.
     Platform,
 
     /// CEF, which renders the page off screen. Requires the `cef` feature.
@@ -111,11 +116,7 @@ impl DefaultBackend {
 
     /// The backend of the target platform, chosen at compile time: CEF where there is no system
     /// webview.
-    const FOR_TARGET: Self = if cfg!(any(
-        target_arch = "wasm32",
-        target_os = "macos",
-        target_os = "windows"
-    )) {
+    const FOR_TARGET: Self = if cfg!(any(target_arch = "wasm32", target_os = "macos")) {
         Self::Platform
     } else {
         Self::Cef
@@ -179,15 +180,15 @@ impl WebViewInstance {
                 }
             }
             DefaultBackend::Platform => {
-                #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
-                {
-                    let backend = PlatformBackend::new(ctx, source, embedded_views)?;
-                    Ok(Self::with_backend(id, backend))
-                }
-                #[cfg(not(any(target_arch = "wasm32", target_os = "macos")))]
-                {
-                    _ = (ctx, id, source, embedded_views);
-                    Err(Error::Unsupported)
+                cfg_select! {
+                    any(target_arch = "wasm32", target_os = "macos") => {
+                        let backend = PlatformBackend::new(ctx, source, embedded_views)?;
+                        Ok(Self::with_backend(id, backend))
+                    }
+                    _ => {
+                        _ = (ctx, id, source, embedded_views);
+                        Err(Error::Unsupported)
+                    }
                 }
             }
         }
@@ -195,8 +196,8 @@ impl WebViewInstance {
 
     /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
     ///
-    /// A page in an embedded view (the web) needs nothing from the page to reserve its rect, so
-    /// this is known before the page exists. A CEF page has nothing to paint
+    /// A page in an embedded view (web, macOS) needs nothing from the page to reserve
+    /// its rect, so this is known before the page exists. A CEF page has nothing to paint
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
         match DefaultBackend::pick() {
