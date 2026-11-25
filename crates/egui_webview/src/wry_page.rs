@@ -34,6 +34,7 @@ impl WryPage {
         parent: &impl HasWindowHandle,
         visible: bool,
     ) -> Result<Self, Error> {
+        check_url(source)?;
         let events = Rc::new(RefCell::new(Vec::new()));
         let builder = wry::WebViewBuilder::new()
             .with_visible(visible)
@@ -72,6 +73,7 @@ impl WryPage {
     }
 
     pub fn load(&self, source: &WebViewSource) -> Result<(), Error> {
+        check_url(source)?;
         match source {
             WebViewSource::Html(html) => self.webview.load_html(html),
             WebViewSource::Url(url) => self.webview.load_url(url),
@@ -107,4 +109,22 @@ impl WryPage {
     pub fn take_events(&self) -> Vec<WebViewEvent> {
         self.events.take()
     }
+}
+
+/// Prevent wry from panicking when `NSURL` cannot parse a URL.
+#[cfg(target_os = "macos")]
+fn check_url(source: &WebViewSource) -> Result<(), Error> {
+    use objc2_foundation::{NSString, NSURL};
+
+    if let WebViewSource::Url(url) = source
+        && NSURL::URLWithString(&NSString::from_str(url)).is_none()
+    {
+        return Err(Error::backend(format!("Not a URL: {url:?}")));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn check_url(_source: &WebViewSource) -> Result<(), Error> {
+    Ok(())
 }

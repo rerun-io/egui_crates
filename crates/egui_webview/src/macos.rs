@@ -1,34 +1,23 @@
-//! The macOS backend: a `WKWebView`, through wry, shown below egui's surface.
+//! The macOS backend displays a wry `WKWebView` below egui's surface.
 //!
-//! egui clears the visible rect of each webview to transparent ([`egui::Shape::Clear`]). The
-//! page's layer is below egui's `CAMetalLayer`, so the page shows through egui's surface, and
-//! the egui layers above the webview, such as windows and popups, blend over it. For that,
-//! egui's layer has to keep its alpha. eframe's wgpu renderer switches to that as soon as a page
-//! is shown, so the window itself can stay opaque.
+//! egui clears the webview's visible rect to transparent. Its Metal layer retains alpha, so
+//! the page shows through while egui windows and popups can still draw over it.
 //!
-//! Only the page's *layer* is below egui. Its *view* is a subview of winit's view, so `AppKit`
-//! hit-tests it before winit's view. A [`ClipView`] contains the `WKWebView` and clips it to
-//! the visible part of its `Ui`, both for drawing and for hit-testing, so a page in a scroll
-//! area neither shows nor takes clicks outside the scroll area. In egui's input areas
-//! ([`EmbeddedViewOutput::egui_input_areas`]), the page still draws under egui, but the clip view's
-//! hit-test returns `nil`, so `AppKit` delivers those clicks to winit's view and thus to egui.
-//!
-//! The keyboard focus follows `AppKit`'s key view loop. Two empty [`FocusEdge`] views, before
-//! and after the `WKWebView` in the loop, make `WebKit` focus the page's first or last element
-//! when Tab enters the page, and detect when Tab leaves it.
+//! The webview is a subview of winit's view. `ClipView` clips both drawing and hit-testing to
+//! the visible area, and passes clicks in egui's input areas through to winit.
+//! `FocusEdge` views on either side of the webview handle Tab navigation into and out of it.
 
 #![expect(unsafe_code)] // AppKit
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection, Pos2, Rect};
+use objc2::MainThreadMarker;
 use objc2::rc::Retained;
-use objc2::{DefinedClass as _, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{NSAutoresizingMaskOptions, NSResponder, NSView};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{NSString, NSURL};
 use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{AppKitWindowHandle, HandleError, HasWindowHandle, RawWindowHandle};
 use wry::WebViewExtMacOS as _;
@@ -59,7 +48,14 @@ fn window_view(window: &impl HasWindowHandle) -> Result<Retained<NSView>, Error>
     let view = unsafe { Retained::retain(handle.ns_view.as_ptr().cast::<NSView>()) }
         .ok_or(Error::Unsupported)?;
 
-    if let Some(metal) = metal_layer(&view) {
+    // OpenGL draws into the view's backing layer, below all sublayers.
+    // SAFETY: `sublayers` returns an array of `CALayer`s, or nil.
+    let metal = unsafe { view.layer().and_then(|layer| layer.sublayers()) }.and_then(|layers| {
+        layers
+            .iter()
+            .find_map(|layer| layer.downcast::<CAMetalLayer>().ok())
+    });
+    if let Some(metal) = metal {
         // Present egui's frames in the Core Animation transaction that also commits the frame
         // changes `place` makes to the page views. Otherwise egui's frame appears after the
         // page has moved, and the window background shows through the rect that the previous
@@ -74,136 +70,12 @@ fn window_view(window: &impl HasWindowHandle) -> Result<Retained<NSView>, Error>
     Ok(view)
 }
 
-/// Returns the `CAMetalLayer` sublayer of winit's `view` that egui renders into.
-///
-/// `None` when egui renders with OpenGL, which draws into the view's own backing layer. That
-/// layer is below all sublayers, so the pages can't go below it.
-fn metal_layer(view: &NSView) -> Option<Retained<CAMetalLayer>> {
-    // SAFETY: `sublayers` returns an array of `CALayer`s, or nil.
-    let sublayers = unsafe { view.layer()?.sublayers() }?;
-    sublayers
-        .iter()
-        .find_map(|sublayer| sublayer.downcast::<CAMetalLayer>().ok())
-}
+mod clip_view;
+mod focus_edge;
 
-#[derive(Default)]
-struct ClipIvars {
-    /// The areas where egui takes the pointer, in the clip view's own (flipped) coordinates.
-    ///
-    /// The clip view's hit-test returns `nil` inside them.
-    egui_input_areas: RefCell<Vec<Rect>>,
-}
-
-define_class!(
-    /// A view that contains a `WKWebView` and clips it to [`EmbeddedViewOutput::visible`].
-    #[unsafe(super(NSView))]
-    #[thread_kind = MainThreadOnly]
-    #[name = "EguiWebViewClipView"]
-    #[ivars = ClipIvars]
-    struct ClipView;
-
-    impl ClipView {
-        /// Uses a top-left origin, like winit's view and egui.
-        #[unsafe(method(isFlipped))]
-        fn is_flipped(&self) -> bool {
-            true
-        }
-
-        /// Returns `nil` for a point in egui's input areas, so `AppKit` delivers the click to
-        /// winit's view, and thus to egui.
-        #[unsafe(method_id(hitTest:))]
-        fn hit_test(&self, point: CGPoint) -> Option<Retained<NSView>> {
-            // `hitTest:` gets `point` in the superview's coordinates.
-            // SAFETY: `superview` returns an `NSView`, or nil.
-            let superview = unsafe { self.superview() };
-            let local = self.convertPoint_fromView(point, superview.as_deref());
-            #[expect(clippy::cast_possible_truncation)]
-            let local = egui::pos2(local.x as f32, local.y as f32);
-            if self.ivars().egui_input_areas.borrow().iter().any(|area| area.contains(local)) {
-                None
-            } else {
-                // SAFETY: The superclass method has the same signature.
-                unsafe { msg_send![super(self), hitTest: point] }
-            }
-        }
-    }
-);
-
-impl ClipView {
-    fn new(mtm: MainThreadMarker) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(ClipIvars::default());
-        // SAFETY: `NSView` supports `init`, which calls `initWithFrame:` with a zero rect.
-        unsafe { msg_send![super(this), init] }
-    }
-}
-
-struct FocusEdgeIvars {
-    /// The direction in which the focus left the page when this view becomes first responder.
-    direction: FocusDirection,
-
-    /// Shared with [`WryBackend::focus_left`]. Set to `direction` when this view becomes first
-    /// responder.
-    left: Rc<Cell<Option<FocusDirection>>>,
-
-    /// Repainted when this view becomes first responder, so that the webview polls
-    /// [`Backend::poll_focus_left`].
-    ctx: Context,
-}
-
-define_class!(
-    /// An empty view just before or after the `WKWebView` in the window's key view loop.
-    ///
-    /// When Tab leaves the page's last element, `WebKit` makes the next key view first
-    /// responder, and the previous one for Shift-Tab. A focus edge that becomes first responder
-    /// thus reports that the focus left the page, and in which direction.
-    ///
-    /// Conversely, selecting the key view that follows the edge before the page makes `WebKit`
-    /// focus the page's first element, and selecting the one that precedes the edge after the
-    /// page focuses its last element.
-    #[unsafe(super(NSView))]
-    #[thread_kind = MainThreadOnly]
-    #[name = "EguiWebViewFocusEdge"]
-    #[ivars = FocusEdgeIvars]
-    struct FocusEdge;
-
-    impl FocusEdge {
-        #[unsafe(method(acceptsFirstResponder))]
-        fn accepts_first_responder(&self) -> bool {
-            true
-        }
-
-        /// Joins the key view loop even when "Keyboard navigation" is off in System Settings.
-        #[unsafe(method(canBecomeKeyView))]
-        fn can_become_key_view(&self) -> bool {
-            true
-        }
-
-        #[unsafe(method(becomeFirstResponder))]
-        fn become_first_responder(&self) -> bool {
-            let ivars = self.ivars();
-            ivars.left.set(Some(ivars.direction));
-            ivars.ctx.request_repaint();
-            true
-        }
-    }
-);
-
-impl FocusEdge {
-    fn new(
-        mtm: MainThreadMarker,
-        ctx: &Context,
-        direction: FocusDirection,
-        left: &Rc<Cell<Option<FocusDirection>>>,
-    ) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(FocusEdgeIvars {
-            direction,
-            left: Rc::clone(left),
-            ctx: ctx.clone(),
-        });
-        // SAFETY: `NSView` supports `init`, which calls `initWithFrame:` with a zero rect.
-        unsafe { msg_send![super(this), init] }
-    }
-}
+use clip_view::ClipView;
+use focus_edge::FocusEdge;
+use objc2::DefinedClass as _;
 
 /// Exposes an `NSView` as a window handle, so that wry adds its `WKWebView` as a subview of it.
 struct ViewHandle<'a>(&'a NSView);
@@ -251,7 +123,6 @@ impl WryBackend {
     ) -> Result<Self, Error> {
         let mtm = MainThreadMarker::new()
             .ok_or_else(|| Error::backend("webviews have to be made on the main thread"))?;
-        check_url(source)?;
         let parent = window_view(window)?;
 
         let clip = ClipView::new(mtm);
@@ -300,29 +171,27 @@ impl WryBackend {
         })
     }
 
-    /// Whether the window's first responder is the `WKWebView` or one of its descendants.
-    ///
-    /// With `or_edge`, also whether it is one of the [`FocusEdge`]s, which briefly hold the
-    /// focus after Tab leaves the page.
-    fn is_focused(&self, or_edge: bool) -> bool {
-        let Some(responder) = self
-            .clip
+    /// Whether the window's first responder is the webview or one of its descendants.
+    fn view_focused(&self) -> bool {
+        self.clip
             .window()
             .and_then(|window| window.firstResponder())
-        else {
-            return false;
-        };
-        let Ok(view) = responder.downcast::<NSView>() else {
-            return false;
-        };
-        view.isDescendantOf(&self.page.webview.webview())
-            || (or_edge && self.focus_edges.iter().any(|edge| *view == ***edge))
+            .and_then(|responder| responder.downcast::<NSView>().ok())
+            .is_some_and(|view| view.isDescendantOf(&self.page.webview.webview()))
+    }
+
+    /// Whether a focus edge briefly holds focus after Tab leaves the page.
+    fn edge_focused(&self) -> bool {
+        self.clip
+            .window()
+            .and_then(|window| window.firstResponder())
+            .and_then(|responder| responder.downcast::<NSView>().ok())
+            .is_some_and(|view| self.focus_edges.iter().any(|edge| *view == ***edge))
     }
 }
 
 impl Backend for WryBackend {
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
-        check_url(source)?;
         self.page.load(source)?;
         self.html = source.html().map(str::to_owned);
         Ok(())
@@ -339,7 +208,10 @@ impl Backend for WryBackend {
         // call on the webview runs on.
         let url = unsafe { self.page.webview.webview().URL() }.and_then(|url| url.absoluteString());
         if let Some(html) = &self.html
-            && url.is_some_and(|url| url.to_string().split('#').next() == Some("about:blank"))
+            && url.is_some_and(|url| {
+                let url = url.to_string();
+                url == "about:blank" || url.starts_with("about:blank#")
+            })
         {
             warn(self.page.webview.load_html(html));
         } else {
@@ -368,7 +240,7 @@ impl Backend for WryBackend {
         let Some(output) = output else {
             // A hidden view stays first responder and keeps receiving key events. Give the
             // focus to egui, and give it back to the page when the page is shown again.
-            if self.is_focused(true) {
+            if self.view_focused() || self.edge_focused() {
                 self.blur();
                 self.pending_focus = Some(FocusDirection::None);
             }
@@ -434,7 +306,7 @@ impl Backend for WryBackend {
 
     fn blur(&mut self) {
         self.pending_focus = None;
-        if self.is_focused(true)
+        if (self.view_focused() || self.edge_focused())
             && let Some(window) = self.clip.window()
         {
             // SAFETY: `superview` returns an `NSView`, or nil.
@@ -444,7 +316,7 @@ impl Backend for WryBackend {
     }
 
     fn has_focus(&self) -> bool {
-        self.is_focused(false)
+        self.view_focused()
     }
 
     fn poll_focus_left(&mut self) -> Option<FocusDirection> {
@@ -471,17 +343,4 @@ fn cg_rect(rect: Rect) -> CGRect {
         CGPoint::new(f64::from(rect.min.x), f64::from(rect.min.y)),
         CGSize::new(f64::from(rect.width()), f64::from(rect.height())),
     )
-}
-
-/// Returns an error for a URL that `NSURL` can't parse, such as `http://[::1`, on which wry
-/// panics.
-fn check_url(source: &WebViewSource) -> Result<(), Error> {
-    let WebViewSource::Url(url) = source else {
-        return Ok(());
-    };
-    if NSURL::URLWithString(&NSString::from_str(url)).is_some() {
-        Ok(())
-    } else {
-        Err(Error::backend(format!("Not a URL: {url:?}")))
-    }
 }
