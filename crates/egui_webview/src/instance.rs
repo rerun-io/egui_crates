@@ -5,7 +5,7 @@ use egui::{
     Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
 };
 
-use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
+use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
 
 /// A web page shown as an egui widget.
 ///
@@ -294,9 +294,9 @@ impl WebViewInstance {
     /// Loads the page at `url`.
     ///
     /// # Errors
-    /// [`Error::InvalidUrl`] if `url` doesn't parse. Otherwise see [`Self::load`].
-    pub fn load_url(&mut self, url: &str) -> Result<(), Error> {
-        self.load(&WebViewSource::Url(url.parse()?))
+    /// See [`Self::load`].
+    pub fn load_url(&mut self, url: Url) -> Result<(), Error> {
+        self.load(&WebViewSource::Url(url))
     }
 
     /// Runs `script` in the page.

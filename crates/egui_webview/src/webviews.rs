@@ -20,12 +20,14 @@ type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInsta
 /// ```ignore
 /// struct MyApp {
 ///     webviews: egui_webview::WebViews,
+///     docs_url: egui_webview::Url,
 /// }
 ///
 /// impl MyApp {
-///     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+///     fn new(cc: &eframe::CreationContext<'_>, docs_url: egui_webview::Url) -> Self {
 ///         Self {
 ///             webviews: egui_webview::WebViews::new(&cc.egui_ctx, cc.embedded_views()),
+///             docs_url,
 ///         }
 ///     }
 /// }
@@ -33,7 +35,7 @@ type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInsta
 /// impl eframe::App for MyApp {
 ///     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
 ///         egui_webview::WebView::new(egui::Id::unique("docs"))
-///             .url("https://docs.rs/egui")
+///             .url(&self.docs_url)
 ///             .show(ui);
 ///     }
 ///
@@ -248,8 +250,9 @@ fn create_page(
 /// A web page, shown with one call:
 ///
 /// ```ignore
+/// let url = egui_webview::Url::parse("https://docs.rs/egui")?;
 /// let response = egui_webview::WebView::new(egui::Id::unique("docs"))
-///     .url("https://docs.rs/egui")
+///     .url(&url)
 ///     .show(ui);
 /// ```
 ///
@@ -274,11 +277,9 @@ pub struct WebView<'a> {
     size: Option<Vec2>,
 }
 
-/// A [`WebViewSource`] that borrows its text.
+/// A [`WebViewSource`] that borrows its content.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SourceRef<'a> {
-    /// A URL that isn't parsed yet.
-    UrlText(&'a str),
     Url(&'a Url),
     Html(&'a str),
 }
@@ -286,10 +287,6 @@ enum SourceRef<'a> {
 impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
     fn eq(&self, other: &S) -> bool {
         match (self, other.as_ref()) {
-            // Most URLs are already in their parsed form, so try to skip parsing.
-            (Self::UrlText(a), WebViewSource::Url(b)) => {
-                *a == b.as_str() || Url::parse(a).is_ok_and(|a| a == *b)
-            }
             (Self::Url(a), WebViewSource::Url(b)) => *a == b,
             (Self::Html(a), WebViewSource::Html(b)) => a == b,
             _ => false,
@@ -297,17 +294,12 @@ impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
     }
 }
 
-impl TryFrom<SourceRef<'_>> for WebViewSource {
-    type Error = String;
-
-    fn try_from(val: SourceRef<'_>) -> Result<Self, Self::Error> {
-        Ok(match val {
-            SourceRef::UrlText(url) => {
-                Self::Url(Url::parse(url).map_err(|err| format!("Invalid URL {url:?}: {err}"))?)
-            }
+impl From<SourceRef<'_>> for WebViewSource {
+    fn from(val: SourceRef<'_>) -> Self {
+        match val {
             SourceRef::Url(url) => Self::Url(url.clone()),
             SourceRef::Html(html) => Self::Html(html.to_owned()),
-        })
+        }
     }
 }
 
@@ -326,11 +318,9 @@ impl<'a> WebView<'a> {
     ///
     /// The page is loaded when the value you pass changes. It isn't loaded again when the user
     /// navigates somewhere else in the page. Use [`Self::load_url`] for that.
-    ///
-    /// If `url` doesn't parse, [`Self::show`] shows the error instead of a page.
     #[inline]
-    pub fn url(mut self, url: &'a str) -> Self {
-        self.source = Some(SourceRef::UrlText(url));
+    pub fn url(mut self, url: &'a Url) -> Self {
+        self.source = Some(SourceRef::Url(url));
         self
     }
 
@@ -347,10 +337,7 @@ impl<'a> WebView<'a> {
     #[inline]
     pub fn source(self, source: &'a WebViewSource) -> Self {
         match source {
-            WebViewSource::Url(url) => Self {
-                source: Some(SourceRef::Url(url)),
-                ..self
-            },
+            WebViewSource::Url(url) => self.url(url),
             WebViewSource::Html(html) => self.html(html),
         }
     }
@@ -381,33 +368,24 @@ impl<'a> WebView<'a> {
         };
         let pass = ui.ctx().cumulative_pass_nr_for(ViewportId::ROOT);
 
-        let (page, events, pending_focus_change, invalid_source) = mailbox.with(|inner| {
+        let (page, events, pending_focus_change) = mailbox.with(|inner| {
             let fallback = inner.fallback.clone();
             let state = inner.webviews.entry(id).or_default();
 
             state.mark_shown(pass);
-            // Only copy the text when it changed.
+            // Only copy the source when it changed.
             let unchanged =
                 new_source.is_some_and(|new| state.source.as_ref().is_some_and(|cur| new == cur));
-            let mut invalid_source = None;
             if !unchanged {
-                match new_source.map(WebViewSource::try_from).transpose() {
-                    Ok(source) => state.source = source.map(Arc::new),
-                    Err(err) => invalid_source = Some(err),
-                }
+                state.source = new_source.map(|source| Arc::new(source.into()));
             }
 
             (
                 state.ui.widget.clone().or_else(|| fallback.map(Ok)),
                 std::mem::take(&mut state.events),
                 state.ui.pending_focus_change.take(),
-                invalid_source,
             )
         });
-
-        if let Some(err) = invalid_source {
-            return placeholder(ui, id, size, Some(&err), events);
-        }
 
         let widget = match page {
             Some(Ok(widget)) => widget,
@@ -459,12 +437,8 @@ impl WebView<'_> {
     }
 
     /// Loads the page at `url` in the page of `id`.
-    ///
-    /// # Errors
-    /// If `url` doesn't parse.
-    pub fn load_url(ctx: &Context, id: impl Into<Id>, url: &str) -> Result<(), url::ParseError> {
-        Self::load(ctx, id, WebViewSource::Url(url.parse()?));
-        Ok(())
+    pub fn load_url(ctx: &Context, id: impl Into<Id>, url: Url) {
+        Self::load(ctx, id, WebViewSource::Url(url));
     }
 
     /// Runs `script` in the page of `id`. See [`WebViewInstance::evaluate_script`].
@@ -676,8 +650,10 @@ mod tests {
 
     /// Shows the page at `https://{name}.example/`.
     fn show(ui: &mut Ui, name: &str) -> WebViewResponse {
+        let url = format!("https://{name}.example/");
+        let url = Url::parse(&url).unwrap_or_else(|err| panic!("Invalid URL {url:?}: {err}"));
         WebView::new(id())
-            .url(&format!("https://{name}.example/"))
+            .url(&url)
             .size(vec2(100.0, 100.0))
             .show(ui)
     }
@@ -856,38 +832,6 @@ mod tests {
             show(ui, "b");
         });
         assert_eq!(harness.log(), ["load https://b.example/", "place"]);
-    }
-
-    #[test]
-    fn a_url_that_parses_to_other_text_does_not_load_again() {
-        let mut harness = Harness::new(false);
-        let show_unnormalized = |ui: &mut Ui| {
-            WebView::new(id()).url("HTTPS://a.example").show(ui);
-        };
-        harness.frame(vec![], show_unnormalized);
-        assert_eq!(harness.log(), ["create https://a.example/", "place"]);
-
-        harness.frame(vec![], show_unnormalized);
-        assert_eq!(harness.log(), ["place"]);
-    }
-
-    #[test]
-    fn an_invalid_url_keeps_the_current_page() {
-        let mut harness = Harness::new(false);
-        harness.frame(vec![], |ui| {
-            show(ui, "a");
-        });
-        harness.log();
-
-        harness.frame(vec![], |ui| {
-            WebView::new(id()).url("not a url").show(ui);
-        });
-        assert_eq!(harness.log(), ["hide"]);
-
-        harness.frame(vec![], |ui| {
-            show(ui, "a");
-        });
-        assert_eq!(harness.log(), ["place"]);
     }
 
     #[test]

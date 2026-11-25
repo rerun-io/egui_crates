@@ -172,7 +172,10 @@ impl Browser {
             let entered =
                 field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
             if go_clicked || entered {
-                report(log, self.webview.load_url(&self.url));
+                match self.url.parse() {
+                    Ok(url) => report(log, self.webview.load_url(url)),
+                    Err(err) => log.push(format!("Invalid URL {:?}: {err}", self.url)),
+                }
             }
         });
     }

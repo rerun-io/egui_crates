@@ -188,9 +188,6 @@ pub enum Error {
     /// not one the platform's backend can use.
     Unsupported,
 
-    /// A URL given as text didn't parse.
-    InvalidUrl(url::ParseError),
-
     /// The backend reported an error.
     Backend(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -202,17 +199,10 @@ impl Error {
     }
 }
 
-impl From<url::ParseError> for Error {
-    fn from(err: url::ParseError) -> Self {
-        Self::InvalidUrl(err)
-    }
-}
-
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unsupported => write!(f, "No webview backend is available on this platform"),
-            Self::InvalidUrl(err) => write!(f, "Invalid URL: {err}"),
             Self::Backend(err) => write!(f, "Webview failed: {err}"),
         }
     }
@@ -222,7 +212,6 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unsupported => None,
-            Self::InvalidUrl(err) => Some(err),
             Self::Backend(err) => Some(err.as_ref()),
         }
     }

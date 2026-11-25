@@ -41,8 +41,9 @@ A `WebViewInstance` isn't `Send`, so not every piece of code can keep one.
 `WebView` shows a page with one call and keeps nothing:
 
 ```rust,ignore
+let url = egui_webview::Url::parse("https://docs.rs/egui")?;
 let response = egui_webview::WebView::new(egui::Id::unique("docs"))
-    .url("https://docs.rs/egui")
+    .url(&url)
     .show(ui);
 ```
 
