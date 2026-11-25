@@ -11,6 +11,7 @@
 //! ```
 
 #![expect(clippy::print_stdout)] // A test.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))] // The test is native only.
 
 use std::sync::Arc;
 
@@ -189,40 +190,48 @@ impl eframe::App for Test {
     }
 }
 
-fn main() -> eframe::Result {
-    egui_webview::init();
-    let cef = cfg!(feature = "cef")
-        && (cfg!(target_os = "linux")
-            || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
+cfg_select! {
+    target_arch = "wasm32" => {
+        /// The test needs a native window, which it gives synthetic input.
+        fn main() {}
+    }
+    _ => {
+        fn main() -> eframe::Result {
+            egui_webview::init();
+            let cef = cfg!(feature = "cef")
+                && (cfg!(target_os = "linux")
+                    || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]),
-        renderer: eframe::Renderer::Wgpu,
-        ..Default::default()
-    };
-    eframe::run_native(
-        "focus_test",
-        options,
-        Box::new(move |cc| {
-            let queue = Queue::default();
-            cc.egui_ctx.add_plugin(Injector(Arc::clone(&queue)));
-            let webview = WebViewInstance::new(
-                &cc.egui_ctx,
-                Id::unique("page"),
-                &WebViewSource::Html(PAGE.to_owned()),
-                cc.embedded_views(),
-            )?;
-            Ok(Box::new(Test {
-                cef,
-                queue,
-                webview,
-                page_focus: None,
-                step: 0,
-                step_started: None,
-                failures: Vec::new(),
-            }))
-        }),
-    )
+            let options = eframe::NativeOptions {
+                viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]),
+                renderer: eframe::Renderer::Wgpu,
+                ..Default::default()
+            };
+            eframe::run_native(
+                "focus_test",
+                options,
+                Box::new(move |cc| {
+                    let queue = Queue::default();
+                    cc.egui_ctx.add_plugin(Injector(Arc::clone(&queue)));
+                    let webview = WebViewInstance::new(
+                        &cc.egui_ctx,
+                        Id::unique("page"),
+                        &WebViewSource::Html(PAGE.to_owned()),
+                        cc.embedded_views(),
+                    )?;
+                    Ok(Box::new(Test {
+                        cef,
+                        queue,
+                        webview,
+                        page_focus: None,
+                        step: 0,
+                        step_started: None,
+                        failures: Vec::new(),
+                    }))
+                }),
+            )
+        }
+    }
 }
 
 mod native {
