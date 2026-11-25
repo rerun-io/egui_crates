@@ -9,8 +9,8 @@ use cef::{
     wrap_load_handler,
 };
 
-use crate::WebViewEvent;
 use crate::chromium::context::Context;
+use crate::{Url, WebViewEvent, reported_url};
 
 wrap_load_handler! {
     pub struct EguiLoadHandler {
@@ -43,7 +43,7 @@ wrap_load_handler! {
 }
 
 /// The URL of `frame`, if it is the main frame.
-fn main_frame_url(frame: Option<&mut cef::Frame>) -> Option<String> {
+fn main_frame_url(frame: Option<&mut cef::Frame>) -> Option<Url> {
     let frame = frame.filter(|frame| frame.is_main() == 1)?;
-    Some(CefString::from(&frame.url()).to_string())
+    reported_url(&CefString::from(&frame.url()).to_string())
 }

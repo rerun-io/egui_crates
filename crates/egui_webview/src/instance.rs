@@ -1,9 +1,21 @@
 use std::sync::Arc;
 
 use eframe::EmbeddedViews;
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Ui, Vec2};
+use egui::{
+    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
+};
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
+
+cfg_select! {
+    all(feature = "wry", target_os = "macos") => {
+        use crate::macos::WryBackend as PlatformBackend;
+    }
+    target_arch = "wasm32" => {
+        use crate::web::IframeBackend as PlatformBackend;
+    }
+    _ => {}
+}
 
 /// A web page shown as an egui widget.
 ///
@@ -26,6 +38,9 @@ pub struct WebViewInstance {
     /// Set when egui's focus moves to the webview, or when the backend reports that the page
     /// took the focus itself. Cleared when the focus leaves the page or the webview.
     page_focused: bool,
+
+    /// The egui theme that the page was last given with [`Backend::set_theme`].
+    theme: Option<Theme>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,8 +101,9 @@ pub struct WebViewResponse {
 /// The backends that [`WebViewInstance::new`] chooses from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
-    /// The platform's own webview in an embedded view: an `<iframe>` on the web.
-    Embedded,
+    /// The platform's own webview in an embedded view: an `<iframe>` on the web, and a
+    /// `WKWebView` on macOS with the `wry` feature.
+    Platform,
 
     /// CEF, which renders the page off screen. Requires the `cef` feature.
     Cef,
@@ -101,10 +117,9 @@ impl DefaultBackend {
     /// webview.
     const FOR_TARGET: Self = if cfg!(any(
         target_arch = "wasm32",
-        target_os = "macos",
-        target_os = "windows"
+        all(feature = "wry", target_os = "macos")
     )) {
-        Self::Embedded
+        Self::Platform
     } else {
         Self::Cef
     };
@@ -135,11 +150,10 @@ impl WebViewInstance {
     ///
     /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - On platforms without a system webview, such as Linux: CEF, as with `Self::new_cef`.
-    ///   This requires the `cef` feature.
-    ///
-    /// Setting the `EGUI_WEBVIEW_BACKEND` environment variable to `cef` overrides that choice
-    /// at run time.
+    /// - On macOS with the `wry` feature: a `WKWebView` below egui's surface. It needs eframe's
+    ///   wgpu renderer. It wins over the `cef` feature if both are enabled.
+    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
+    ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].
@@ -168,16 +182,16 @@ impl WebViewInstance {
                     Err(Error::Unsupported)
                 }
             }
-            DefaultBackend::Embedded => {
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
-                    Ok(Self::with_backend(id, backend))
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    _ = (ctx, id, source, embedded_views);
-                    Err(Error::Unsupported)
+            DefaultBackend::Platform => {
+                cfg_select! {
+                    any(target_arch = "wasm32", all(feature = "wry", target_os = "macos")) => {
+                        let backend = PlatformBackend::new(ctx, source, embedded_views)?;
+                        Ok(Self::with_backend(id, backend).with_theme_of(ctx))
+                    }
+                    _ => {
+                        _ = (ctx, id, source, embedded_views);
+                        Err(Error::Unsupported)
+                    }
                 }
             }
         }
@@ -185,12 +199,12 @@ impl WebViewInstance {
 
     /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
     ///
-    /// A page in an embedded view (web, macOS, Windows) needs nothing from the page to reserve
+    /// A page in an embedded view (web, macOS) needs nothing from the page to reserve
     /// its rect, so this is known before the page exists. A CEF page has nothing to paint
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
         match DefaultBackend::pick() {
-            DefaultBackend::Embedded => Some(Arc::new(crate::EmbeddedWidget)),
+            DefaultBackend::Platform => Some(Arc::new(crate::EmbeddedWidget)),
             DefaultBackend::Cef => None,
         }
     }
@@ -231,7 +245,7 @@ impl WebViewInstance {
         options: crate::CefOptions,
     ) -> Result<Self, Error> {
         let backend = crate::chromium::CefBackend::new(ctx, source, options)?;
-        Ok(Self::with_backend(id, backend))
+        Ok(Self::with_backend(id, backend).with_theme_of(ctx))
     }
 
     /// Creates a webview that shows its page through `backend`.
@@ -243,6 +257,26 @@ impl WebViewInstance {
             widget: backend.widget(),
             backend: Box::new(backend),
             page_focused: false,
+            theme: None,
+        }
+    }
+
+    /// Gives a newly created page egui's theme before its first paint.
+    #[cfg(any(
+        target_arch = "wasm32",
+        all(feature = "wry", target_os = "macos"),
+        feature = "cef"
+    ))]
+    fn with_theme_of(mut self, ctx: &Context) -> Self {
+        self.update_theme(ctx);
+        self
+    }
+
+    fn update_theme(&mut self, ctx: &Context) {
+        let theme = ctx.theme();
+        if self.theme != Some(theme) {
+            self.backend.set_theme(theme);
+            self.theme = Some(theme);
         }
     }
 
@@ -259,6 +293,7 @@ impl WebViewInstance {
         let output = outputs
             .iter()
             .find(|output| output.id == self.id && output.visible.is_positive());
+        self.update_theme(ctx);
         self.backend.place(ctx, output);
     }
 
@@ -279,9 +314,9 @@ impl WebViewInstance {
     /// Loads the page at `url`.
     ///
     /// # Errors
-    /// See [`Self::load`].
-    pub fn load_url(&mut self, url: impl Into<String>) -> Result<(), Error> {
-        self.load(&WebViewSource::Url(url.into()))
+    /// [`Error::InvalidUrl`] if `url` doesn't parse. Otherwise see [`Self::load`].
+    pub fn load_url(&mut self, url: &str) -> Result<(), Error> {
+        self.load(&WebViewSource::Url(url.parse()?))
     }
 
     /// Runs `script` in the page.

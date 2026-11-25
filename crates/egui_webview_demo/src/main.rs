@@ -74,7 +74,10 @@ fn source(url: &str) -> WebViewSource {
     if url.is_empty() {
         WebViewSource::Html(PAGE.to_owned())
     } else {
-        WebViewSource::Url(url.to_owned())
+        url.parse().map_or_else(
+            |err| WebViewSource::Html(format!("Invalid URL {url:?}: {err}")),
+            WebViewSource::Url,
+        )
     }
 }
 
@@ -95,7 +98,7 @@ impl Browser {
         let webview = WebViewInstance::new(ctx, egui::Id::unique(&name), source, embedded_views)
             .map_err(|err| format!("No webview: {err}"))?;
         let url = match source {
-            WebViewSource::Url(url) => url.clone(),
+            WebViewSource::Url(url) => url.to_string(),
             WebViewSource::Html(_) => String::new(),
         };
         Ok(Self { name, webview, url })
@@ -167,7 +170,7 @@ impl Browser {
             let entered =
                 field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
             if go_clicked || entered {
-                report(log, self.webview.load_url(self.url.clone()));
+                report(log, self.webview.load_url(&self.url));
             }
         });
     }
@@ -183,8 +186,8 @@ impl Browser {
                     WebViewEvent::Loaded { url } => {
                         // Don't show the URL of a page given as HTML (`about:srcdoc`,
                         // `about:blank` or a `data:` URL) in the URL field.
-                        if !url.starts_with("about:") && !url.starts_with("data:") {
-                            self.url.clone_from(&url);
+                        if !matches!(url.scheme(), "about" | "data") {
+                            self.url = url.to_string();
                         }
                         format!("Loaded {}", short_url(&url))
                     }
@@ -403,11 +406,11 @@ impl eframe::App for DemoApp {
 
 /// Shortens `url` for the log. CEF loads a page given as HTML from a `data:` URL that contains
 /// the whole document.
-fn short_url(url: &str) -> &str {
-    if url.starts_with("data:") {
+fn short_url(url: &egui_webview::Url) -> &str {
+    if url.scheme() == "data" {
         "data:…"
     } else {
-        url
+        url.as_str()
     }
 }
 

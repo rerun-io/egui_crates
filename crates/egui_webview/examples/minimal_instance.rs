@@ -43,7 +43,7 @@ fn main() -> eframe::Result {
             let webview = WebViewInstance::new(
                 &cc.egui_ctx,
                 egui::Id::unique("page"),
-                &WebViewSource::Url("https://www.egui.rs".to_owned()),
+                &WebViewSource::Url("https://www.egui.rs".parse()?),
                 cc.embedded_views(),
             )?;
             Ok(Box::new(App { webview }))
