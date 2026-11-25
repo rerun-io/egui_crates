@@ -339,6 +339,7 @@ impl eframe::App for DemoApp {
             egui::Panel::bottom("log").resizable(true).show(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .stick_to_bottom(true)
+                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         for line in log.iter() {
                             ui.monospace(line);

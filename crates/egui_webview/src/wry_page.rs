@@ -1,4 +1,4 @@
-//! A wry webview and the events it reports.
+//! A wry webview and the events it reports, shared by the backends built on wry.
 
 mod ipc;
 
@@ -6,9 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use egui::Context;
-use objc2_foundation::{NSString, NSURL};
 use raw_window_handle::HasWindowHandle;
-use wry::WebViewExtMacOS as _;
 
 use crate::{Error, WebViewEvent, WebViewSource, reported_url, warn};
 
@@ -38,17 +36,23 @@ impl WryPage {
     /// Creates a webview that loads `source`, as a child of `parent`.
     ///
     /// # Errors
-    /// If `source` is a URL that `NSURL` can't parse, or if wry fails to create the webview.
+    /// If `source` is a URL that the platform's webview can't parse, or if wry fails to create the webview.
     pub fn new(
         ctx: &Context,
         source: &WebViewSource,
         parent: &impl HasWindowHandle,
     ) -> Result<Self, Error> {
         let events = Rc::new(RefCell::new(Vec::new()));
-        let webview = wry::WebViewBuilder::new()
+        let on_message: ipc::OnMessage = Rc::new({
+            let (ctx, events) = (ctx.clone(), Rc::clone(&events));
+            move |text| {
+                events.borrow_mut().push(WebViewEvent::Message(text));
+                ctx.request_repaint();
+            }
+        });
+        let builder = wry::WebViewBuilder::new()
             // Otherwise wry activates the app when it creates the webview.
             .with_focused(false)
-            .with_initialization_script(ipc::SCRIPT)
             .with_on_page_load_handler({
                 let (ctx, events) = (ctx.clone(), Rc::clone(&events));
                 move |event, url| {
@@ -61,11 +65,11 @@ impl WryPage {
                     });
                     ctx.request_repaint();
                 }
-            })
+            });
+        let webview = ipc::prepare(builder, &on_message)
             .build_as_child(parent)
             .map_err(Error::backend)?;
-        // Register the native handler before the first document can run its scripts.
-        let ipc = ipc::Ipc::new(ctx, webview.manager(), Rc::clone(&events));
+        let ipc = ipc::Ipc::new(&webview, on_message);
         let page = Self {
             _ipc: ipc,
             webview,
@@ -126,14 +130,26 @@ impl WryPage {
     }
 }
 
-/// Returns an error for a URL that `NSURL` can't parse, on which wry panics.
+/// Returns an error for a URL that the platform's webview can't parse.
 ///
-/// `NSURL` and the `url` crate follow different standards, so a parsed [`crate::Url`] isn't enough.
+/// On macOS, wry panics on a URL that `NSURL` can't parse. `NSURL` and the `url` crate follow
+/// different standards, so a parsed [`crate::Url`] isn't enough. Elsewhere this always succeeds.
+#[cfg_attr(not(target_os = "macos"), expect(clippy::unnecessary_wraps))]
 fn check_url(source: &WebViewSource) -> Result<(), Error> {
-    if let WebViewSource::Url(url) = source
-        && NSURL::URLWithString(&NSString::from_str(url.as_str())).is_none()
-    {
-        return Err(Error::backend(format!("NSURL can't parse {url}")));
+    cfg_select! {
+        target_os = "macos" => {
+            use objc2_foundation::{NSString, NSURL};
+
+            if let WebViewSource::Url(url) = source
+                && NSURL::URLWithString(&NSString::from_str(url.as_str())).is_none()
+            {
+                return Err(Error::backend(format!("NSURL can't parse {url}")));
+            }
+            Ok(())
+        }
+        _ => {
+            _ = source;
+            Ok(())
+        }
     }
-    Ok(())
 }
