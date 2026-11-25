@@ -61,7 +61,8 @@ pub struct State {
 
     /// What the widget wrote down in its passes, until the backend acts on it after the pass.
     pub inbox: Inbox,
-    /// The root viewport's pass (see [`crate::mailbox::now`]) that last showed the page.
+    /// The root viewport's pass (see [`egui::Context::cumulative_pass_nr_for`]) that last showed
+    /// the page.
     pub shown_pass: Option<u64>,
 }
 
