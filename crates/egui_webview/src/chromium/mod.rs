@@ -160,6 +160,13 @@ impl CefBackend {
             told_size: None,
         })
     }
+
+    /// The browser's main frame. CEF has none once the browser is closed.
+    fn main_frame(&self) -> Result<cef::Frame, Error> {
+        self.browser
+            .main_frame()
+            .ok_or_else(|| Error::backend("the CEF browser has no main frame"))
+    }
 }
 
 /// The half of a CEF page that runs in egui's pass.
@@ -357,16 +364,14 @@ impl Context {
 
 impl Backend for CefBackend {
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
-        if let Some(frame) = self.browser.main_frame() {
-            frame.load_url(Some(&source_url(source).as_str().into()));
-        }
+        self.main_frame()?
+            .load_url(Some(&source_url(source).as_str().into()));
         Ok(())
     }
 
     fn evaluate_script(&mut self, script: &str) -> Result<(), Error> {
-        if let Some(frame) = self.browser.main_frame() {
-            frame.execute_java_script(Some(&script.into()), None, 0);
-        }
+        self.main_frame()?
+            .execute_java_script(Some(&script.into()), None, 0);
         Ok(())
     }
 
