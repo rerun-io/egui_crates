@@ -52,7 +52,7 @@ pub fn wgpu_configuration(config: &mut egui_wgpu::WgpuConfiguration) {
         let descriptor = &mut setup.instance_descriptor;
         descriptor.backends = wgpu::Backends::DX12;
         descriptor.backend_options.dx12.presentation_system =
-            wgpu::Dx12SwapchainKind::DxgiFromTopmostVisual;
+            wgpu::Dx12SwapchainKind::DxgiFromVisual;
     }
 }
 
