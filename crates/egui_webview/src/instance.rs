@@ -183,7 +183,10 @@ impl WebViewInstance {
                 cfg_select! {
                     platform_backend => {
                         let backend = PlatformBackend::new(ctx, source, embedded_views)?;
-                        Ok(Self::with_backend(id, backend).with_theme_of(ctx))
+                        let mut webview = Self::with_backend(id, backend);
+                        // Give the page egui's theme before its first paint.
+                        webview.update_theme(ctx);
+                        Ok(webview)
                     }
                     _ => {
                         _ = (ctx, id, source, embedded_views);
@@ -241,7 +244,10 @@ impl WebViewInstance {
         options: crate::CefOptions,
     ) -> Result<Self, Error> {
         let backend = crate::chromium::CefBackend::new(ctx, source, options)?;
-        Ok(Self::with_backend(id, backend).with_theme_of(ctx))
+        let mut webview = Self::with_backend(id, backend);
+        // Give the page egui's theme before its first paint.
+        webview.update_theme(ctx);
+        Ok(webview)
     }
 
     /// Creates a webview that shows its page through `backend`.
@@ -255,13 +261,6 @@ impl WebViewInstance {
             page_focused: false,
             theme: None,
         }
-    }
-
-    /// Gives a newly created page egui's theme before its first paint.
-    #[cfg(any(target_arch = "wasm32", wry_backend, feature = "cef"))]
-    fn with_theme_of(mut self, ctx: &Context) -> Self {
-        self.update_theme(ctx);
-        self
     }
 
     fn update_theme(&mut self, ctx: &Context) {
