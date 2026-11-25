@@ -5,7 +5,7 @@ use egui::{
     Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
 };
 
-use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
+use crate::{Backend, Error, PageStyle, PageWidget, Url, WebViewEvent, WebViewSource};
 
 /// A web page shown as an egui widget.
 ///
@@ -32,6 +32,15 @@ pub struct WebViewInstance {
     /// The theme last given to [`Backend::set_theme`], or `None` before the first
     /// [`Self::place`].
     theme: Option<Theme>,
+
+    /// See [`Self::set_page_style`].
+    page_style: PageStyle,
+
+    /// The CSS of [`Self::page_style`] that the page was last given.
+    style_sheet: Option<String>,
+
+    /// The script that gives a document [`Self::style_sheet`].
+    style_script: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -245,6 +254,47 @@ impl WebViewInstance {
             backend: Box::new(backend),
             page_focused: false,
             theme: None,
+            page_style: PageStyle::default(),
+            style_sheet: None,
+            style_script: None,
+        }
+    }
+
+    /// Sets how the page looks where it sets no style of its own. The default is
+    /// [`PageStyle::Browser`].
+    ///
+    /// The current document gets the style now, and so does every document that the page
+    /// loads later. Call this right after you create the webview, so that the first document
+    /// has the style before its first paint.
+    ///
+    /// With [`PageStyle::Egui`], [`Self::place`] keeps the page up to date with egui's style.
+    pub fn set_page_style(&mut self, ctx: &Context, style: PageStyle) {
+        if self.page_style != style {
+            self.page_style = style;
+            self.update_style_sheet(ctx);
+        }
+    }
+
+    fn update_style_sheet(&mut self, ctx: &Context) {
+        if self.page_style == PageStyle::Browser && self.style_sheet.is_none() {
+            return;
+        }
+        let css = self.page_style.css(ctx);
+        if self.style_sheet != css {
+            let script = crate::style::script(css.as_deref());
+            self.backend
+                .set_document_start_script(css.is_some().then_some(&script));
+            self.apply_style(&script);
+            self.style_script = css.is_some().then_some(script);
+            self.style_sheet = css;
+        }
+    }
+
+    /// Runs `script` from [`crate::style::script`] in the current document.
+    fn apply_style(&mut self, script: &str) {
+        // On the web, the app can't run scripts in a cross-origin page.
+        if let Err(err) = self.backend.evaluate_script(script) {
+            log::debug!("egui_webview: can't style the page: {err}");
         }
     }
 
@@ -257,7 +307,8 @@ impl WebViewInstance {
     /// Call it for a backend that renders into a texture too. It has no view to place, but it
     /// uses the call to stop rendering a page that isn't shown.
     ///
-    /// This also gives the page egui's theme, the first time and whenever it changes.
+    /// This also gives the page egui's current theme as its `prefers-color-scheme`, and
+    /// egui's current style if the page has [`PageStyle::Egui`].
     pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
         let theme = ctx.theme();
         if self.theme != Some(theme) {
@@ -269,6 +320,7 @@ impl WebViewInstance {
         let output = outputs
             .iter()
             .find(|output| output.id == self.id && output.visible.is_positive());
+        self.update_style_sheet(ctx);
         self.backend.place(ctx, output);
     }
 
@@ -428,7 +480,19 @@ impl WebViewInstance {
 
     /// The events from the page since the last call, oldest first.
     pub(crate) fn take_events(&mut self) -> Vec<WebViewEvent> {
-        self.backend.take_events()
+        let events = self.backend.take_events();
+        // A backend without `Backend::set_document_start_script` gets the style here, and
+        // so does a document that started to load before the backend had the script.
+        let new_document = events.iter().any(|event| {
+            matches!(
+                event,
+                WebViewEvent::Loading { .. } | WebViewEvent::Loaded { .. }
+            )
+        });
+        if new_document && let Some(script) = self.style_script.clone() {
+            self.apply_style(&script);
+        }
+        events
     }
 }
 

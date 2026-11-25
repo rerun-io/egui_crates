@@ -119,6 +119,17 @@ pub trait Backend: std::fmt::Debug {
     /// changes.
     fn set_theme(&mut self, theme: Theme) {}
 
+    /// Runs `script` at the start of every document that the page loads from now on, before
+    /// the document's own scripts. It replaces the script of the previous call, and `None`
+    /// only removes that one. The script doesn't run in the current document.
+    ///
+    /// The script only needs to run in the main frame.
+    ///
+    /// The webview uses it to give each document its [`crate::PageStyle`] before the first
+    /// paint. It also runs the script when the page reports that it loads, so a backend that
+    /// keeps the default still gets the style, only later.
+    fn set_document_start_script(&mut self, script: Option<&str>) {}
+
     /// Gives the page the keyboard focus, because egui's focus moved to the webview.
     ///
     /// `direction` says how egui's focus arrived:

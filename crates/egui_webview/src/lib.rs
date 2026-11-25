@@ -41,6 +41,7 @@ mod chromium;
 mod instance;
 mod mailbox;
 mod runtime;
+mod style;
 #[cfg(platform_backend)]
 mod web;
 mod webviews;
@@ -50,6 +51,7 @@ pub use backend::{Backend, EmbeddedWidget, PageWidget};
 pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use runtime::Runtime;
+pub use style::{PageStyle, style_sheet};
 pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};
