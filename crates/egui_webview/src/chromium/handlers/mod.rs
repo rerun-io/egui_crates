@@ -22,7 +22,7 @@ pub fn client(context: &Arc<Context>) -> cef::Client {
         render::EguiRenderHandler::new(Arc::clone(context)),
         display::EguiDisplayHandler::new(Arc::clone(context)),
         load::EguiLoadHandler::new(Arc::clone(context)),
-        life_span::EguiLifeSpanHandler::new(),
+        life_span::EguiLifeSpanHandler::new(Arc::clone(context)),
         context_menu::EguiContextMenuHandler::new(Arc::clone(context)),
         focus::EguiFocusHandler::new(Arc::clone(context)),
     )
