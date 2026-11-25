@@ -386,6 +386,14 @@ impl Backend for CefBackend {
         self.browser.go_forward();
     }
 
+    fn can_go_back(&self) -> bool {
+        self.browser.can_go_back() == 1
+    }
+
+    fn can_go_forward(&self) -> bool {
+        self.browser.can_go_forward() == 1
+    }
+
     fn widget(&self) -> Arc<dyn PageWidget> {
         Arc::<Context>::clone(&self.context)
     }

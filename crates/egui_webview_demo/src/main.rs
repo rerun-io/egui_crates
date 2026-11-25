@@ -118,19 +118,21 @@ impl Browser {
     fn nav_buttons(&mut self, ui: &mut egui::Ui) {
         let webview = &mut self.webview;
         let side = ui.spacing().interact_size.y;
-        let nav = |ui: &mut egui::Ui, glyph: &str, hover: &str| {
+        let nav = |ui: &mut egui::Ui, enabled: bool, glyph: &str, hover: &str| {
             let button = egui::Button::new(glyph)
                 .frame_when_inactive(false)
                 .min_size(egui::Vec2::splat(side));
-            ui.add(button).on_hover_text(hover).clicked()
+            ui.add_enabled(enabled, button)
+                .on_hover_text(hover)
+                .clicked()
         };
-        if nav(ui, "⏴", "Back") {
+        if nav(ui, webview.can_go_back(), "⏴", "Back") {
             webview.back();
         }
-        if nav(ui, "⏵", "Forward") {
+        if nav(ui, webview.can_go_forward(), "⏵", "Forward") {
             webview.forward();
         }
-        if nav(ui, "⟳", "Reload") {
+        if nav(ui, true, "⟳", "Reload") {
             webview.reload();
         }
     }

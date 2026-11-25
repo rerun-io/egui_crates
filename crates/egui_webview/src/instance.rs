@@ -332,6 +332,19 @@ impl WebViewInstance {
         self.backend.forward();
     }
 
+    /// Whether [`Self::back`] has a page to go to.
+    ///
+    /// On the web this is always `true`, because the app can't read the history of the
+    /// `<iframe>`.
+    pub fn can_go_back(&self) -> bool {
+        self.backend.can_go_back()
+    }
+
+    /// Whether [`Self::forward`] has a page to go to. See [`Self::can_go_back`] for the web.
+    pub fn can_go_forward(&self) -> bool {
+        self.backend.can_go_forward()
+    }
+
     /// Shows the page in a rect of `size`, and returns the page's events since the last call.
     ///
     /// The page takes part in egui's keyboard focus like a widget. Tab moves the focus to the

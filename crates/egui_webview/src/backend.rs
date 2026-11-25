@@ -76,6 +76,19 @@ pub trait Backend: std::fmt::Debug {
     /// Navigates forward in the webview's history. See [`crate::WebViewInstance::forward`].
     fn forward(&mut self);
 
+    /// Whether [`Self::back`] has a page to go to.
+    ///
+    /// The default is `true`, for a backend that can't tell, so that a back button stays
+    /// usable.
+    fn can_go_back(&self) -> bool {
+        true
+    }
+
+    /// Whether [`Self::forward`] has a page to go to. See [`Self::can_go_back`].
+    fn can_go_forward(&self) -> bool {
+        true
+    }
+
     /// The half of this page that runs in egui's pass. The webview asks for it once, when it is
     /// created.
     ///
