@@ -61,6 +61,7 @@ tokio = { version = "1.53", features = [
   "signal",
 ] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2.5.9"
 vec1 = { version = "1.12.1", default-features = false }
 wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.64"

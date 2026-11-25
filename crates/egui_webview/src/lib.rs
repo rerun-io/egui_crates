@@ -29,7 +29,7 @@
 //!         "My app",
 //!         eframe::NativeOptions::default(),
 //!         Box::new(|cc| {
-//!             let source = WebViewSource::Url("https://www.egui.rs".to_owned());
+//!             let source = WebViewSource::Url("https://www.egui.rs".parse()?);
 //!             let webview = WebViewInstance::new(
 //!                 &cc.egui_ctx,
 //!                 egui::Id::new("page"),
@@ -88,6 +88,8 @@ pub use chromium::{CefOptions, init as cef_init, run_subprocess as run_cef_subpr
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
 
+pub use url::{self, Url};
+
 /// Initializes `egui_webview`. Call this first in `main`, whatever the platform and whichever
 /// features are enabled:
 ///
@@ -112,7 +114,7 @@ pub enum WebViewSource {
     Html(String),
 
     /// The URL of a page.
-    Url(String),
+    Url(Url),
 }
 
 impl WebViewSource {
@@ -125,6 +127,12 @@ impl WebViewSource {
     }
 }
 
+impl From<Url> for WebViewSource {
+    fn from(url: Url) -> Self {
+        Self::Url(url)
+    }
+}
+
 /// Events returned by the webview.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -133,13 +141,13 @@ pub enum WebViewEvent {
     Loading {
         /// The URL of the page. For a page given as [`WebViewSource::Html`], this is
         /// `about:srcdoc`, `about:blank` or a `data:` URL, depending on the backend.
-        url: String,
+        url: Url,
     },
 
     /// A page finished loading.
     Loaded {
         /// The URL of the page, as in [`Self::Loading`].
-        url: String,
+        url: Url,
     },
 
     /// A string that the page sent with `window.ipc.postMessage(text)`.
@@ -156,6 +164,17 @@ pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
     }
 }
 
+/// Parses a URL that a backend's engine reported for a [`WebViewEvent`].
+///
+/// Engines report valid URLs, so this only logs a warning for one that doesn't parse.
+pub(crate) fn reported_url(url: &str) -> Option<Url> {
+    Url::parse(url)
+        .inspect_err(|err| {
+            log::warn!("egui_webview: the engine reported an invalid URL {url:?}: {err}");
+        })
+        .ok()
+}
+
 /// An error from creating or using a [`WebViewInstance`].
 #[derive(Debug)]
 #[non_exhaustive]
@@ -163,6 +182,9 @@ pub enum Error {
     /// No backend supports this platform, or the window handle of [`eframe::EmbeddedViews`] is
     /// not one the platform's backend can use.
     Unsupported,
+
+    /// A URL given as text didn't parse.
+    InvalidUrl(url::ParseError),
 
     /// The backend reported an error.
     Backend(Box<dyn std::error::Error + Send + Sync>),
@@ -175,10 +197,17 @@ impl Error {
     }
 }
 
+impl From<url::ParseError> for Error {
+    fn from(err: url::ParseError) -> Self {
+        Self::InvalidUrl(err)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unsupported => write!(f, "No webview backend is available on this platform"),
+            Self::InvalidUrl(err) => write!(f, "Invalid URL: {err}"),
             Self::Backend(err) => write!(f, "Webview failed: {err}"),
         }
     }
@@ -188,6 +217,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unsupported => None,
+            Self::InvalidUrl(err) => Some(err),
             Self::Backend(err) => Some(err.as_ref()),
         }
     }

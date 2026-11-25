@@ -507,7 +507,7 @@ fn context_menu_id(page: &egui::Response) -> egui::Id {
 /// URL.
 fn source_url(source: &WebViewSource) -> String {
     match source {
-        WebViewSource::Url(url) => url.clone(),
+        WebViewSource::Url(url) => url.as_str().to_owned(),
         WebViewSource::Html(html) => {
             let mut url = String::from("data:text/html;charset=utf-8,");
             for byte in html.bytes() {

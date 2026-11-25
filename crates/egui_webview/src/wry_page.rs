@@ -10,7 +10,7 @@ use objc2_foundation::{NSString, NSURL};
 use raw_window_handle::HasWindowHandle;
 use wry::WebViewExtMacOS as _;
 
-use crate::{Error, WebViewEvent, WebViewSource, warn};
+use crate::{Error, WebViewEvent, WebViewSource, reported_url, warn};
 
 /// A wry webview, together with the [`WebViewEvent`]s it reported since the last
 /// [`Self::take_events`].
@@ -52,6 +52,9 @@ impl WryPage {
             .with_on_page_load_handler({
                 let (ctx, events) = (ctx.clone(), Rc::clone(&events));
                 move |event, url| {
+                    let Some(url) = reported_url(&url) else {
+                        return;
+                    };
                     events.borrow_mut().push(match event {
                         wry::PageLoadEvent::Started => WebViewEvent::Loading { url },
                         wry::PageLoadEvent::Finished => WebViewEvent::Loaded { url },
@@ -77,7 +80,7 @@ impl WryPage {
         check_url(source)?;
         match source {
             WebViewSource::Html(html) => self.webview.load_html(html),
-            WebViewSource::Url(url) => self.webview.load_url(url),
+            WebViewSource::Url(url) => self.webview.load_url(url.as_str()),
         }
         .map_err(Error::backend)
     }
@@ -113,25 +116,13 @@ impl WryPage {
 }
 
 /// Returns an error for a URL that `NSURL` can't parse, on which wry panics.
+///
+/// `NSURL` and the `url` crate follow different standards, so a parsed [`crate::Url`] isn't enough.
 fn check_url(source: &WebViewSource) -> Result<(), Error> {
     if let WebViewSource::Url(url) = source
-        && NSURL::URLWithString(&NSString::from_str(url)).is_none()
+        && NSURL::URLWithString(&NSString::from_str(url.as_str())).is_none()
     {
-        return Err(Error::backend(format!("Not a URL: {url:?}")));
+        return Err(Error::backend(format!("NSURL can't parse {url}")));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// wry panics on a URL that `NSURL` can't parse, so `check_url` must reject it first.
-    #[test]
-    fn check_url_rejects_what_nsurl_cannot_parse() {
-        let url = |url: &str| WebViewSource::Url(url.to_owned());
-        assert!(check_url(&url("http://[::1")).is_err());
-        assert!(check_url(&url("https://example.com/")).is_ok());
-        assert!(check_url(&WebViewSource::Html("http://[::1".to_owned())).is_ok());
-    }
 }

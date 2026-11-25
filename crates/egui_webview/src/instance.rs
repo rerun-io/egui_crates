@@ -314,9 +314,9 @@ impl WebViewInstance {
     /// Loads the page at `url`.
     ///
     /// # Errors
-    /// See [`Self::load`].
-    pub fn load_url(&mut self, url: impl Into<String>) -> Result<(), Error> {
-        self.load(&WebViewSource::Url(url.into()))
+    /// [`Error::InvalidUrl`] if `url` doesn't parse. Otherwise see [`Self::load`].
+    pub fn load_url(&mut self, url: &str) -> Result<(), Error> {
+        self.load(&WebViewSource::Url(url.parse()?))
     }
 
     /// Runs `script` in the page.
