@@ -78,6 +78,11 @@ fn cef_color(color: Color32) -> u32 {
     u32::from_be_bytes([0xFF, r, g, b])
 }
 
+/// The target of the trace logs about the frames of a page: `painted <height in pixels>
+/// <kept|stale>` for each frame that CEF paints, and `shown <the widget's height> <the frame's
+/// height>`, in points, for each pass that shows the page.
+pub(crate) const FRAMES_LOG_TARGET: &str = "egui_webview::frames";
+
 /// How many passes of input are kept for the backend. More than that only pile up if the app
 /// doesn't call [`crate::WebViewInstance::place`].
 const MAX_WAITING_BATCHES: usize = 64;
@@ -357,6 +362,13 @@ impl Context {
             // stretched to the new rect. While the view grows, what is behind the widget shows
             // in the part that the frame doesn't cover yet.
             let size = texture.resolution_vec2() / ctx.pixels_per_point();
+            // The `resize_bench` example reads this.
+            log::trace!(
+                target: FRAMES_LOG_TARGET,
+                "shown {} {}",
+                rect.height().round(),
+                size.y
+            );
             painter.image(
                 texture.id(),
                 Rect::from_min_size(rect.min, size),

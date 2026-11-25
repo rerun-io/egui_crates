@@ -91,3 +91,7 @@ winit = { workspace = true, features = ["x11"], optional = true }
 [[example]]
 name = "cef_input_test"
 required-features = ["cef"]
+
+[[example]]
+name = "resize_bench"
+required-features = ["cef"]
