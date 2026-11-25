@@ -23,7 +23,6 @@ mod keys;
 mod layer;
 mod runtime;
 
-use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::mpsc;
 
@@ -510,20 +509,15 @@ fn context_menu_id(page: &egui::Response) -> egui::Id {
     page.id.with("context_menu")
 }
 
-/// The URL that loads `source`. CEF loads only URLs, so HTML becomes a percent-encoded `data:`
-/// URL.
+/// The URL that loads `source`. CEF loads only URLs, so HTML becomes a base64 `data:` URL.
 fn source_url(source: &WebViewSource) -> String {
+    use base64::Engine as _;
+
     match source {
         WebViewSource::Url(url) => url.clone(),
         WebViewSource::Html(html) => {
-            let mut url = String::from("data:text/html;charset=utf-8,");
-            for byte in html.bytes() {
-                if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
-                    url.push(char::from(byte));
-                } else {
-                    write!(url, "%{byte:02X}").ok();
-                }
-            }
+            let mut url = String::from("data:text/html;charset=utf-8;base64,");
+            base64::engine::general_purpose::STANDARD.encode_string(html, &mut url);
             url
         }
     }
@@ -546,12 +540,12 @@ mod tests {
         let url = "https://example.com/a b?c=d";
         assert_eq!(source_url(&WebViewSource::Url(url.to_owned())), url);
         assert_eq!(
-            source_url(&WebViewSource::Html("<a>-_.~ é%#".to_owned())),
-            "data:text/html;charset=utf-8,%3Ca%3E-_.~%20%C3%A9%25%23"
+            source_url(&WebViewSource::Html("<a>é%#".to_owned())),
+            "data:text/html;charset=utf-8;base64,PGE+w6klIw=="
         );
         assert_eq!(
             source_url(&WebViewSource::Html(String::new())),
-            "data:text/html;charset=utf-8,"
+            "data:text/html;charset=utf-8;base64,"
         );
     }
 }
