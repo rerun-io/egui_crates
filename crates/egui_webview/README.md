@@ -96,6 +96,50 @@ egui windows and popups above a page paint over it and receive the pointer input
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
 So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    App["<b>your eframe::App</b><br/>ui() shows widgets · output_hook() places pages"]
+
+    subgraph egui_webview
+        WebView["<b>WebView</b><br/>widget; holds no page"]
+        Mailbox["<b>Mailbox</b><br/>commands ↓ · events ↑"]
+        WebViews["<b>WebViews</b><br/>registry; owns the pages"]
+        Instance["<b>WebViewInstance</b><br/>one page"]
+        PageWidget{{"<b>trait PageWidget</b><br/>runs in egui's pass"}}
+        Backend{{"<b>trait Backend</b><br/>the page itself"}}
+        EmbeddedWidget["<b>EmbeddedWidget</b><br/>widget of Wry + Iframe"]
+        CefWidget["<b>chromium::Context</b><br/>widget of Cef; paints a texture"]
+        Wry["<b>WryBackend</b> (macOS)<br/>WKWebView below egui"]
+        Iframe["<b>IframeBackend</b> (web)<br/>&lt;iframe&gt; below the canvas"]
+        Cef["<b>CefBackend</b> (feature cef)<br/>off-screen Chromium"]
+    end
+
+    subgraph egui
+        EmbeddedView["<b>EmbeddedView</b><br/>clears its rect to transparent"]
+        Output["<b>EmbeddedViewOutput</b><br/>rect · visible · z_index"]
+    end
+
+    App -- in the pass --> WebView
+    App -- after the pass --> WebViews
+    WebView <--> Mailbox <--> WebViews
+    WebViews -- owns 0..n --> Instance
+    WebView --> PageWidget
+    Instance --> PageWidget
+    Instance --> Backend
+    PageWidget -. impl .-> EmbeddedWidget & CefWidget
+    Backend -. impl .-> Wry & Iframe & Cef
+    EmbeddedWidget == "ui.add()" ==> EmbeddedView
+    EmbeddedView == end of pass ==> Output
+    Output == "Backend::place()" ==> Wry & Iframe
+```
+
+In every pass, a `PageWidget` allocates the page's rect.
+For the embedded backends (web, macOS) it is an `egui::EmbeddedView`, which egui clears to transparent and reports as an `EmbeddedViewOutput` after the pass.
+`Backend::place` then moves the page there.
+The CEF backend paints the page as a texture instead, and its `place` always gets `None`.
+
 ## CEF
 
 The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built, and builds a small C++ wrapper library, which requires CMake and Ninja.
