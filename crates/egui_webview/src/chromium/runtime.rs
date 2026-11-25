@@ -37,6 +37,9 @@ pub const MAX_PUMP_DELAY: Duration = Duration::from_millis(100);
 /// How long [`shutdown`] waits for the browsers to close.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Whether the helper processes run in Chromium's sandbox.
+const SANDBOX: bool = cfg!(feature = "cef-sandbox");
+
 /// Where CEF is in its life, which happens once per process.
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
 static STATE: std::sync::Mutex<State> = std::sync::Mutex::new(State::Unchecked);
@@ -159,6 +162,14 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     // app creates its first webview.
     if load_library().is_ok() {
         let args = cef::args::Args::new();
+        #[cfg(all(target_os = "macos", feature = "cef-sandbox"))]
+        let _sandbox = match helper_sandbox(&args) {
+            Ok(sandbox) => sandbox,
+            Err(err) => {
+                log::error!("egui_webview: {err}");
+                return CefProcess::Helper { exit_code: 1 };
+            }
+        };
         let mut app = EguiApp::new();
         let exit_code = cef::execute_process(
             Some(args.as_main_args()),
@@ -180,6 +191,28 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
         }
     }
     CefProcess::App(ShutdownGuard::new())
+}
+
+/// Starts the sandbox in a helper process on macOS. The sandbox lasts until it is dropped.
+#[cfg(all(target_os = "macos", feature = "cef-sandbox"))]
+fn helper_sandbox(args: &cef::args::Args) -> Result<Option<cef::sandbox::Sandbox>, String> {
+    let is_helper = std::env::args().any(|arg| arg.starts_with("--type="));
+    if !is_helper {
+        return Ok(None);
+    }
+    // The path that `cef::sandbox::Sandbox::new` loads, which panics if it is missing.
+    let exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let library = exe.parent().map(|dir| {
+        dir.join("../../../Chromium Embedded Framework.framework/Libraries/libcef_sandbox.dylib")
+    });
+    if !library.is_some_and(|library| library.exists()) {
+        return Err(
+            "the CEF sandbox needs the helper to run from a helper app in an app bundle".to_owned(),
+        );
+    }
+    let mut sandbox = cef::sandbox::Sandbox::new();
+    sandbox.initialize(args.as_main_args());
+    Ok(Some(sandbox))
 }
 
 fn lock_state() -> std::sync::MutexGuard<'static, State> {
@@ -273,16 +306,20 @@ pub fn initialize(ctx: &egui::Context) -> Result<(), Error> {
 /// Initializes CEF with `options`. Returns the cache directory to delete at shutdown, if any.
 fn start(options: &CefInitOptions) -> Result<Option<PathBuf>, String> {
     let exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    check_sandbox(&exe)?;
     load_library()?;
 
     let mut settings = cef::Settings {
         windowless_rendering_enabled: 1,
         external_message_pump: 1,
-        no_sandbox: 1,
-        browser_subprocess_path: exe.to_string_lossy().as_ref().into(),
+        no_sandbox: i32::from(!SANDBOX),
         log_severity: sys::cef_log_severity_t::LOGSEVERITY_WARNING.into(),
         ..Default::default()
     };
+    // In a sandboxed app bundle on macOS, CEF finds the helper apps by itself.
+    if !SANDBOX || !cfg!(target_os = "macos") {
+        settings.browser_subprocess_path = exe.to_string_lossy().as_ref().into();
+    }
     let temp_dir = if let Some(dir) = &options.cache_dir {
         // CEF needs an absolute path, and the profile in `cache_path` to persist it.
         let dir = std::path::absolute(dir).map_err(|err| err.to_string())?;
@@ -310,6 +347,36 @@ fn start(options: &CefInitOptions) -> Result<Option<PathBuf>, String> {
         Ok(temp_dir)
     } else {
         Err("CEF failed to initialize".to_owned())
+    }
+}
+
+/// Fails if the `cef-sandbox` feature is on, and the sandbox can't work here.
+#[cfg_attr(
+    not(any(windows, target_os = "macos")),
+    expect(clippy::unnecessary_wraps, reason = "it fails on other platforms")
+)]
+fn check_sandbox(exe: &Path) -> Result<(), String> {
+    if !SANDBOX {
+        return Ok(());
+    }
+    cfg_select! {
+        windows => {
+            _ = exe;
+            Err("the `cef-sandbox` feature isn't supported on Windows".to_owned())
+        }
+        target_os = "macos" => {
+            if in_app_bundle(exe) {
+                Ok(())
+            } else {
+                Err("the `cef-sandbox` feature needs an app bundle with CEF's helper apps on \
+                     macOS"
+                    .to_owned())
+            }
+        }
+        _ => {
+            _ = exe;
+            Ok(())
+        }
     }
 }
 
