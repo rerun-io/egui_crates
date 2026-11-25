@@ -299,7 +299,7 @@ impl IframeBackend {
     ///
     /// `output` is in ui points. `scale` is how many CSS pixels one ui point is, which
     /// [`css_pixels_per_point`] measures.
-    fn style(output: &EmbeddedViewOutput, scale: f32, theme: Theme) -> (String, String) {
+    fn style(output: &EmbeddedViewOutput, scale: f32, theme: Theme) -> Styles {
         let rect = output.rect * scale;
         let visible = output.visible * scale;
         let z_index = output.z_index;
@@ -321,8 +321,6 @@ impl IframeBackend {
         // background of a browser tab, which also shows while the page loads. `Canvas` is that
         // color for the `<iframe>`'s `color-scheme`, so it is dark in the dark theme.
         let offset = rect.min - visible.min;
-        let color_scheme = if visuals.dark_mode { "dark" } else { "light" };
-        let [r, g, b, a] = visuals.panel_fill.to_srgba_unmultiplied();
         let iframe = format!(
             "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; \
              border: none; color-scheme: {}; background: Canvas; pointer-events: auto;",
@@ -600,10 +598,6 @@ fn color_scheme(theme: Theme) -> &'static str {
         Theme::Dark => "dark",
         Theme::Light => "light",
     }
-}
-
-fn set_style(element: &web_sys::Element, css: &str) {
-    element.set_attribute("style", css).ok();
 }
 
 fn js_error(err: impl Into<JsValue>) -> Error {
