@@ -87,6 +87,12 @@ pub struct WryBackend {
 
     /// The outer rect of egui's window when last checked, to detect when the window moves.
     last_window_rect: Option<Rect>,
+
+    /// A [`Backend::focus`] deferred until the page is shown, because a hidden `WebView2`
+    /// doesn't take the focus.
+    ///
+    /// Also set when a focused page is hidden, so that it gets the focus back when shown again.
+    pending_focus: Option<FocusDirection>,
 }
 
 impl WryBackend {
@@ -167,6 +173,7 @@ impl WryBackend {
             focus_left,
             last: None,
             last_window_rect: None,
+            pending_focus: None,
         })
     }
 
@@ -296,14 +303,30 @@ impl Backend for WryBackend {
         if self.last == placed {
             return;
         }
-        match &placed {
-            Some(placed) => self.show(placed),
-            None => warn(self.page.webview.set_visible(false)),
+        if let Some(placed) = &placed {
+            self.show(placed);
+        } else {
+            // A hidden page keeps the keyboard focus and keeps receiving key events. Give the
+            // focus to egui, and give it back to the page when the page is shown again.
+            if self.focused.get() {
+                self.blur();
+                self.pending_focus = Some(FocusDirection::None);
+            }
+            warn(self.page.webview.set_visible(false));
         }
         self.last = placed;
+        if self.last.is_some()
+            && let Some(direction) = self.pending_focus.take()
+        {
+            self.focus(direction);
+        }
     }
 
     fn focus(&mut self, direction: FocusDirection) {
+        if self.last.is_none() {
+            self.pending_focus = Some(direction);
+            return;
+        }
         let reason = match direction {
             FocusDirection::Next => COREWEBVIEW2_MOVE_FOCUS_REASON_NEXT,
             FocusDirection::Previous => COREWEBVIEW2_MOVE_FOCUS_REASON_PREVIOUS,
@@ -314,6 +337,7 @@ impl Backend for WryBackend {
     }
 
     fn blur(&mut self) {
+        self.pending_focus = None;
         if self.focused.get() {
             warn(self.page.webview.focus_parent());
             // Clear the flag now: `LostFocus` arrives later, and until then the webview would
