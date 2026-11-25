@@ -30,7 +30,7 @@ struct DemoApp {
     project: usize,
 
     /// egui's own gallery, for coverage of the widget kinds we wouldn't think to write out:
-    /// combo box, radio group, colour picker, progress bar, hyperlink, and the rest.
+    /// combo box, radio group, color picker, progress bar, hyperlink, and the rest.
     gallery: egui_demo_lib::WidgetGallery,
 }
 

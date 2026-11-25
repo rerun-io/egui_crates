@@ -9,7 +9,7 @@ use egui_kittest::inspector_api::Frame;
 /// Encode the entire history as a looping GIF, write it to a timestamped file in the system
 /// temp dir, and put a *file reference* for that path onto the system clipboard via arboard.
 /// Pasting into Slack / Discord / GitHub / Finder etc. attaches the GIF with animation intact.
-/// Mirrors the recorder's GIF behaviour: animation plays at `frame_rate`, last frame held
+/// Mirrors the recorder's GIF behavior: animation plays at `frame_rate`, last frame held
 /// for one second so the loop point is obvious.
 pub fn copy_history_as_gif(history: &[Frame], frame_rate: f32) -> Result<PathBuf, String> {
     use image::codecs::gif::{GifEncoder, Repeat};
