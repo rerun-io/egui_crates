@@ -78,6 +78,7 @@ wrap_render_handler! {
             width: ::std::os::raw::c_int,
             height: ::std::os::raw::c_int,
         ) {
+            profiling::scope!("on_paint");
             let (Ok(width), Ok(height)) = (usize::try_from(width), usize::try_from(height)) else {
                 return;
             };

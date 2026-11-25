@@ -195,6 +195,7 @@ impl CefBackend {
         source: &WebViewSource,
         options: CefOptions,
     ) -> Result<Self, Error> {
+        profiling::function_scope!();
         let engine = runtime::initialize(ctx)?;
 
         let (context, events) = Context::new(ctx);
@@ -256,6 +257,7 @@ impl PageWidget for Context {
 
     /// Paints the page into `response.rect`, and writes down this pass's input for the backend.
     fn show(&self, ui: &mut Ui, response: &egui::Response) {
+        profiling::function_scope!();
         let ctx = ui.ctx().clone();
         let rect = response.rect;
 
@@ -515,6 +517,7 @@ impl Backend for CefBackend {
 
     /// Tells the browser what its widget saw in the pass that just ended.
     fn place(&mut self, ctx: &egui::Context, _output: Option<&EmbeddedViewOutput>) {
+        profiling::function_scope!();
         // Shown or not, the browser needs CEF's message loop work, so egui must keep running
         // passes.
         ctx.request_repaint_after(runtime::MAX_PUMP_DELAY);
@@ -556,8 +559,11 @@ impl Backend for CefBackend {
         if inbox.release_pointer {
             self.input.release(&host);
         }
-        for batch in &inbox.batches {
-            self.input.replay(&self.browser, batch);
+        {
+            profiling::scope!("replay_input");
+            for batch in &inbox.batches {
+                self.input.replay(&self.browser, batch);
+            }
         }
         if let Some((menu, picked)) = inbox.menu_done {
             match picked {
