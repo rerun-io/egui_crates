@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 
 use egui::mutex::Mutex;
-use egui::{CursorIcon, FocusDirection, Rect, Vec2, ViewportId};
+use egui::{CursorIcon, FocusDirection, Pos2, Rect, Vec2, ViewportId};
 
 use super::handlers::ContextMenu;
 use super::layer::Layer;
@@ -34,6 +34,38 @@ impl std::fmt::Debug for Context {
     }
 }
 
+/// The popup's painted rect and the translation from it to CEF's original view coordinates.
+#[derive(Clone, Copy, Debug)]
+pub struct PopupPlacement {
+    /// Where egui paints the popup, in view points.
+    pub rect: Rect,
+    offset: Vec2,
+}
+
+impl PopupPlacement {
+    /// Places the requested popup inside the view where possible.
+    pub fn new(view_size: Vec2, requested: Rect) -> Self {
+        let min = requested
+            .min
+            .min((view_size - requested.size()).to_pos2())
+            .max(Pos2::ZERO);
+        Self {
+            rect: Rect::from_min_size(min, requested.size()),
+            offset: requested.min - min,
+        }
+    }
+
+    /// Maps a pointer position in the view to the coordinates CEF uses for hit testing.
+    pub fn cef_position(self, pos: Pos2) -> Pos2 {
+        let Rect { min, max } = self.rect;
+        if min.x <= pos.x && pos.x < max.x && min.y <= pos.y && pos.y < max.y {
+            pos + self.offset
+        } else {
+            pos
+        }
+    }
+}
+
 /// Everything about a page that changes while it lives.
 #[derive(Debug)]
 pub struct State {
@@ -46,7 +78,7 @@ pub struct State {
     /// The latest frame of the popup widget, such as the drop-down list of a `<select>`.
     pub popup: Layer,
     /// The popup widget's rect in view points, while it is open.
-    pub popup_rect: Option<Rect>,
+    pub popup_placement: Option<PopupPlacement>,
     pub cursor: CursorIcon,
     pub tooltip: Option<String>,
     /// Whether CEF last asked for a virtual keyboard, which it does when an editable element
@@ -105,7 +137,7 @@ impl Context {
             size: (egui::vec2(1.0, 1.0), egui_ctx.pixels_per_point()),
             view: Layer::default(),
             popup: Layer::default(),
-            popup_rect: None,
+            popup_placement: None,
             cursor: CursorIcon::Default,
             tooltip: None,
             keyboard_requested: false,
@@ -140,5 +172,23 @@ impl Context {
     /// which isn't necessarily the root.
     pub fn request_repaint(&self) {
         self.egui_ctx.request_repaint_of(ViewportId::ROOT);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use egui::{pos2, vec2};
+
+    use super::*;
+
+    #[test]
+    fn shifted_popup_maps_only_its_painted_pixels() {
+        let requested = Rect::from_min_size(pos2(80.0, 90.0), vec2(40.0, 30.0));
+        let popup = PopupPlacement::new(Vec2::splat(100.0), requested);
+        assert_eq!(popup.cef_position(pos2(60.0, 70.0)), requested.min);
+        assert_eq!(popup.cef_position(pos2(99.0, 99.0)), pos2(119.0, 119.0));
+        for outside in [pos2(59.0, 80.0), pos2(100.0, 80.0), pos2(80.0, 100.0)] {
+            assert_eq!(popup.cef_position(outside), outside);
+        }
     }
 }

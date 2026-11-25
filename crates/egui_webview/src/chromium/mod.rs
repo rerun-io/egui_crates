@@ -187,7 +187,7 @@ impl PageWidget for Context {
         // A page that is scrolled out of view counts as not shown, so CEF stops rendering it.
         let visible = ui.is_rect_visible(rect);
         let pass = ctx.cumulative_pass_nr_for(ViewportId::ROOT);
-        let menu_open = {
+        let (menu_open, popup) = {
             let mut state = self.state.lock();
             if visible {
                 state.shown_pass = Some(pass);
@@ -195,7 +195,7 @@ impl PageWidget for Context {
             // CEF asks for this size when it renders. The backend tells CEF after the pass that
             // it changed.
             state.size = (rect.size(), ctx.pixels_per_point());
-            state.context_menu.is_some()
+            (state.context_menu.is_some(), state.popup_placement)
         };
 
         if visible {
@@ -247,7 +247,7 @@ impl PageWidget for Context {
         // While the context menu is open, keys don't go to the page, so Escape only closes the
         // menu. That has to be decided now. By the time the backend sends the input, the menu
         // is closed.
-        let batch = input::Batch::record(ui, response, !menu_open);
+        let batch = input::Batch::record(ui, response, popup, !menu_open);
         if !batch.is_empty() {
             let mut state = self.state.lock();
             let batches = &mut state.inbox.batches;
@@ -363,12 +363,12 @@ impl Context {
                 Color32::WHITE,
             );
         }
-        if let Some(popup) = state.popup_rect
+        if let Some(popup) = state.popup_placement
             && let Some(texture) = state.popup.upload(ctx, "egui_webview_popup")
         {
             painter.image(
                 texture.id(),
-                popup.translate(rect.min.to_vec2()),
+                popup.rect.translate(rect.min.to_vec2()),
                 uv,
                 Color32::WHITE,
             );

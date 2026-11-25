@@ -13,6 +13,7 @@ use egui::{
     Event, ImeEvent, Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, Rect, Response, Ui, Vec2,
 };
 
+use super::context::PopupPlacement;
 use super::keys::KeyExt as _;
 
 /// What the page's widget saw in one pass.
@@ -25,6 +26,7 @@ pub struct Batch {
 
     /// The page's rect.
     rect: Rect,
+    popup: Option<PopupPlacement>,
 
     /// False while a layer above the page, such as a window or a popup, covers the pointer.
     hovered: bool,
@@ -48,7 +50,12 @@ impl Batch {
     ///
     /// It also does the two things that the input means for egui itself. A press on the page
     /// gives the widget egui's focus, and a wheel event over the page isn't egui's to scroll.
-    pub fn record(ui: &Ui, response: &Response, forward_keys: bool) -> Self {
+    pub fn record(
+        ui: &Ui,
+        response: &Response,
+        popup: Option<PopupPlacement>,
+        forward_keys: bool,
+    ) -> Self {
         let hovered = response.contains_pointer();
         let focused = response.has_focus();
         let points_per_line = ui
@@ -63,6 +70,7 @@ impl Batch {
         let batch = ui.input(|i| Self {
             events: i.events.clone(),
             rect: response.rect,
+            popup,
             hovered,
             focused,
             forward_keys,
@@ -97,7 +105,11 @@ impl Batch {
     /// `modifiers` and the event flags of the mouse buttons that are held down.
     fn mouse_event(&self, pos: Pos2, modifiers: Modifiers, buttons_down: u32) -> MouseEvent {
         // CEF takes whole points, relative to the page's corner.
-        let pos = (pos - self.rect.min).round();
+        let pos = (pos - self.rect.min).to_pos2();
+        let pos = self
+            .popup
+            .map_or(pos, |popup| popup.cef_position(pos))
+            .round();
         #[expect(clippy::cast_possible_truncation)]
         let (x, y) = (pos.x as i32, pos.y as i32);
         MouseEvent {

@@ -6,9 +6,9 @@ use std::sync::Arc;
 // The `wrap_*` macros call `add_ref` from this trait.
 use cef::rc::Rc as _;
 use cef::{Browser, ImplRenderHandler, RenderHandler, WrapRenderHandler, sys, wrap_render_handler};
-use egui::{Pos2, Rect, pos2};
+use egui::{Rect, pos2};
 
-use crate::chromium::context::Context;
+use crate::chromium::context::{Context, PopupPlacement};
 use crate::chromium::layer::Layer;
 
 wrap_render_handler! {
@@ -47,7 +47,7 @@ wrap_render_handler! {
             if show == 0 {
                 {
                     let mut state = self.context.state.lock();
-                    state.popup_rect = None;
+                    state.popup_placement = None;
                     state.popup = Layer::default();
                 }
                 self.context.request_repaint();
@@ -62,10 +62,8 @@ wrap_render_handler! {
             let mut state = self.context.state.lock();
             let (size, _) = state.size;
             let popup_size = egui::vec2(rect.width as f32, rect.height as f32);
-            let min = pos2(rect.x as f32, rect.y as f32)
-                .min((size - popup_size).to_pos2())
-                .max(Pos2::ZERO);
-            state.popup_rect = Some(Rect::from_min_size(min, popup_size));
+            let requested = Rect::from_min_size(pos2(rect.x as f32, rect.y as f32), popup_size);
+            state.popup_placement = Some(PopupPlacement::new(size, requested));
         }
 
         fn on_paint(
