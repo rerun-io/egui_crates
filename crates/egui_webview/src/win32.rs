@@ -69,6 +69,7 @@ struct Placed {
 }
 
 /// Shows the page in a `WebView2` under egui's surface.
+#[derive(Debug)]
 pub struct WryBackend {
     page: WryPage,
 
