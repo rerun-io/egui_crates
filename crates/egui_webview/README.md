@@ -28,7 +28,7 @@ Call `egui_webview::init` first in `main`:
 
 ```rust,ignore
 fn main() {
-    egui_webview::init();
+    let _guard = egui_webview::init();
     // …
 }
 ```

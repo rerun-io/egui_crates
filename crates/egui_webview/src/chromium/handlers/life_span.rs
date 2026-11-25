@@ -10,6 +10,7 @@ use cef::{
 };
 
 use crate::chromium::context::Context;
+use crate::chromium::runtime;
 use crate::{WebViewEvent, reported_url};
 
 wrap_life_span_handler! {
@@ -18,6 +19,15 @@ wrap_life_span_handler! {
     }
 
     impl LifeSpanHandler {
+        fn on_after_created(&self, _browser: Option<&mut Browser>) {
+            runtime::browser_opened();
+        }
+
+        /// The last call for a browser, which CEF destroys next.
+        fn on_before_close(&self, _browser: Option<&mut Browser>) {
+            runtime::browser_closed();
+        }
+
         /// Cancels a new window (such as `target="_blank"` or `window.open`), and tells the app
         /// about it instead. A windowless browser has nowhere to show one, and loading it in
         /// this browser would let any script or `<iframe>` navigate the whole view.

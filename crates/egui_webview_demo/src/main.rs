@@ -430,7 +430,7 @@ fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     // With CEF, its helper processes run from this executable. A helper process ends here.
-    egui_webview::init();
+    let _guard = egui_webview::init();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]),
@@ -452,7 +452,7 @@ fn main() {
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-    egui_webview::init();
+    let _guard = egui_webview::init();
 
     let search = web_sys::window()
         .and_then(|window| window.location().search().ok())

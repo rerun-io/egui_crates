@@ -32,27 +32,60 @@ mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
 #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-pub use chromium::{CefOptions, init as cef_init, run_subprocess as run_cef_subprocess};
+pub use chromium::{
+    CefInitOptions, CefOptions, CefProcess, init as cef_init, init_with as cef_init_with,
+    run_subprocess as run_cef_subprocess,
+};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};
 
 /// Initializes `egui_webview`. Call this first in `main`, whatever the platform and whichever
-/// features are enabled:
+/// features are enabled, and keep the guard until `eframe::run_native` has returned:
 ///
 /// ```no_run
-/// egui_webview::init();
-/// // … start the app
+/// let _guard = egui_webview::init();
+/// // … run the app
 /// ```
 ///
 /// Currently, it only does something natively with the `cef` feature, where it calls
-/// `egui_webview::cef_init`: CEF starts its helper processes (renderer, GPU, …) from the app's
-/// own executable, and in such a process this function runs the helper and then exits the
+/// [`cef_init`](`crate::cef_init`): CEF starts its helper processes (renderer, GPU, …) from the
+/// app's own executable, and in such a process this function runs the helper and then exits the
 /// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
-pub fn init() {
-    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-    cef_init();
+pub fn init() -> ShutdownGuard {
+    cfg_select! {
+        all(feature = "cef", not(target_arch = "wasm32")) => { cef_init() }
+        _ => { ShutdownGuard::new() }
+    }
+}
+
+/// Shuts down what [`init`] started, when dropped.
+///
+/// Drop it at the end of `main`, after `eframe::run_native` has returned and the webviews are
+/// gone. With CEF, that waits until CEF has closed its browsers, shuts CEF down, and deletes its
+/// temporary files. CEF can't start again in the same process.
+///
+/// It isn't `Send`, because CEF shuts down on the thread that initialized it.
+#[must_use = "dropping the guard shuts down the webviews' runtime"]
+#[derive(Debug)]
+pub struct ShutdownGuard {
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl ShutdownGuard {
+    pub(crate) fn new() -> Self {
+        Self {
+            _not_send: std::marker::PhantomData,
+        }
+    }
+}
+
+impl Drop for ShutdownGuard {
+    fn drop(&mut self) {
+        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        chromium::shutdown();
+    }
 }
 
 /// What should the webview load?

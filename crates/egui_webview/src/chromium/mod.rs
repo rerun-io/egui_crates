@@ -39,7 +39,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
-pub use runtime::{init, run_subprocess};
+pub use runtime::{CefInitOptions, CefProcess, init, init_with, run_subprocess, shutdown};
 
 /// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

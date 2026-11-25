@@ -199,7 +199,7 @@ impl eframe::App for Test {
 }
 
 fn main() -> eframe::Result {
-    egui_webview::init();
+    let _guard = egui_webview::init();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
