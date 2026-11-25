@@ -27,7 +27,7 @@ struct Tool {
 }
 
 // TODO(emilk): remove `ninja` when `cef-dll-sys` no longer requires it:
-// https://github.com/tauri-apps/cef-rs
+// https://github.com/tauri-apps/cef-rs/pull/525
 const TOOLS: &[Tool] = &[
     Tool {
         name: "cmake",
