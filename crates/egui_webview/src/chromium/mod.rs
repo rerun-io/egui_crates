@@ -354,7 +354,8 @@ impl Context {
         let mut state = self.state.lock();
         if let Some(texture) = state.view.upload(ctx, "egui_webview") {
             // Paint at the texture's own size, so that a frame rendered before a resize isn't
-            // stretched to the new rect.
+            // stretched to the new rect. While the view grows, what is behind the widget shows
+            // in the part that the frame doesn't cover yet.
             let size = texture.resolution_vec2() / ctx.pixels_per_point();
             painter.image(
                 texture.id(),

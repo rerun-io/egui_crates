@@ -73,6 +73,9 @@ pub struct State {
     ///
     /// CEF's view coordinates (DIPs) are egui points, with the origin at the view's top-left.
     pub size: (Vec2, f32),
+    /// The size in pixels of the view that CEF last asked for, and so the size of the frames
+    /// it should paint. See [`State::is_frame_current`].
+    pub asked_pixels: Option<Vec2>,
     /// The latest frame of the page.
     pub view: Layer,
     /// The latest frame of the popup widget, such as the drop-down list of a `<select>`.
@@ -103,6 +106,19 @@ pub struct State {
 }
 
 impl State {
+    /// Whether a frame of `size` pixels has the size that CEF last asked for.
+    ///
+    /// During a resize, CEF can paint a frame at the old size after it asked for the new one.
+    /// It scales the page, which already has the new layout, to fit that frame. So such a frame
+    /// shows the page a few percent too small, and must be dropped.
+    pub fn is_frame_current(&self, size: [usize; 2]) -> bool {
+        // CEF rounds a fractional size in its own way, so allow a pixel of difference.
+        self.asked_pixels.is_none_or(|asked| {
+            let [width, height] = size;
+            (asked.x - width as f32).abs() <= 1.0 && (asked.y - height as f32).abs() <= 1.0
+        })
+    }
+
     /// Whether an editable element of the page has focus, so that the IME should be enabled.
     ///
     /// Either signal is enough. CEF doesn't ask for a virtual keyboard when an element gains
@@ -135,6 +151,7 @@ impl Context {
         let (events, receiver) = mpsc::channel();
         let state = State {
             size: (egui::vec2(1.0, 1.0), egui_ctx.pixels_per_point()),
+            asked_pixels: None,
             view: Layer::default(),
             popup: Layer::default(),
             popup_placement: None,

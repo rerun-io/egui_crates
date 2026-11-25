@@ -19,7 +19,11 @@ wrap_render_handler! {
     impl RenderHandler {
         fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut cef::Rect>) {
             if let Some(rect) = rect {
-                let size = self.context.state.lock().size.0.round();
+                let mut state = self.context.state.lock();
+                let (size, scale) = state.size;
+                let size = size.round();
+                state.asked_pixels = Some(size.max(egui::Vec2::splat(1.0)) * scale);
+                drop(state);
                 // CEF requires a view rect that isn't empty.
                 rect.x = 0;
                 rect.y = 0;
@@ -87,7 +91,11 @@ wrap_render_handler! {
             let buffer = unsafe { std::slice::from_raw_parts(buffer, width * height * 4) };
             {
                 let mut state = self.context.state.lock();
-                let layer = if *type_.as_ref() == sys::cef_paint_element_type_t::PET_POPUP {
+                let is_popup = *type_.as_ref() == sys::cef_paint_element_type_t::PET_POPUP;
+                if !is_popup && !state.is_frame_current([width, height]) {
+                    return;
+                }
+                let layer = if is_popup {
                     &mut state.popup
                 } else {
                     &mut state.view
