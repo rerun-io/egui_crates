@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Response, Ui, Vec2};
+use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Response, Theme, Ui, Vec2};
 
 use crate::{Error, WebViewEvent, WebViewSource};
 
@@ -99,6 +99,13 @@ pub trait Backend: std::fmt::Debug {
     /// window points, or by [`Context::pixels_per_point`] to get physical pixels.
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {}
 
+    /// Makes the page see `theme` as its `prefers-color-scheme`, like a browser does with the
+    /// OS theme. Then web UI frameworks follow egui's theme without any code in the page.
+    ///
+    /// The webview calls this when it creates the page, and again whenever egui's theme
+    /// changes.
+    fn set_theme(&mut self, theme: Theme) {}
+
     /// Gives the page the keyboard focus, because egui's focus moved to the webview.
     ///
     /// `direction` says how egui's focus arrived:
@@ -151,7 +158,7 @@ pub trait Backend: std::fmt::Debug {
 ///
 /// [`FocusDirection::Next`]: egui::FocusDirection::Next
 /// [`FocusDirection::Previous`]: egui::FocusDirection::Previous
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", feature = "cef"))]
 pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     let index = match direction {
         egui::FocusDirection::Next => 0,

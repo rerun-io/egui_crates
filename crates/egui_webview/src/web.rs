@@ -18,7 +18,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use egui::{Context, EmbeddedViewOutput, FocusDirection};
+use egui::{Context, EmbeddedViewOutput, FocusDirection, Theme};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
@@ -156,6 +156,9 @@ pub struct IframeBackend {
     /// Used to skip redundant style writes.
     last_style: Option<Styles>,
 
+    /// The theme from [`Backend::set_theme`]. The `<iframe>` gets it as its `color-scheme`.
+    theme: Theme,
+
     /// The [`FocusEdge`]s before and after the `<iframe>`, in that order.
     focus_edges: [FocusEdge; 2],
 
@@ -277,6 +280,7 @@ impl IframeBackend {
             pending_scripts,
             events,
             last_style: None,
+            theme: Theme::Light,
             focus_edges: [before, after],
             focus_left,
             focus_parked,
@@ -294,8 +298,8 @@ impl IframeBackend {
     /// The inline styles of the container and the `<iframe>` for `output`.
     ///
     /// `output` is in ui points. `scale` is how many CSS pixels one ui point is, which
-    /// [`css_pixels_per_point`] measures. `visuals` is egui's theme.
-    fn style(output: &EmbeddedViewOutput, scale: f32, visuals: &egui::Visuals) -> Styles {
+    /// [`css_pixels_per_point`] measures.
+    fn style(output: &EmbeddedViewOutput, scale: f32, theme: Theme) -> (String, String) {
         let rect = output.rect * scale;
         let visible = output.visible * scale;
         let z_index = output.z_index;
@@ -313,24 +317,20 @@ impl IframeBackend {
         );
 
         // The `<iframe>` is positioned relative to the container, which clips it to `visible`.
-        //
-        // Its `color-scheme` follows egui's theme, and its background is egui's panel color.
-        // A page that supports that scheme, and the blank page while it loads, show that
-        // background, so a dark app doesn't flash white. A page that only supports the other
-        // scheme gets an opaque background from the browser in its own scheme, so a light-only
-        // page stays readable in a dark app.
+        // An `<iframe>` is transparent where its page paints no background, so give it the
+        // background of a browser tab, which also shows while the page loads. `Canvas` is that
+        // color for the `<iframe>`'s `color-scheme`, so it is dark in the dark theme.
         let offset = rect.min - visible.min;
         let color_scheme = if visuals.dark_mode { "dark" } else { "light" };
         let [r, g, b, a] = visuals.panel_fill.to_srgba_unmultiplied();
         let iframe = format!(
             "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; \
-             border: none; color-scheme: {color_scheme}; \
-             background: rgba({r}, {g}, {b}, {}); pointer-events: auto;",
+             border: none; color-scheme: {}; background: Canvas; pointer-events: auto;",
             offset.x,
             offset.y,
             rect.width(),
             rect.height(),
-            f32::from(a) / 255.0,
+            color_scheme(theme),
         );
         Styles { container, iframe }
     }
@@ -421,7 +421,7 @@ impl Backend for IframeBackend {
         // A hidden page needs no scale, so it doesn't measure the canvas.
         let style = output.map(|output| {
             let scale = css_pixels_per_point(ctx, &self.canvas.get_bounding_client_rect());
-            Self::style(output, scale, &ctx.global_style().visuals)
+            Self::style(output, scale, self.theme)
         });
         if style == self.last_style {
             return;
@@ -436,6 +436,19 @@ impl Backend for IframeBackend {
             }
         }
         self.last_style = style;
+    }
+
+    fn set_theme(&mut self, theme: Theme) {
+        // The page's `prefers-color-scheme` follows the `<iframe>`'s `color-scheme`. `place`
+        // includes it when it writes the whole style. Set it here too, so that a hidden page
+        // gets it before `place` runs again.
+        self.theme = theme;
+        warn(
+            self.iframe
+                .style()
+                .set_property("color-scheme", color_scheme(theme))
+                .map_err(js_error),
+        );
     }
 
     fn focus(&mut self, direction: FocusDirection) {
@@ -579,6 +592,18 @@ fn with_prelude(html: &str) -> String {
         .map_or(0, |end| end + 1);
     let (doctype, rest) = trimmed.split_at(doctype_end);
     format!("{doctype}{HTML_PRELUDE}{rest}")
+}
+
+/// The CSS `color-scheme` of `theme`.
+fn color_scheme(theme: Theme) -> &'static str {
+    match theme {
+        Theme::Dark => "dark",
+        Theme::Light => "light",
+    }
+}
+
+fn set_style(element: &web_sys::Element, css: &str) {
+    element.set_attribute("style", css).ok();
 }
 
 fn js_error(err: impl Into<JsValue>) -> Error {
