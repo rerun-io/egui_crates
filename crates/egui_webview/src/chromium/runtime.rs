@@ -217,27 +217,28 @@ fn resource_paths(exe: &std::path::Path, settings: &mut cef::Settings) {
     let Some(cef_dir) = sys::get_cef_dir() else {
         return;
     };
-    #[cfg(target_os = "macos")]
-    {
-        let in_bundle = exe
-            .parent()
-            .is_some_and(|dir| dir.join("../Frameworks").exists());
-        if !in_bundle {
-            settings.framework_dir_path = cef_dir
-                .join("Chromium Embedded Framework.framework")
-                .to_string_lossy()
-                .as_ref()
-                .into();
+    cfg_select! {
+        target_os = "macos" => {
+            let in_bundle = exe
+                .parent()
+                .is_some_and(|dir| dir.join("../Frameworks").exists());
+            if !in_bundle {
+                settings.framework_dir_path = cef_dir
+                    .join("Chromium Embedded Framework.framework")
+                    .to_string_lossy()
+                    .as_ref()
+                    .into();
+            }
         }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let next_to_exe = exe
-            .parent()
-            .is_some_and(|dir| dir.join("icudtl.dat").exists());
-        if !next_to_exe {
-            settings.resources_dir_path = cef_dir.to_string_lossy().as_ref().into();
-            settings.locales_dir_path = cef_dir.join("locales").to_string_lossy().as_ref().into();
+        _ => {
+            let next_to_exe = exe
+                .parent()
+                .is_some_and(|dir| dir.join("icudtl.dat").exists());
+            if !next_to_exe {
+                settings.resources_dir_path = cef_dir.to_string_lossy().as_ref().into();
+                settings.locales_dir_path =
+                    cef_dir.join("locales").to_string_lossy().as_ref().into();
+            }
         }
     }
 }
