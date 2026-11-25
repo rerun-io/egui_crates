@@ -52,9 +52,9 @@
 //!
 //! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
 //!   paints like any other image, and the widget forwards egui's input to the page.
-//! - An embedded view (`WKWebView` on macOS with the `wry` feature, an `<iframe>` on the web): the page lies below egui's
-//!   surface. Its rect is an [`egui::EmbeddedView`], which clears the rect to
-//!   transparent so the page shows through. After every pass of the root viewport,
+//! - An embedded view (`WKWebView` on macOS with the `wry` feature, `WebView2` on Windows, an `<iframe>` on the web): the
+//!   page lies below egui's surface. Its rect is an [`egui::EmbeddedView`], which clears the rect
+//!   to transparent so the page shows through. After every pass of the root viewport,
 //!   [`WebViewInstance::place`] moves the page to where egui put that rect, which egui reports
 //!   as an [`egui::EmbeddedViewOutput`]. egui layers above the page (windows, popups, …) paint
 //!   over it, and the output tells the backend where egui takes the pointer input.
