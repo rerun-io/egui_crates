@@ -117,3 +117,117 @@ fn clamp_rect(rect: &cef::Rect, size: [usize; 2]) -> [usize; 4] {
     let (y, h) = clamp(rect.y, rect.height, size[1]);
     [x, y, w, h]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SIZE: [usize; 2] = [4, 3];
+
+    fn rect(x: i32, y: i32, width: i32, height: i32) -> cef::Rect {
+        cef::Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// A BGRA frame of `size` whose pixels are gray, with their index as the gray level.
+    fn frame(size: [usize; 2]) -> Vec<u8> {
+        (0..size[0] * size[1])
+            .flat_map(|i| {
+                let gray = u8::try_from(i).unwrap_or(u8::MAX);
+                [gray, gray, gray, 255]
+            })
+            .collect()
+    }
+
+    /// The pixels that `frame` has in `[x, y, width, height]`.
+    fn pixels(size: [usize; 2], [x, y, w, h]: [usize; 4]) -> ColorImage {
+        let pixels = (y..y + h)
+            .flat_map(|row| (x..x + w).map(move |col| row * size[0] + col))
+            .map(|i| {
+                let gray = u8::try_from(i).unwrap_or(u8::MAX);
+                Color32::from_rgb(gray, gray, gray)
+            })
+            .collect();
+        ColorImage::new([w, h], pixels)
+    }
+
+    /// The pending upload as `[x, y, width, height]`, and its pixels.
+    fn pending(layer: &Layer) -> Option<([usize; 4], &ColorImage)> {
+        let ([x, y], image) = layer.pending.as_ref()?;
+        Some(([*x, *y, image.width(), image.height()], image))
+    }
+
+    /// A layer that has a frame of [`SIZE`] uploaded, and nothing pending.
+    fn uploaded_layer() -> Layer {
+        let mut layer = Layer::default();
+        layer.paint(&frame(SIZE), SIZE, &[]);
+        layer.upload(&egui::Context::default(), "test");
+        layer
+    }
+
+    #[test]
+    fn new_size_takes_whole_frame() {
+        let mut layer = uploaded_layer();
+        let size = [2, 2];
+        layer.paint(&frame(size), size, &[rect(0, 0, 1, 1)]);
+        let whole = [0, 0, 2, 2];
+        assert_eq!(pending(&layer), Some((whole, &pixels(size, whole))));
+        assert!(layer.resized);
+    }
+
+    #[test]
+    fn dirty_rects_are_united() {
+        let mut layer = uploaded_layer();
+        layer.paint(&frame(SIZE), SIZE, &[rect(0, 0, 1, 1), rect(2, 1, 1, 1)]);
+        let united = [0, 0, 3, 2];
+        assert_eq!(pending(&layer), Some((united, &pixels(SIZE, united))));
+        assert!(!layer.resized);
+    }
+
+    #[test]
+    fn dirty_rect_joins_pending_upload() {
+        let mut layer = uploaded_layer();
+        layer.paint(&frame(SIZE), SIZE, &[rect(3, 2, 1, 1)]);
+        layer.paint(&frame(SIZE), SIZE, &[rect(1, 0, 1, 1)]);
+        let united = [1, 0, 3, 3];
+        assert_eq!(pending(&layer), Some((united, &pixels(SIZE, united))));
+    }
+
+    #[test]
+    fn empty_and_outside_dirty_rects_are_ignored() {
+        let mut layer = uploaded_layer();
+        let dirty = [
+            rect(1, 1, 0, 2),
+            rect(1, 1, 2, 0),
+            rect(4, 0, 1, 1),
+            rect(-2, 0, 2, 3),
+        ];
+        layer.paint(&frame(SIZE), SIZE, &dirty);
+        assert_eq!(pending(&layer), None);
+    }
+
+    #[test]
+    fn union_of_rects() {
+        assert_eq!(union([1, 1, 1, 1], [1, 1, 1, 1]), [1, 1, 1, 1]);
+        assert_eq!(union([0, 0, 2, 2], [1, 1, 1, 1]), [0, 0, 2, 2]);
+        assert_eq!(union([3, 0, 1, 1], [0, 2, 1, 1]), [0, 0, 4, 3]);
+    }
+
+    #[test]
+    fn rects_are_clamped_to_the_frame() {
+        assert_eq!(clamp_rect(&rect(1, 1, 2, 1), SIZE), [1, 1, 2, 1]);
+        assert_eq!(clamp_rect(&rect(-1, -2, 3, 4), SIZE), [0, 0, 2, 2]);
+        assert_eq!(clamp_rect(&rect(3, 2, 5, 5), SIZE), [3, 2, 1, 1]);
+        assert_eq!(clamp_rect(&rect(-5, 0, 2, 1), SIZE), [0, 0, 0, 1]);
+        assert_eq!(clamp_rect(&rect(9, 9, 1, 1), SIZE), [4, 3, 0, 0]);
+        assert_eq!(clamp_rect(&rect(1, 1, -1, 1), SIZE), [1, 1, 0, 1]);
+        assert_eq!(
+            clamp_rect(&rect(i32::MAX, i32::MIN, i32::MAX, i32::MAX), SIZE),
+            [4, 0, 0, 0]
+        );
+    }
+}

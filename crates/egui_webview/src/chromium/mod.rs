@@ -528,3 +528,30 @@ fn source_url(source: &WebViewSource) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cef_colors() {
+        assert_eq!(cef_color(Color32::TRANSPARENT), 0);
+        assert_eq!(cef_color(Color32::from_rgb(1, 2, 3)), 0xFF01_0203);
+        let translucent = Color32::from_rgba_unmultiplied(255, 0, 0, 1);
+        assert_eq!(cef_color(translucent) >> 24, 0xFF);
+    }
+
+    #[test]
+    fn source_urls() {
+        let url = "https://example.com/a b?c=d";
+        assert_eq!(source_url(&WebViewSource::Url(url.to_owned())), url);
+        assert_eq!(
+            source_url(&WebViewSource::Html("<a>-_.~ é%#".to_owned())),
+            "data:text/html;charset=utf-8,%3Ca%3E-_.~%20%C3%A9%25%23"
+        );
+        assert_eq!(
+            source_url(&WebViewSource::Html(String::new())),
+            "data:text/html;charset=utf-8,"
+        );
+    }
+}

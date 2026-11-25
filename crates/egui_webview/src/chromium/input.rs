@@ -604,3 +604,49 @@ fn event_flags(modifiers: Modifiers) -> u32 {
 fn bits(flag: sys::cef_event_flags_t) -> u32 {
     u32::from_ne_bytes(flag.0.to_ne_bytes())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn left() -> MouseButton {
+        MouseButton {
+            type_: sys::cef_mouse_button_type_t::MBT_LEFT.into(),
+            flag: 1,
+        }
+    }
+
+    fn right() -> MouseButton {
+        MouseButton {
+            type_: sys::cef_mouse_button_type_t::MBT_RIGHT.into(),
+            flag: 2,
+        }
+    }
+
+    #[test]
+    fn click_counting() {
+        let mut input = Input::default();
+        let pos = Pos2::ZERO;
+        assert_eq!(input.count_click(0.0, pos, left()), 1);
+        assert_eq!(input.count_click(0.4, pos + Vec2::splat(2.0), left()), 2);
+        assert_eq!(input.count_click(0.8, pos, left()), 3);
+    }
+
+    #[test]
+    fn click_count_restarts() {
+        let mut input = Input::default();
+        let pos = Pos2::ZERO;
+        input.count_click(0.0, pos, left());
+        assert_eq!(input.count_click(0.5, pos, left()), 1, "too late");
+        assert_eq!(
+            input.count_click(0.6, pos + Vec2::X * 4.0, left()),
+            1,
+            "too far"
+        );
+        assert_eq!(
+            input.count_click(0.7, pos + Vec2::X * 4.0, right()),
+            1,
+            "other button"
+        );
+    }
+}

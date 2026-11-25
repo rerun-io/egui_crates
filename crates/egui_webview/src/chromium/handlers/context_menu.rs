@@ -147,3 +147,18 @@ fn menu_label(label: &str) -> String {
     }
     text
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn menu_labels() {
+        assert_eq!(menu_label("&Copy"), "Copy");
+        assert_eq!(menu_label("Save &As"), "Save As");
+        assert_eq!(menu_label("Fish && Chips"), "Fish & Chips");
+        assert_eq!(menu_label("&&&x"), "&x");
+        assert_eq!(menu_label("Trailing&"), "Trailing");
+        assert_eq!(menu_label(""), "");
+    }
+}
