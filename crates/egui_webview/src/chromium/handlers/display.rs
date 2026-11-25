@@ -12,11 +12,16 @@ use egui::CursorIcon;
 
 use crate::chromium::context::Context;
 
-/// The native cursor handle CEF passes to `on_cursor_change`, whose type differs per platform.
-#[cfg(not(target_os = "macos"))]
-use cef::CursorHandle;
-#[cfg(target_os = "macos")]
-type CursorHandle = *mut u8;
+cfg_select! {
+    target_os = "macos" => {
+        /// The native cursor handle CEF passes to `on_cursor_change`, whose type differs per
+        /// platform.
+        type CursorHandle = *mut u8;
+    }
+    _ => {
+        use cef::CursorHandle;
+    }
+}
 
 wrap_display_handler! {
     pub struct EguiDisplayHandler {

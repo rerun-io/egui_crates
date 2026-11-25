@@ -168,16 +168,21 @@ fn function_key_number(key: Key) -> Option<u8> {
     key.name().strip_prefix('F')?.parse().ok()
 }
 
-/// winit's scancode for the physical key `code`, or `None` if the platform has none for it.
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn scancode(code: KeyCode) -> Option<i32> {
-    use winit::platform::scancode::PhysicalKeyExtScancode as _;
-    i32::try_from(code.to_scancode()?).ok()
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn scancode(_code: KeyCode) -> Option<i32> {
-    None
+cfg_select! {
+    any(target_os = "windows", target_os = "macos", target_os = "linux") => {
+        /// winit's scancode for the physical key `code`, or `None` if the platform has none for
+        /// it.
+        fn scancode(code: KeyCode) -> Option<i32> {
+            use winit::platform::scancode::PhysicalKeyExtScancode as _;
+            i32::try_from(code.to_scancode()?).ok()
+        }
+    }
+    _ => {
+        /// winit has no scancodes on this platform.
+        fn scancode(_code: KeyCode) -> Option<i32> {
+            None
+        }
+    }
 }
 
 /// The winit code of the physical key that egui-winit maps to `key`, which reverses
