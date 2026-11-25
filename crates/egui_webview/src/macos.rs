@@ -13,10 +13,13 @@ use std::cell::Cell;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Pos2, Rect};
-use objc2::MainThreadMarker;
+use egui::{Context, EmbeddedViewOutput, FocusDirection, Pos2, Rect, Theme};
 use objc2::rc::Retained;
-use objc2_app_kit::{NSAutoresizingMaskOptions, NSResponder, NSView};
+use objc2::{DefinedClass as _, MainThreadMarker, MainThreadOnly, define_class, msg_send};
+use objc2_app_kit::{
+    NSAppearance, NSAppearanceCustomization as _, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
+    NSAutoresizingMaskOptions, NSResponder, NSView,
+};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{AppKitWindowHandle, HandleError, HasWindowHandle, RawWindowHandle};
@@ -225,6 +228,22 @@ impl Backend for WryBackend {
 
     fn forward(&mut self) {
         self.page.forward();
+    }
+
+    fn set_theme(&mut self, theme: Theme) {
+        // `WebKit` gives the page the view's appearance as its `prefers-color-scheme`.
+        // SAFETY: `AppKit` defines these constants, and they never change.
+        let name = unsafe {
+            match theme {
+                Theme::Dark => NSAppearanceNameDarkAqua,
+                Theme::Light => NSAppearanceNameAqua,
+            }
+        };
+        let appearance = NSAppearance::appearanceNamed(name);
+        self.page
+            .webview
+            .webview()
+            .setAppearance(appearance.as_deref());
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
