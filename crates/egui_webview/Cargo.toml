@@ -46,6 +46,7 @@ wry = [
   "dep:objc2-core-foundation",
   "dep:objc2-foundation",
   "dep:objc2-quartz-core",
+  "dep:objc2-web-kit",
   "dep:raw-window-handle",
   "dep:wry",
 ]
@@ -123,6 +124,13 @@ objc2-quartz-core = { version = "0.3.2", optional = true, default-features = fal
   "objc2-core-foundation",
   "CALayer",
   "CAMetalLayer",
+] }
+objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, features = [
+  "std",
+  "WKFrameInfo",
+  "WKScriptMessage",
+  "WKScriptMessageHandler",
+  "WKUserContentController",
 ] }
 raw-window-handle = { version = "0.6.2", optional = true }
 wry = { version = "0.57.1", optional = true, default-features = false }

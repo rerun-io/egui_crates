@@ -1,11 +1,14 @@
 //! A wry webview and the events it reports.
 
+mod ipc;
+
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use egui::Context;
 use objc2_foundation::{NSString, NSURL};
 use raw_window_handle::HasWindowHandle;
+use wry::WebViewExtMacOS as _;
 
 use crate::{Error, WebViewEvent, WebViewSource, warn};
 
@@ -14,6 +17,7 @@ use crate::{Error, WebViewEvent, WebViewSource, warn};
 ///
 /// The backend that owns it adds the placement and focus handling around it.
 pub struct WryPage {
+    _ipc: ipc::Ipc,
     pub webview: wry::WebView,
     events: Rc<RefCell<Vec<WebViewEvent>>>,
 
@@ -40,20 +44,11 @@ impl WryPage {
         source: &WebViewSource,
         parent: &impl HasWindowHandle,
     ) -> Result<Self, Error> {
-        check_url(source)?;
         let events = Rc::new(RefCell::new(Vec::new()));
-        let builder = wry::WebViewBuilder::new()
+        let webview = wry::WebViewBuilder::new()
             // Otherwise wry activates the app when it creates the webview.
             .with_focused(false)
-            .with_ipc_handler({
-                let (ctx, events) = (ctx.clone(), Rc::clone(&events));
-                move |request| {
-                    events
-                        .borrow_mut()
-                        .push(WebViewEvent::Message(request.into_body()));
-                    ctx.request_repaint();
-                }
-            })
+            .with_initialization_script(ipc::SCRIPT)
             .with_on_page_load_handler({
                 let (ctx, events) = (ctx.clone(), Rc::clone(&events));
                 move |event, url| {
@@ -63,17 +58,19 @@ impl WryPage {
                     });
                     ctx.request_repaint();
                 }
-            });
-        let builder = match source {
-            WebViewSource::Html(html) => builder.with_html(html),
-            WebViewSource::Url(url) => builder.with_url(url),
-        };
-        let webview = builder.build_as_child(parent).map_err(Error::backend)?;
-        Ok(Self {
+            })
+            .build_as_child(parent)
+            .map_err(Error::backend)?;
+        // Register the native handler before the first document can run its scripts.
+        let ipc = ipc::Ipc::new(ctx, webview.manager(), Rc::clone(&events));
+        let page = Self {
+            _ipc: ipc,
             webview,
             events,
             zoom: Cell::new(1.0),
-        })
+        };
+        page.load(source)?;
+        Ok(page)
     }
 
     pub fn load(&self, source: &WebViewSource) -> Result<(), Error> {
