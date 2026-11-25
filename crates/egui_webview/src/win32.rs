@@ -100,7 +100,7 @@ impl WryBackend {
             return Err(Error::Unsupported);
         }
 
-        let page = WryPage::new(ctx, source, &handle, false)?;
+        let page = WryPage::new(ctx, source, &handle)?;
 
         let focused = Rc::new(Cell::new(false));
         let focus_left = Rc::new(Cell::new(None));

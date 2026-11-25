@@ -52,12 +52,13 @@
 //!
 //! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
 //!   paints like any other image, and the widget forwards egui's input to the page.
-//! - An embedded view (`WKWebView` on macOS with the `wry` feature, `WebView2` on Windows, an `<iframe>` on the web): the
-//!   page lies below egui's surface. Its rect is an [`egui::EmbeddedView`], which clears the rect
-//!   to transparent so the page shows through. After every pass of the root viewport,
-//!   [`WebViewInstance::place`] moves the page to where egui put that rect, which egui reports
-//!   as an [`egui::EmbeddedViewOutput`]. egui layers above the page (windows, popups, …) paint
-//!   over it, and the output tells the backend where egui takes the pointer input.
+//! - An embedded view (`WKWebView` on macOS and `WebView2` on Windows, both with the `wry` feature,
+//!   or an `<iframe>` on the web): the page lies below egui's surface. Its rect is an
+//!   [`egui::EmbeddedView`], which clears the rect to transparent so the page shows through.
+//!   After every pass of the root viewport, [`WebViewInstance::place`] moves the page to where
+//!   egui put that rect, which egui reports as an [`egui::EmbeddedViewOutput`]. egui layers above
+//!   the page (windows, popups, …) paint over it, and the output tells the backend where egui
+//!   takes the pointer input.
 //!
 //! Tab and Shift-Tab move the keyboard focus between egui widgets and the page's elements; see
 //! [`WebViewInstance::ui`].
@@ -79,7 +80,9 @@ mod mailbox;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod webviews;
-#[cfg(all(feature = "wry", target_os = "macos"))]
+#[cfg(all(feature = "wry", target_os = "windows"))]
+mod win32;
+#[cfg(all(feature = "wry", any(target_os = "macos", target_os = "windows")))]
 mod wry_page;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
@@ -87,6 +90,8 @@ pub use backend::{Backend, EmbeddedWidget, PageWidget};
 pub use chromium::{CefOptions, init as cef_init, run_subprocess as run_cef_subprocess};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use webviews::{WebView, WebViews};
+#[cfg(all(feature = "wry", target_os = "windows"))]
+pub use win32::wgpu_configuration;
 
 pub use url::{self, Url};
 

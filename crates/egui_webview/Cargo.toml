@@ -30,6 +30,7 @@ default = ["wry"]
 #! feature has an effect there. With both `cef` and `wry` enabled, `wry` wins on macOS:
 #! `WebViewInstance::new` uses the system webview, unless the `EGUI_WEBVIEW_BACKEND` environment
 #! variable is `cef` at run time. `WebViewInstance::new_cef` always uses CEF.
+#! The same goes for Windows, where the system webview is `WebView2`.
 #! On other native platforms `wry` has no effect, so CEF is used.
 #! Without a backend for the platform, `WebViewInstance::new` returns `Error::Unsupported`.
 
@@ -38,9 +39,11 @@ default = ["wry"]
 cef = ["dep:cef", "dep:winit"]
 
 ## Show pages in the system webview, through [wry](https://github.com/tauri-apps/wry).
-## Only macOS (`WKWebView`) has a backend so far: the feature has no effect on other platforms.
-## It needs eframe's wgpu renderer.
+## There are backends for macOS (`WKWebView`) and Windows (`WebView2`): the feature has no effect
+## on other platforms. It needs eframe's wgpu renderer. On Windows, the window must also be
+## transparent, and eframe's wgpu options must come from `egui_webview::wgpu_configuration`.
 wry = [
+  "dep:egui-wgpu",
   "dep:objc2",
   "dep:objc2-app-kit",
   "dep:objc2-core-foundation",
@@ -48,6 +51,9 @@ wry = [
   "dep:objc2-quartz-core",
   "dep:objc2-web-kit",
   "dep:raw-window-handle",
+  "dep:webview2-com",
+  "dep:wgpu",
+  "dep:windows",
   "dep:wry",
 ]
 
@@ -133,20 +139,21 @@ objc2-web-kit = { version = "0.3.2", optional = true, default-features = false, 
   "WKScriptMessageHandler",
   "WKUserContentController",
 ] }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 raw-window-handle = { version = "0.6.2", optional = true }
 wry = { version = "0.57.1", optional = true, default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-egui-wgpu = { version = "0.37.0", default-features = false }
+egui-wgpu = { version = "0.37.0", optional = true, default-features = false }
 # Must be the version wry uses, so that the `WebView2` controller wry returns has the same Rust
 # type as ours.
-webview2-com = "0.39.1"
-wgpu = { version = "30.0.0", default-features = false, features = ["dx12"] }
-windows = { version = "0.62.2", features = [
+webview2-com = { version = "0.39.1", optional = true }
+wgpu = { version = "30.0.0", optional = true, default-features = false, features = ["dx12"] }
+windows = { version = "0.62.2", optional = true, features = [
   "Win32_Graphics_Gdi",
   "Win32_UI_Input_KeyboardAndMouse",
 ] }
-wry = { version = "0.57.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend

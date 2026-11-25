@@ -152,7 +152,7 @@ impl eframe::App for Test {
                     Action::PageTab { shift } if cef => queue.lock().extend(tab(shift)),
                     Action::PageTab { shift } => native::press_tab(frame, shift),
                     Action::ClickPage if cef => queue.lock().extend(click(page.rect.min + FIELD_B)),
-                    Action::ClickPage => native::click(frame, page.rect.min + FIELD_B),
+                    Action::ClickPage => native::click(frame, &ctx, page.rect.min + FIELD_B),
                     Action::ClickAfter => queue.lock().extend(click(after.rect.center())),
                 }
                 *step_started = Some(now);
@@ -197,20 +197,22 @@ impl eframe::App for Test {
 fn main() -> eframe::Result {
     egui_webview::init();
     let cef = cfg!(feature = "cef")
-        && (cfg!(not(all(feature = "wry", target_os = "macos")))
-            || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
+        && (cfg!(not(all(
+            feature = "wry",
+            any(target_os = "macos", target_os = "windows")
+        ))) || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
 
     let viewport = egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]);
     // On Windows, a page only shows through egui's surface in a transparent window.
-    #[cfg(target_os = "windows")]
+    #[cfg(all(feature = "wry", target_os = "windows"))]
     let viewport = viewport.with_transparent(true);
 
     let options = eframe::NativeOptions {
         viewport,
         renderer: eframe::Renderer::Wgpu,
-        #[cfg(target_os = "windows")]
+        #[cfg(all(feature = "wry", target_os = "windows"))]
         wgpu_options: {
-            let mut options = egui_wgpu::WgpuConfiguration::default();
+            let mut options = eframe::egui_wgpu::WgpuConfiguration::default();
             egui_webview::wgpu_configuration(&mut options);
             options
         },
@@ -287,7 +289,7 @@ mod native {
         }
     }
 
-    pub fn click(frame: &eframe::Frame, pos: egui::Pos2) {
+    pub fn click(frame: &eframe::Frame, _ctx: &egui::Context, pos: egui::Pos2) {
         let window = window(frame);
         // `AppKit` window coordinates have their origin at the bottom left, egui's at the top left.
         let height = window.contentLayoutRect().size.height;
@@ -311,9 +313,9 @@ mod native {
 }
 
 /// Key presses and clicks sent through the OS input queue, for a page in an embedded view.
-#[cfg(target_os = "windows")]
+#[cfg(all(feature = "wry", target_os = "windows"))]
 mod native {
-    #![expect(unsafe_code)]
+    #![expect(unsafe_code, clippy::unwrap_used)]
     #![expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)] // Win32 takes `i32` coordinates and sizes.
 
     use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
@@ -386,13 +388,13 @@ mod native {
     }
 }
 
-#[cfg(not(any(all(feature = "wry", target_os = "macos"), target_os = "windows")))]
+#[cfg(not(all(feature = "wry", any(target_os = "macos", target_os = "windows"))))]
 mod native {
     pub fn press_tab(_frame: &eframe::Frame, _shift: bool) {
         unreachable!("Only CEF here");
     }
 
-    pub fn click(_frame: &eframe::Frame, _pos: egui::Pos2) {
+    pub fn click(_frame: &eframe::Frame, _ctx: &egui::Context, _pos: egui::Pos2) {
         unreachable!("Only CEF here");
     }
 }

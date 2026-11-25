@@ -84,11 +84,11 @@ trunk serve --example minimal_instance
 * Web: an `<iframe>` below egui's canvas.
 * macOS, with the `wry` feature (on by default): a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
   It needs eframe's wgpu renderer.
-* Windows: a WebView2, created through wry, below egui's surface.
+* Windows, with the `wry` feature: a WebView2, created through wry, below egui's surface.
   It needs a transparent window, and eframe's wgpu renderer on DX12, configured with `wgpu_configuration`.
 * Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
-  `WebViewInstance::new` uses it on platforms without another backend, such as Linux and Windows, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
-  With both `wry` and `cef` enabled, `wry` wins on macOS unless that variable is set.
+  `WebViewInstance::new` uses it on platforms without another backend, such as Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
+  With both `wry` and `cef` enabled, `wry` wins on macOS and Windows unless that variable is set.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
 
@@ -113,7 +113,7 @@ flowchart TB
         Backend{{"<b>trait Backend</b><br/>the page itself"}}
         EmbeddedWidget["<b>EmbeddedWidget</b><br/>widget of Wry + Iframe"]
         CefWidget["<b>chromium::Context</b><br/>widget of Cef; paints a texture"]
-        Wry["<b>WryBackend</b> (macOS)<br/>WKWebView below egui"]
+        Wry["<b>WryBackend</b> (macOS, Windows)<br/>WKWebView / WebView2 below egui"]
         Iframe["<b>IframeBackend</b> (web)<br/>&lt;iframe&gt; below the canvas"]
         Cef["<b>CefBackend</b> (feature cef)<br/>off-screen Chromium"]
     end

@@ -4,15 +4,15 @@ use eframe::EmbeddedViews;
 use egui::{
     Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
 };
-use egui::{
-    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
-};
 
 use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 
 cfg_select! {
     all(feature = "wry", target_os = "macos") => {
         use crate::macos::WryBackend as PlatformBackend;
+    }
+    all(feature = "wry", target_os = "windows") => {
+        use crate::win32::WryBackend as PlatformBackend;
     }
     target_arch = "wasm32" => {
         use crate::web::IframeBackend as PlatformBackend;
@@ -104,8 +104,8 @@ pub struct WebViewResponse {
 /// The backends that [`WebViewInstance::new`] chooses from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
-    /// The platform's own webview in an embedded view: an `<iframe>` on the web, and a
-    /// `WKWebView` on macOS with the `wry` feature.
+    /// The platform's own webview in an embedded view: an `<iframe>` on the web, and with the
+    /// `wry` feature a `WKWebView` on macOS and a `WebView2` on Windows.
     Platform,
 
     /// CEF, which renders the page off screen. Requires the `cef` feature.
@@ -120,7 +120,10 @@ impl DefaultBackend {
     /// webview.
     const FOR_TARGET: Self = if cfg!(any(
         target_arch = "wasm32",
-        all(feature = "wry", target_os = "macos")
+        all(
+            feature = "wry",
+            any(target_os = "macos", target_os = "windows")
+        )
     )) {
         Self::Platform
     } else {
@@ -155,6 +158,9 @@ impl WebViewInstance {
     /// - On the web: an `<iframe>` below egui's canvas.
     /// - On macOS with the `wry` feature: a `WKWebView` below egui's surface. It needs eframe's
     ///   wgpu renderer. It wins over the `cef` feature if both are enabled.
+    /// - On Windows with the `wry` feature: a `WebView2` below egui's surface. It needs eframe's
+    ///   wgpu renderer, configured with [`crate::wgpu_configuration`], and a transparent window.
+    ///   It wins over the `cef` feature if both are enabled.
     /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
     ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
@@ -187,7 +193,10 @@ impl WebViewInstance {
             }
             DefaultBackend::Platform => {
                 cfg_select! {
-                    any(target_arch = "wasm32", all(feature = "wry", target_os = "macos")) => {
+                    any(
+                        target_arch = "wasm32",
+                        all(feature = "wry", any(target_os = "macos", target_os = "windows")),
+                    ) => {
                         let backend = PlatformBackend::new(ctx, source, embedded_views)?;
                         Ok(Self::with_backend(id, backend).with_theme_of(ctx))
                     }
@@ -202,7 +211,7 @@ impl WebViewInstance {
 
     /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
     ///
-    /// A page in an embedded view (web, macOS) needs nothing from the page to reserve
+    /// A page in an embedded view (web, macOS, Windows) needs nothing from the page to reserve
     /// its rect, so this is known before the page exists. A CEF page has nothing to paint
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
@@ -267,7 +276,7 @@ impl WebViewInstance {
     /// Gives a newly created page egui's theme before its first paint.
     #[cfg(any(
         target_arch = "wasm32",
-        all(feature = "wry", target_os = "macos"),
+        all(feature = "wry", any(target_os = "macos", target_os = "windows")),
         feature = "cef"
     ))]
     fn with_theme_of(mut self, ctx: &Context) -> Self {
