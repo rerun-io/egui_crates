@@ -8,7 +8,7 @@ use egui::{
 use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
 
 cfg_select! {
-    target_os = "macos" => {
+    all(feature = "wry", target_os = "macos") => {
         use crate::macos::WryBackend as PlatformBackend;
     }
     target_arch = "wasm32" => {
@@ -103,7 +103,7 @@ pub struct WebViewResponse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
     /// The platform's own webview in an embedded view: an `<iframe>` on the web, and a
-    /// `WKWebView` on macOS.
+    /// `WKWebView` on macOS with the `wry` feature.
     Platform,
 
     /// CEF, which renders the page off screen. Requires the `cef` feature.
@@ -116,7 +116,10 @@ impl DefaultBackend {
 
     /// The backend of the target platform, chosen at compile time: CEF where there is no system
     /// webview.
-    const FOR_TARGET: Self = if cfg!(any(target_arch = "wasm32", target_os = "macos")) {
+    const FOR_TARGET: Self = if cfg!(any(
+        target_arch = "wasm32",
+        all(feature = "wry", target_os = "macos")
+    )) {
         Self::Platform
     } else {
         Self::Cef
@@ -148,7 +151,8 @@ impl WebViewInstance {
     ///
     /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - On macOS: a `WKWebView` below egui's surface. It needs eframe's wgpu renderer.
+    /// - On macOS with the `wry` feature: a `WKWebView` below egui's surface. It needs eframe's
+    ///   wgpu renderer. It wins over the `cef` feature if both are enabled.
     /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
     ///   as with `Self::new_cef`. This requires the `cef` feature.
     ///
@@ -181,7 +185,7 @@ impl WebViewInstance {
             }
             DefaultBackend::Platform => {
                 cfg_select! {
-                    any(target_arch = "wasm32", target_os = "macos") => {
+                    any(target_arch = "wasm32", all(feature = "wry", target_os = "macos")) => {
                         let backend = PlatformBackend::new(ctx, source, embedded_views)?;
                         Ok(Self::with_backend(id, backend))
                     }
