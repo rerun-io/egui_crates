@@ -11,6 +11,7 @@
 
 mod clip_view;
 mod focus_edge;
+mod focus_observer;
 
 use std::cell::Cell;
 use std::ptr::NonNull;
@@ -30,6 +31,7 @@ use wry::WebViewExtMacOS as _;
 
 use self::clip_view::ClipView;
 use self::focus_edge::FocusEdge;
+use self::focus_observer::FocusObserver;
 use crate::wry_page::WryPage;
 use crate::{Backend, Error, WebViewEvent, WebViewSource, warn};
 
@@ -104,6 +106,9 @@ pub struct WryBackend {
     /// The [`FocusEdge`]s before and after the `WKWebView` in the key view loop, in that order.
     focus_edges: [Retained<FocusEdge>; 2],
 
+    /// Keeps `AppKit` focus notifications active even while egui is idle.
+    _focus_observer: Retained<FocusObserver>,
+
     /// The direction in which the keyboard focus left the page, set by a [`FocusEdge`].
     focus_left: Rc<Cell<Option<FocusDirection>>>,
 
@@ -159,12 +164,14 @@ impl WryBackend {
             view.setNextKeyView(Some(after));
         }
 
+        let focus_observer = FocusObserver::new(ctx, page.webview.ns_window(), &view);
         Ok(Self {
             page,
             clip,
             html: source.html().map(str::to_owned),
             last: None,
             focus_edges,
+            _focus_observer: focus_observer,
             focus_left,
             pending_focus: None,
         })
