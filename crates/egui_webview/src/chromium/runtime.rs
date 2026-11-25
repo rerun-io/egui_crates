@@ -168,20 +168,23 @@ pub fn init_with(options: CefInitOptions) -> ShutdownGuard {
 /// // … run the app
 /// ```
 pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
-    // A process that can't load the library is no helper process, because the process that
-    // starts the helpers has loaded the same library. `initialize` reports the error when the
-    // app creates its first webview.
-    if load_library().is_ok() {
-        let args = cef::args::Args::new();
-        // A helper process runs the app's `main` too, so it gets the same options.
-        #[cfg(all(target_os = "macos", feature = "cef-sandbox"))]
-        let _sandbox = match helper_sandbox(&options, &args) {
-            Ok(sandbox) => sandbox,
-            Err(err) => {
-                log::error!("egui_webview: {err}");
-                return CefProcess::Helper { exit_code: 1 };
-            }
-        };
+    let args = cef::args::Args::new();
+    // macOS helpers must enter the sandbox before loading the CEF framework.
+    #[cfg(all(target_os = "macos", feature = "cef-sandbox"))]
+    let _sandbox = match helper_sandbox(&options, &args) {
+        Ok(sandbox) => sandbox,
+        Err(err) => {
+            log::error!("egui_webview: {err}");
+            return CefProcess::Helper { exit_code: 1 };
+        }
+    };
+
+    if let Err(err) = load_library() {
+        if is_helper() {
+            log::error!("egui_webview: {err}");
+            return CefProcess::Helper { exit_code: 1 };
+        }
+    } else {
         let mut app = EguiApp::new();
         let exit_code = cef::execute_process(
             Some(args.as_main_args()),
@@ -205,6 +208,11 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     CefProcess::App(ShutdownGuard::new())
 }
 
+/// Whether Chromium launched this executable as a helper.
+fn is_helper() -> bool {
+    std::env::args_os().any(|arg| arg.as_encoded_bytes().starts_with(b"--type="))
+}
+
 /// Starts the sandbox in a helper process on macOS, if `options` ask for it. The sandbox lasts
 /// until it is dropped.
 #[cfg(all(target_os = "macos", feature = "cef-sandbox"))]
@@ -212,8 +220,7 @@ fn helper_sandbox(
     options: &CefInitOptions,
     args: &cef::args::Args,
 ) -> Result<Option<cef::sandbox::Sandbox>, String> {
-    let is_helper = std::env::args().any(|arg| arg.starts_with("--type="));
-    if !options.sandbox || !is_helper {
+    if !options.sandbox || !is_helper() {
         return Ok(None);
     }
     // The path that `cef::sandbox::Sandbox::new` loads, which panics if it is missing.
