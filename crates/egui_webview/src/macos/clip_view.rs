@@ -1,12 +1,12 @@
 use std::cell::RefCell;
 
-use egui::{EmbeddedViewOutput, Rect};
+use egui::Rect;
 use objc2::rc::Retained;
 use objc2::{DefinedClass as _, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::NSView;
 use objc2_core_foundation::CGPoint;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(super) struct ClipIvars {
     /// The areas where egui takes the pointer, in the clip view's own (flipped) coordinates.
     ///
@@ -16,6 +16,7 @@ pub(super) struct ClipIvars {
 
 define_class!(
     /// A view that contains a `WKWebView` and clips it to [`EmbeddedViewOutput::visible`].
+    #[derive(Debug)]
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
     #[name = "EguiWebViewClipView"]

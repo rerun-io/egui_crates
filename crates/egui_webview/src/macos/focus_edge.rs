@@ -6,6 +6,7 @@ use objc2::rc::Retained;
 use objc2::{DefinedClass as _, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::NSView;
 
+#[derive(Debug)]
 pub(super) struct FocusEdgeIvars {
     /// The direction in which the focus left the page when this view becomes first responder.
     direction: FocusDirection,
@@ -29,6 +30,7 @@ define_class!(
     /// Conversely, selecting the key view that follows the edge before the page makes `WebKit`
     /// focus the page's first element, and selecting the one that precedes the edge after the
     /// page focuses its last element.
+    #[derive(Debug)]
     #[unsafe(super(NSView))]
     #[thread_kind = MainThreadOnly]
     #[name = "EguiWebViewFocusEdge"]

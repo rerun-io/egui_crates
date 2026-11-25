@@ -21,6 +21,15 @@ pub struct WryPage {
     zoom: Cell<f32>,
 }
 
+impl std::fmt::Debug for WryPage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WryPage")
+            .field("events", &self.events)
+            .field("zoom", &self.zoom)
+            .finish_non_exhaustive()
+    }
+}
+
 impl WryPage {
     /// Creates a webview that loads `source`, as a child of `parent`.
     ///

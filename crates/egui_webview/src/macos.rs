@@ -14,8 +14,8 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection, Pos2, Rect, Theme};
+use objc2::MainThreadMarker;
 use objc2::rc::Retained;
-use objc2::{DefinedClass as _, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
     NSAppearance, NSAppearanceCustomization as _, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
     NSAutoresizingMaskOptions, NSResponder, NSView,
@@ -92,6 +92,7 @@ impl HasWindowHandle for ViewHandle<'_> {
 }
 
 /// Shows a page in a `WKWebView` below egui's surface. See the module docs.
+#[derive(Debug)]
 pub struct WryBackend {
     page: WryPage,
     clip: Retained<ClipView>,
