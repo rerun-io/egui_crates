@@ -109,7 +109,7 @@ impl std::fmt::Debug for CefBackend {
             .field("input", &self.input)
             .field("hidden", &self.hidden)
             .field("told_size", &self.told_size)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
