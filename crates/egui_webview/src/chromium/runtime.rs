@@ -185,7 +185,7 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
             return CefProcess::Helper { exit_code: 1 };
         }
     } else {
-        let mut app = EguiApp::new();
+        let mut app = EguiApp::new(options.cache_dir.is_none());
         let exit_code = cef::execute_process(
             Some(args.as_main_args()),
             Some(&mut app),
@@ -362,7 +362,7 @@ fn start(options: &CefInitOptions) -> Result<Option<PathBuf>, String> {
 
     // CEF keeps pointers into the arguments for the life of the process.
     let args = Box::leak(Box::new(cef::args::Args::new()));
-    let mut app = EguiApp::new();
+    let mut app = EguiApp::new(options.cache_dir.is_none());
     if cef::initialize(
         Some(args.as_main_args()),
         Some(&settings),
@@ -541,7 +541,9 @@ fn wake(delay: Duration) {
 }
 
 wrap_app! {
-    struct EguiApp {}
+    struct EguiApp {
+        ephemeral_profile: bool,
+    }
 
     impl App {
         fn on_before_command_line_processing(
@@ -556,8 +558,10 @@ wrap_app! {
             if !is_browser {
                 return;
             }
-            // Use a mock keychain, so that Chromium doesn't show a macOS keychain access prompt.
-            command_line.append_switch(Some(&"use-mock-keychain".into()));
+            // An in-memory profile has no cookies to encrypt on disk.
+            if cfg!(target_os = "macos") && self.ephemeral_profile {
+                command_line.append_switch(Some(&"use-mock-keychain".into()));
+            }
             // Pick the Ozone platform of the session, unless the command line picks one.
             #[cfg(target_os = "linux")]
             if command_line.has_switch(Some(&"ozone-platform".into())) == 0 {
