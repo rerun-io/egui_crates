@@ -158,7 +158,7 @@ impl WebViewInstance {
         embedded_views: &EmbeddedViews,
     ) -> Result<Self, Error> {
         #[cfg(not(target_arch = "wasm32"))]
-        let _runtime = crate::Runtime::current()?;
+        crate::Runtime::engine()?;
         match DefaultBackend::pick() {
             DefaultBackend::Cef => {
                 _ = embedded_views;

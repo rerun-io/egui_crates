@@ -23,7 +23,7 @@ use egui::Ui;
 use tempfile::TempDir;
 
 use super::context::Context;
-use crate::{Error, Runtime};
+use crate::{Error, Runtime, runtime::Engine};
 
 /// The name of the process message that brings the text of a page's
 /// `window.ipc.postMessage(text)` from the render process to the browser process.
@@ -71,7 +71,7 @@ pub struct CefInitOptions {
     ///
     /// With `None`, the default, the profile lives in memory and nothing persists. CEF still
     /// needs a directory for some files. It gets a new one in the system's temporary directory,
-    /// which is deleted when the last [`Runtime`] is dropped.
+    /// which is deleted when CEF shuts down.
     pub cache_dir: Option<PathBuf>,
 
     /// Whether CEF's helper processes run in Chromium's sandbox. The default is `false`.
@@ -155,6 +155,7 @@ pub fn init(options: CefInitOptions) -> Runtime {
 pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     let mut state = lock_state();
     if !matches!(*state, State::Unchecked) {
+        drop(state); // `Runtime::start` may panic.
         return CefProcess::App(Runtime::start());
     }
     let args = cef::args::Args::new();
@@ -191,6 +192,7 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
         options,
         thread: std::thread::current().id(),
     };
+    drop(state); // `Runtime::start` may panic.
     CefProcess::App(Runtime::start())
 }
 
@@ -289,8 +291,8 @@ fn load_framework() -> Result<(), String> {
 /// is to start, on another thread, if the CEF library can't be loaded, if CEF fails to
 /// initialize, or if CEF has shut down. The first failure is kept, so later calls fail in the
 /// same way.
-pub fn initialize(ctx: &egui::Context) -> Result<Runtime, Error> {
-    let runtime = Runtime::current()?;
+pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
+    let engine = Runtime::engine()?;
     let mut state = lock_state();
     if let State::Ready { thread, .. } | State::Running { thread, .. } = &*state
         && *thread != std::thread::current().id()
@@ -316,7 +318,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<Runtime, Error> {
         State::Running { .. } => {
             // egui ignores a second plugin of the same type.
             ctx.add_plugin(CefPlugin);
-            return Ok(runtime);
+            return Ok(engine);
         }
         // CEF starts its helper processes from this executable. Refuse to start them before the
         // app has shown that its `main` handles being one.
@@ -325,7 +327,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<Runtime, Error> {
         }
         State::Failed(err) => err.as_str(),
         State::ShutDown => {
-            "CEF has shut down, because the last `egui_webview::Runtime` was dropped. \
+            "CEF has shut down, because the `egui_webview::Runtime` was dropped. \
              Keep it until `eframe::run_native` returns"
         }
     };
@@ -418,7 +420,7 @@ fn in_app_bundle(exe: &Path) -> bool {
         .is_some_and(|dir| dir.join("../Frameworks").exists())
 }
 
-/// Shuts CEF down, if it runs. Called when the last [`Runtime`] is dropped.
+/// Shuts CEF down, if it runs. Called when the [`Runtime`] and the last webview are dropped.
 ///
 /// If closing takes longer than [`SHUTDOWN_TIMEOUT`], a later message pump finishes shutdown.
 /// The temporary cache directory is deleted after shutdown. CEF can't start again in this process.

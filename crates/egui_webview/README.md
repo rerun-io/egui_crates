@@ -34,7 +34,7 @@ fn main() -> eframe::Result {
 }
 ```
 
-Natively, creating a webview without a running `Runtime` fails with `Error::NoRuntime`, which `WebView` shows in the page's rect. On the web, `Runtime` does nothing. Clones of the `Runtime`, later calls to `Runtime::new` on the same thread, and live webviews share the runtime. After the last owner is dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
+Natively, creating a webview without a running `Runtime` fails with `Error::NoRuntime`, which `WebView` shows in the page's rect. On the web, `Runtime` does nothing. Natively, only one `Runtime` may be alive at a time, and creating a second one panics. Live webviews keep CEF running. After the `Runtime` and the last webview are dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
 
 ## Showing a page without keeping it
 
@@ -107,7 +107,7 @@ Set `CEF_PATH` to share one download between projects.
 CEF runs its helper processes from the app's own executable, which is why `egui_webview::Runtime::new` must run at the start of `main`, before anything but logging.
 With the `cef` feature, in a helper process it runs CEF and exits, and otherwise it returns the `Runtime`.
 
-`egui_webview::Runtime::with_cef_options` takes `CefInitOptions`, which apply to the whole process; the first call sets them. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
+`egui_webview::Runtime::with_cef_options` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
 
 `egui_webview::run_cef_subprocess` does the same as `Runtime::with_cef_options` without exiting. It returns `CefProcess::Helper` with the helper's exit code, or `CefProcess::App` with the `Runtime`.
 

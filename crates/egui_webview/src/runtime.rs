@@ -4,12 +4,17 @@
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
+    sync::atomic::{AtomicBool, Ordering},
 };
+
+/// Whether a [`Runtime`] is alive in this process.
+#[cfg(not(target_arch = "wasm32"))]
+static ALIVE: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(target_arch = "wasm32"))]
 thread_local! {
-    /// The runtime of this thread, while some [`Runtime`] keeps it alive.
-    static CURRENT: RefCell<Weak<Owner>> = const { RefCell::new(Weak::new()) };
+    /// The engine of this thread, while the [`Runtime`] or a webview keeps it alive.
+    static ENGINE: RefCell<Weak<Owner>> = const { RefCell::new(Weak::new()) };
 }
 
 /// Keeps the webview engine alive on the thread that created it.
@@ -27,20 +32,32 @@ thread_local! {
 /// [`crate::Error::NoRuntime`]. On the web, the browser is the engine, and a [`Runtime`] does
 /// nothing.
 ///
-/// Clones, and later calls to [`Self::new`] on the same thread, share the runtime. Each CEF
-/// webview also keeps it until dropped. After the last owner is dropped, CEF shuts down once its
-/// browsers finish closing, and can't start again in this process.
+/// Natively, only one [`Runtime`] may be alive at a time. Creating a second one panics.
+///
+/// Each CEF webview keeps the engine alive until dropped. After the [`Runtime`] and the last
+/// webview are dropped, CEF shuts down once its browsers finish closing, and can't start again in
+/// this process.
 #[must_use = "keep the runtime until `eframe::run_native` returns"]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[cfg_attr(target_arch = "wasm32", expect(missing_copy_implementations))] // Not `Copy` natively.
 pub struct Runtime {
     #[cfg(not(target_arch = "wasm32"))]
+    _engine: Engine,
+}
+
+/// Keeps the webview engine alive.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub(crate) struct Engine {
     _owner: Rc<Owner>,
 }
 
 impl Runtime {
     /// Starts the webview runtime. Call this at the start of `main`, right after initializing
     /// logging.
+    ///
+    /// # Panics
+    /// Natively, if another [`Runtime`] is alive.
     ///
     /// Currently, it only does something natively with the `cef` feature, where it is
     /// `Self::with_cef_options` with the default options: CEF starts its helper processes
@@ -57,7 +74,7 @@ impl Runtime {
 
     /// Like [`Self::new`], with `options` for when the first webview starts CEF.
     ///
-    /// The first call in the process sets the process-wide options:
+    /// The options apply to the whole process:
     ///
     /// ```no_run
     /// let options = egui_webview::CefInitOptions {
@@ -75,33 +92,51 @@ impl Runtime {
         crate::chromium::init(options)
     }
 
-    /// Shares the running runtime of this thread, or starts a new one.
+    /// Starts the runtime, on the engine of this thread if webviews still keep one alive.
+    ///
+    /// # Panics
+    /// If another [`Runtime`] is alive.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn start() -> Self {
-        CURRENT.with_borrow_mut(|current| {
-            let owner = current.upgrade().unwrap_or_else(|| {
+        assert!(
+            !ALIVE.swap(true, Ordering::SeqCst),
+            "egui_webview: only one `egui_webview::Runtime` may be alive at a time"
+        );
+        let owner = ENGINE.with_borrow_mut(|engine| {
+            engine.upgrade().unwrap_or_else(|| {
                 let owner = Rc::new(Owner);
-                *current = Rc::downgrade(&owner);
+                *engine = Rc::downgrade(&owner);
                 owner
-            });
-            Self { _owner: owner }
-        })
+            })
+        });
+        Self {
+            _engine: Engine { _owner: owner },
+        }
     }
 
-    /// The running runtime of this thread.
+    /// The engine of the [`Runtime`], for a webview to keep alive.
     ///
     /// # Errors
     /// [`crate::Error::NoRuntime`] if no [`Runtime`] on this thread is alive.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn current() -> Result<Self, crate::Error> {
-        CURRENT
-            .with_borrow(Weak::upgrade)
-            .map(|owner| Self { _owner: owner })
+    pub(crate) fn engine() -> Result<Engine, crate::Error> {
+        ALIVE
+            .load(Ordering::SeqCst)
+            .then(|| ENGINE.with_borrow(Weak::upgrade))
+            .flatten()
+            .map(|owner| Engine { _owner: owner })
             .ok_or(crate::Error::NoRuntime)
     }
 }
 
-/// Shuts the engine down when the last [`Runtime`] is dropped.
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        ALIVE.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Shuts the engine down when the [`Runtime`] and the last webview are dropped.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 struct Owner;
@@ -119,16 +154,27 @@ mod tests {
     use super::*;
     use crate::Error;
 
+    // One test, because the runtime is process-wide.
     #[test]
-    fn current_needs_a_live_runtime() {
-        assert!(matches!(Runtime::current(), Err(Error::NoRuntime)));
+    fn one_runtime_at_a_time() {
+        assert!(matches!(Runtime::engine(), Err(Error::NoRuntime)));
 
         let runtime = Runtime::start();
-        let shared = Runtime::start();
-        drop(runtime);
-        assert!(Runtime::current().is_ok());
+        let engine = Runtime::engine();
+        assert!(engine.is_ok());
+        // Also on another thread.
+        let second = std::thread::Builder::new()
+            .name("second_runtime".to_owned())
+            .spawn(|| drop(Runtime::start()))
+            .map(std::thread::JoinHandle::join);
+        assert!(matches!(second, Ok(Err(_))));
 
-        drop(shared);
-        assert!(matches!(Runtime::current(), Err(Error::NoRuntime)));
+        drop(runtime);
+        assert!(matches!(Runtime::engine(), Err(Error::NoRuntime)));
+
+        // A webview's engine outlives the runtime, and a new runtime takes it over.
+        drop(Runtime::start());
+        drop(engine);
+        assert!(matches!(Runtime::engine(), Err(Error::NoRuntime)));
     }
 }

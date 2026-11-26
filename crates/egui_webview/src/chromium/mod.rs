@@ -100,7 +100,7 @@ pub struct CefBackend {
     told_size: Option<(Vec2, f32)>,
 
     // Drop after the browser and its callbacks have released their CEF references.
-    _runtime: crate::Runtime,
+    _engine: crate::runtime::Engine,
 }
 
 impl std::fmt::Debug for CefBackend {
@@ -126,7 +126,7 @@ impl CefBackend {
         source: &WebViewSource,
         options: CefOptions,
     ) -> Result<Self, Error> {
-        let runtime = runtime::initialize(ctx)?;
+        let engine = runtime::initialize(ctx)?;
 
         let (context, events) = Context::new(ctx);
         let window_info = WindowInfo {
@@ -160,7 +160,7 @@ impl CefBackend {
             input: input::Input::default(),
             hidden: false,
             told_size: None,
-            _runtime: runtime,
+            _engine: engine,
         })
     }
 
