@@ -69,6 +69,7 @@ web-sys = { workspace = true, features = [
   "HtmlElement",
   "HtmlIFrameElement",
   "KeyboardEvent",
+  "KeyboardEventInit",
   "Location",
   "MessageEvent",
   "Node",

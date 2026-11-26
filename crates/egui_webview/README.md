@@ -20,6 +20,7 @@ impl eframe::App for MyApp {
 ```
 
 Tab and Shift-Tab move the keyboard focus between egui widgets and the page's elements.
+egui also gets the shortcuts (keys pressed with Ctrl or Cmd) that the user presses in a page, so the app's shortcuts work while a page has the focus. On the web, this works for HTML pages and pages from the app's origin, but not for pages from other origins.
 `examples/minimal_instance.rs` is a complete app of this shape.
 
 ## Initialization
