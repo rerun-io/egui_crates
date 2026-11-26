@@ -201,7 +201,7 @@ cfg_select! {
     _ => {
         fn main() -> eframe::Result {
             let _guard = egui_webview::init();
-            let cef = cfg!(feature = "cef")
+            let cef = cfg!(cef_backend)
                 && (cfg!(not(wry_backend))
                     || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
 

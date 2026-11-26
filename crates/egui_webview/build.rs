@@ -1,5 +1,5 @@
 //! Defines the cfg aliases that say which backends this build has, and checks for the build
-//! tools that the `cef` feature needs.
+//! tools that CEF needs.
 //!
 //! On Windows and macOS, `cef-dll-sys` builds CEF's C++ wrapper with `CMake` and Ninja. Without
 //! them it fails with an opaque `CMake` error, so we report the missing tool and how to install
@@ -10,7 +10,7 @@
 
 use std::env;
 
-/// A build tool that the `cef` feature requires.
+/// A build tool that CEF requires.
 struct Tool {
     /// The name of the executable.
     name: &'static str,
@@ -49,11 +49,12 @@ const TOOLS: &[Tool] = &[
 
 fn main() {
     cfg_aliases::cfg_aliases! {
-        // CEF renders the page off screen, on any native platform.
-        cef_backend: { all(feature = "cef", not(target_arch = "wasm32")) },
-
         // The platforms that have a backend built on wry.
-        wry_backend: { all(feature = "wry", target_os = "macos") },
+        wry_backend: { target_os = "macos" },
+
+        // CEF renders the page off screen. It is the backend of the native platforms without a
+        // wry backend, and the `cef` feature adds it on the others.
+        cef_backend: { all(not(target_arch = "wasm32"), any(feature = "cef", not(wry_backend))) },
 
         // The page is an embedded view of the platform: an `<iframe>` or a system webview.
         platform_backend: { any(target_arch = "wasm32", wry_backend) },
@@ -68,7 +69,8 @@ fn main() {
         }
     }
 
-    let has_cef = env::var_os("CARGO_FEATURE_CEF").is_some();
+    let is_macos = env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "macos");
+    let has_cef = env::var_os("CARGO_FEATURE_CEF").is_some() || !is_macos;
     let is_wasm = env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|arch| arch == "wasm32");
     // docs.rs builds with `cef/dox`, which builds nothing.
     let is_docs_rs = env::var_os("DOCS_RS").is_some();
@@ -83,7 +85,7 @@ fn main() {
             let Tool { name, .. } = tool;
             let install = install_command(tool);
             println!(
-                "cargo::error=The `cef` feature of `egui_webview` requires `{name}`, which was \
+                "cargo::error=The CEF backend of `egui_webview` requires `{name}`, which was \
                  not found on `PATH`. Install it with `{install}`."
             );
         }

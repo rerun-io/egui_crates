@@ -102,10 +102,10 @@ pub struct WebViewResponse {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DefaultBackend {
     /// The platform's own webview in an embedded view: an `<iframe>` on the web, and a
-    /// `WKWebView` on macOS with the `wry` feature.
+    /// `WKWebView` on macOS.
     Platform,
 
-    /// CEF, which renders the page off screen. Requires the `cef` feature.
+    /// CEF, which renders the page off screen. On macOS, it requires the `cef` feature.
     Cef,
 }
 
@@ -147,10 +147,9 @@ impl WebViewInstance {
     ///
     /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - On macOS with the `wry` feature: a `WKWebView` below egui's surface. It needs eframe's
-    ///   wgpu renderer. It wins over the `cef` feature if both are enabled.
-    /// - On other platforms, or when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF,
-    ///   as with `Self::new_cef`. This requires the `cef` feature.
+    /// - On macOS: a `WKWebView` below egui's surface. It needs eframe's wgpu renderer.
+    /// - On other native platforms, or on macOS with the `cef` feature when the
+    ///   `EGUI_WEBVIEW_BACKEND` environment variable is `cef`: CEF, as with `Self::new_cef`.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].
@@ -212,8 +211,9 @@ impl WebViewInstance {
     /// Creates a webview that CEF (Chromium) renders off screen into an egui texture.
     ///
     /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
-    /// native platform, and [`Self::new`] uses it there. It requires the `cef` feature, and a
-    /// call to [`crate::init`] first in `main`.
+    /// native platform. [`Self::new`] uses it on platforms without a system webview, such as
+    /// Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`. On macOS it
+    /// requires the `cef` feature. It always requires a call to [`crate::init`] first in `main`.
     ///
     /// `id` must be unique in `ctx`.
     ///

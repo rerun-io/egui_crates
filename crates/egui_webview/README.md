@@ -85,11 +85,10 @@ trunk serve --example minimal_instance
 ## Backends
 
 * Web: an `<iframe>` below egui's canvas.
-* macOS, with the `wry` feature (on by default): a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
+* macOS: a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
   It needs eframe's wgpu renderer.
-* Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
-  `WebViewInstance::new` uses it on platforms without another backend, such as Linux and Windows, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
-  With both `wry` and `cef` enabled, `wry` wins on macOS unless that variable is set.
+* Other native platforms, such as Linux and Windows: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
+  On macOS, the `cef` feature builds it too, and `WebViewInstance::new` uses it when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
   `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
 
@@ -118,7 +117,7 @@ flowchart TB
         CefWidget["<b>chromium::Context</b><br/>widget of Cef; paints a texture"]
         Wry["<b>WryBackend</b> (macOS)<br/>WKWebView below egui"]
         Iframe["<b>IframeBackend</b> (web)<br/>&lt;iframe&gt; below the canvas"]
-        Cef["<b>CefBackend</b> (feature cef)<br/>off-screen Chromium"]
+        Cef["<b>CefBackend</b> (not macOS, or feature cef)<br/>off-screen Chromium"]
     end
 
     subgraph egui
@@ -152,7 +151,7 @@ On Windows and macOS it also builds a small C++ wrapper library, which requires 
 Set `CEF_PATH` to share one download between projects.
 
 CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
-With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns the shutdown guard.
+Where CEF is built, it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns the shutdown guard.
 
 `egui_webview::cef_init_with` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
 

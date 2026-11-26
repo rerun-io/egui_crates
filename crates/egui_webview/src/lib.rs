@@ -50,9 +50,9 @@
 //!
 //! A [`WebViewInstance`] shows its page through a [`Backend`], in one of two ways:
 //!
-//! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
+//! - Off-screen rendering (CEF, except on macOS without the `cef` feature): the page renders into a texture that egui
 //!   paints like any other image, and the widget forwards egui's input to the page.
-//! - An embedded view (`WKWebView` on macOS with the `wry` feature, an `<iframe>` on the web): the page lies below egui's
+//! - An embedded view (`WKWebView` on macOS, an `<iframe>` on the web): the page lies below egui's
 //!   surface. Its rect is an [`egui::EmbeddedView`], which clears the rect to
 //!   transparent so the page shows through. After every pass of the root viewport,
 //!   [`WebViewInstance::place`] moves the page to where egui put that rect, which egui reports
@@ -116,10 +116,10 @@ pub use url::{self, Url};
 /// // … run the app
 /// ```
 ///
-/// Currently, it only does something natively with the `cef` feature, where it calls
+/// Currently, it only does something where CEF is built, and then it calls
 /// `egui_webview::cef_init`: CEF starts its helper processes (renderer, GPU, …) from the app's
 /// own executable, and in such a process this function runs the helper and then exits the
-/// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
+/// process instead of returning. Elsewhere, such as on the web, it does nothing.
 pub fn init() -> ShutdownGuard {
     cfg_select! {
         cef_backend => { cef_init() }
