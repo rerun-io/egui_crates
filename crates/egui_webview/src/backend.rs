@@ -171,7 +171,7 @@ pub trait Backend: std::fmt::Debug {
 ///
 /// [`FocusDirection::Next`]: egui::FocusDirection::Next
 /// [`FocusDirection::Previous`]: egui::FocusDirection::Previous
-#[cfg(any(target_arch = "wasm32", feature = "cef"))]
+#[cfg(any(cef_backend, platform_backend))]
 pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     let index = match direction {
         egui::FocusDirection::Next => 0,

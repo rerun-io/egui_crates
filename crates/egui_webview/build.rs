@@ -47,6 +47,14 @@ const TOOLS: &[Tool] = &[
 ];
 
 fn main() {
+    cfg_aliases::cfg_aliases! {
+        // CEF renders the page off screen, on the desktop platforms that CEF supports.
+        cef_backend: { all(feature = "cef", any(target_os = "linux", target_os = "macos", target_os = "windows")) },
+
+        // The page is an embedded view of the platform: an `<iframe>`.
+        platform_backend: { target_arch = "wasm32" },
+    }
+
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-env-changed=DOCS_RS");
     println!("cargo::rerun-if-env-changed=PATH");

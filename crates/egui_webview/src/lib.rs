@@ -36,23 +36,32 @@
 //!   runs in egui's passes.
 
 mod backend;
-#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+#[cfg(cef_backend)]
 mod chromium;
 mod instance;
 mod mailbox;
 mod runtime;
-#[cfg(target_arch = "wasm32")]
+#[cfg(platform_backend)]
 mod web;
 mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
-#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+#[cfg(cef_backend)]
 pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use runtime::Runtime;
 pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};
+
+/// Whether this build has a backend that can show pages.
+///
+/// That is the `<iframe>` backend on the web, and CEF on Linux, macOS, and Windows with the
+/// `cef` feature.
+/// Without a backend, [`WebViewInstance::new`] returns an error.
+pub const fn is_supported() -> bool {
+    cfg!(any(cef_backend, platform_backend))
+}
 
 /// What should the webview load?
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -129,7 +138,7 @@ pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
 /// Parses a URL that a backend's engine reported for a [`WebViewEvent`].
 ///
 /// Engines report valid URLs, so this only logs a warning for one that doesn't parse.
-#[cfg(any(target_arch = "wasm32", feature = "cef"))]
+#[cfg(any(cef_backend, platform_backend))]
 pub(crate) fn reported_url(url: &str) -> Option<Url> {
     Url::parse(url)
         .inspect_err(|err| {
