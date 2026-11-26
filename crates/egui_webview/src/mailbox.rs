@@ -12,7 +12,7 @@ use egui::mutex::Mutex;
 use egui::{Context, Id, IdMap, ViewportId};
 
 use crate::instance::FocusChange;
-use crate::{PageWidget, WebViewEvent, WebViewSource};
+use crate::{PageStyle, PageWidget, WebViewEvent, WebViewSource};
 
 /// The mailbox itself. The widget and the registry each hold a clone.
 #[derive(Clone)]
@@ -66,6 +66,9 @@ impl Mailbox {
 #[derive(Default)]
 pub(crate) struct WebViewState {
     pub source: Option<Arc<WebViewSource>>,
+
+    /// The style that [`crate::WebView::show`] last asked for.
+    pub style: Arc<PageStyle>,
 
     pub alive_pass: Option<u64>,
 

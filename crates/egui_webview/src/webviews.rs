@@ -8,7 +8,8 @@ use egui::{Context, EmbeddedViewOutput, Id, Sense, Ui, Vec2, ViewportId};
 use crate::instance::show_widget;
 use crate::mailbox::{Command, Mailbox};
 use crate::{
-    Error, PageWidget, Url, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource, warn,
+    Error, PageStyle, PageWidget, Url, WebViewEvent, WebViewInstance, WebViewResponse,
+    WebViewSource, warn,
 };
 
 type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInstance, Error>>;
@@ -151,9 +152,14 @@ impl WebViews {
             pages,
         } = self;
 
-        let Some((source, was_shown, commands)) = mailbox.with_view_state(id, |state| {
+        let Some((source, style, was_shown, commands)) = mailbox.with_view_state(id, |state| {
             let commands = std::mem::take(&mut state.page_command_queue);
-            (state.source.clone(), state.was_shown(pass), commands)
+            (
+                state.source.clone(),
+                Arc::clone(&state.style),
+                state.was_shown(pass),
+                commands,
+            )
         }) else {
             return;
         };
@@ -191,6 +197,11 @@ impl WebViews {
         let mut pending_focus_change = None;
         let mut events = Vec::new();
         if let Ok(instance) = &mut page.instance {
+            // A new page gets its style here, before it paints its first document.
+            if *instance.page_style() != *style {
+                instance.set_page_style(ctx, PageStyle::clone(&style));
+            }
+
             let mut focus_change = None;
             for command in commands {
                 match command {
@@ -275,6 +286,7 @@ fn create_page(
 pub struct WebView<'a> {
     id: Id,
     source: Option<SourceRef<'a>>,
+    style: &'a PageStyle,
     size: Option<Vec2>,
 }
 
@@ -311,6 +323,7 @@ impl<'a> WebView<'a> {
         Self {
             id: id.into(),
             source: None,
+            style: &PageStyle::Browser,
             size: None,
         }
     }
@@ -343,6 +356,13 @@ impl<'a> WebView<'a> {
         }
     }
 
+    /// How the page looks where it sets no style of its own. Default: [`PageStyle::Browser`].
+    #[inline]
+    pub fn style(mut self, style: &'a PageStyle) -> Self {
+        self.style = style;
+        self
+    }
+
     /// The size of the page's rect. Default: all of the available space.
     #[inline]
     pub fn size(mut self, size: Vec2) -> Self {
@@ -359,6 +379,7 @@ impl<'a> WebView<'a> {
         let Self {
             id,
             source: new_source,
+            style,
             size,
         } = self;
         let size = size.unwrap_or_else(|| ui.available_size());
@@ -377,6 +398,9 @@ impl<'a> WebView<'a> {
             // Only copy the source when it changed.
             let unchanged =
                 new_source.is_some_and(|new| state.source.as_ref().is_some_and(|cur| new == cur));
+            if *state.style != *style {
+                state.style = Arc::new(style.clone());
+            }
             if !unchanged {
                 state.source = new_source.map(|source| Arc::new(source.into()));
             }
@@ -540,6 +564,18 @@ mod tests {
             self.log.borrow_mut().push("forward".to_owned());
         }
 
+        fn can_go_back(&self) -> bool {
+            true
+        }
+
+        fn can_go_forward(&self) -> bool {
+            true
+        }
+
+        fn widget(&self) -> Arc<dyn PageWidget> {
+            Arc::new(EmbeddedWidget)
+        }
+
         fn place(&mut self, _ctx: &Context, output: Option<&EmbeddedViewOutput>) {
             let what = if output.is_some() { "place" } else { "hide" };
             self.log.borrow_mut().push(what.to_owned());
@@ -555,8 +591,16 @@ mod tests {
             self.focused.set(false);
         }
 
+        fn set_theme(&mut self, _theme: egui::Theme) {}
+
+        fn set_document_start_script(&mut self, _script: Option<&str>) {}
+
         fn has_focus(&self) -> bool {
             self.focused.get()
+        }
+
+        fn poll_focus_left(&mut self) -> Option<FocusDirection> {
+            None
         }
 
         fn take_events(&mut self) -> Vec<WebViewEvent> {

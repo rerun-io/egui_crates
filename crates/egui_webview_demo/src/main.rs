@@ -4,7 +4,7 @@
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use egui_webview::{WebView, WebViewEvent, WebViewInstance, WebViewSource, WebViews};
+use egui_webview::{PageStyle, WebView, WebViewEvent, WebViewInstance, WebViewSource, WebViews};
 
 /// The page the demo starts with. Its grid of tiles makes scrolling under egui visible.
 const PAGE: &str = r#"<!DOCTYPE html>
@@ -55,12 +55,38 @@ const PAGE: &str = r#"<!DOCTYPE html>
 </html>
 "#;
 
+/// A page without any CSS. With [`PageStyle::Egui`] it looks like the egui around it.
+const UNSTYLED_PAGE: &str = r#"<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body>
+<h1>A page without CSS</h1>
+<p>This page sets no style of its own. With <b>Follow egui's style</b> in the toolbar it takes its font, text size and colors from egui, and follows them when they change. Without it, you see the browser's defaults.</p>
+<p>A <a href="https://example.com">link</a>, some <code>inline code</code>, and a block of it:</p>
+<pre>fn main() {
+    println!("Hello from the page");
+}</pre>
+<p>
+  <button onclick="window.ipc.postMessage('Hello from the unstyled page!')">Send a message to egui</button>
+  <input aria-label="Text to type" placeholder="Type here">
+  <label><input type="checkbox" checked> A checkbox</label>
+</p>
+</body>
+</html>
+"#;
+
+/// Stands for [`UNSTYLED_PAGE`] in [`SOURCES`].
+const UNSTYLED: &str = "unstyled";
+
 /// The pages the Page menu offers, which new browser windows also cycle through. An empty URL
 /// stands for [`PAGE`].
 ///
 /// On the web, many sites refuse to be shown in an `<iframe>`, so these URLs have to allow it.
-const SOURCES: [(&str, &str); 3] = [
+const SOURCES: [(&str, &str); 4] = [
     ("Demo page", ""),
+    ("Unstyled page", UNSTYLED),
     ("egui.rs", "https://www.egui.rs"),
     ("example.com", "https://example.com"),
 ];
@@ -73,6 +99,8 @@ const RELOAD: egui::KeyboardShortcut =
 fn source(url: &str) -> WebViewSource {
     if url.is_empty() {
         WebViewSource::Html(PAGE.to_owned())
+    } else if url == UNSTYLED {
+        WebViewSource::Html(UNSTYLED_PAGE.to_owned())
     } else {
         url.parse().map_or_else(
             |err| WebViewSource::Html(format!("Invalid URL {url:?}: {err}")),
@@ -93,10 +121,13 @@ impl Browser {
         ctx: &egui::Context,
         name: String,
         source: &WebViewSource,
+        style: PageStyle,
         embedded_views: &eframe::EmbeddedViews,
     ) -> Result<Self, String> {
-        let webview = WebViewInstance::new(ctx, egui::Id::unique(&name), source, embedded_views)
-            .map_err(|err| format!("No webview: {err}"))?;
+        let mut webview =
+            WebViewInstance::new(ctx, egui::Id::unique(&name), source, embedded_views)
+                .map_err(|err| format!("No webview: {err}"))?;
+        webview.set_page_style(ctx, style);
         let url = match source {
             WebViewSource::Url(url) => url.to_string(),
             WebViewSource::Html(_) => String::new(),
@@ -215,6 +246,9 @@ struct DemoApp {
 
     /// Owns the page of the builder window, which is shown with [`WebView`].
     webviews: WebViews,
+
+    /// The style of every page.
+    page_style: PageStyle,
     show_builder: bool,
     show_modal: bool,
     show_log: bool,
@@ -223,10 +257,12 @@ struct DemoApp {
 
 impl DemoApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let page_style = PageStyle::Egui;
         let main = Browser::new(
             &cc.egui_ctx,
             "Main".to_owned(),
             &source(""),
+            page_style.clone(),
             cc.embedded_views(),
         );
 
@@ -235,6 +271,7 @@ impl DemoApp {
             windows: Vec::new(),
             opened: 0,
             webviews: WebViews::new(&cc.egui_ctx, cc.embedded_views()),
+            page_style,
             show_builder: false,
             show_modal: false,
             show_log: true,
@@ -244,12 +281,13 @@ impl DemoApp {
 
     fn open_window(&mut self, ctx: &egui::Context, embedded_views: &eframe::EmbeddedViews) {
         self.opened += 1;
-        // The first window shows egui.rs, so that it differs from the main page.
+        // The first window shows the unstyled page, so that it differs from the main page.
         let (_, url) = SOURCES[self.opened % SOURCES.len()];
         match Browser::new(
             ctx,
             format!("Window {}", self.opened),
             &source(url),
+            self.page_style.clone(),
             embedded_views,
         ) {
             Ok(browser) => self
@@ -265,6 +303,7 @@ impl eframe::App for DemoApp {
         let Self {
             main,
             windows,
+            page_style,
             show_builder,
             show_modal,
             show_log,
@@ -305,6 +344,7 @@ impl eframe::App for DemoApp {
                         *show_modal = true;
                     }
                     ui.checkbox(show_log, "Show log");
+                    ui.menu_button("Text size", text_size_ui);
                     ui.menu_button("Theme", |ui| {
                         let current = ui.ctx().theme();
                         let mut theme = current;
@@ -319,6 +359,25 @@ impl eframe::App for DemoApp {
                 // the windows instead.
                 ui.scope(|ui| {
                     ui.reset_style();
+                    ui.separator();
+                    let mut follow = *page_style == PageStyle::Egui;
+                    let checkbox = ui
+                        .checkbox(&mut follow, "Follow egui's style")
+                        .on_hover_text(
+                            "Pages take egui's font, text size and colors where they set no \
+                             style of their own. Try it with the unstyled page.",
+                        );
+                    if checkbox.changed() {
+                        *page_style = if follow {
+                            PageStyle::Egui
+                        } else {
+                            PageStyle::Browser
+                        };
+                        let browsers = windows.iter_mut().map(|(_, browser)| browser);
+                        for browser in std::iter::once(&mut *main).chain(browsers) {
+                            browser.webview.set_page_style(ui.ctx(), page_style.clone());
+                        }
+                    }
                     ui.separator();
                     main.nav_buttons(ui);
                     main.url_field(ui, log);
@@ -366,7 +425,10 @@ impl eframe::App for DemoApp {
                     }
                     ui.label("Shown with `WebView`");
                 });
-                let response = WebView::new(id).html(PAGE).show(ui);
+                let response = WebView::new(id)
+                    .html(UNSTYLED_PAGE)
+                    .style(page_style)
+                    .show(ui);
                 for event in response.events {
                     log.push(format!("Builder window: {event:?}"));
                 }
@@ -410,6 +472,23 @@ impl eframe::App for DemoApp {
             browser.webview.place(ctx, views);
         }
         self.webviews.update(ctx, output);
+    }
+}
+
+/// Changes the size of egui's body text, which pages with [`PageStyle::Egui`] follow.
+fn text_size_ui(ui: &mut egui::Ui) {
+    let body = egui::TextStyle::Body;
+    let mut size = ui
+        .style()
+        .text_styles
+        .get(&body)
+        .map_or(13.0, |font| font.size);
+    if ui.add(egui::Slider::new(&mut size, 8.0..=32.0)).changed() {
+        ui.ctx().all_styles_mut(|style| {
+            if let Some(font) = style.text_styles.get_mut(&body) {
+                font.size = size;
+            }
+        });
     }
 }
 

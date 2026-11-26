@@ -498,6 +498,10 @@ impl Backend for CefBackend {
         Arc::<Context>::clone(&self.context)
     }
 
+    fn set_document_start_script(&mut self, script: Option<&str>) {
+        self.context.state.lock().document_start_script = script.map(str::to_owned);
+    }
+
     fn set_theme(&mut self, theme: Theme) {
         // A windowless browser ignores CEF's color scheme setting, so emulate the media feature
         // through DevTools instead. The emulation stays when the page navigates.
@@ -596,6 +600,12 @@ impl Backend for CefBackend {
         if let Some(host) = self.browser.host() {
             host.set_focus(0);
         }
+    }
+
+    fn has_focus(&self) -> bool {
+        // egui forwards its key events to the page, so the page has the focus exactly when the
+        // webview has egui's focus.
+        false
     }
 
     fn poll_focus_left(&mut self) -> Option<FocusDirection> {

@@ -50,7 +50,6 @@ impl PageWidget for EmbeddedWidget {
 /// its [`PageWidget`] paints.
 ///
 /// All methods are called on the thread that runs egui, so a backend doesn't need to be `Send`.
-#[expect(unused_variables)] // The default implementations ignore their arguments.
 pub trait Backend: std::fmt::Debug {
     /// Load a page.
     ///
@@ -78,26 +77,19 @@ pub trait Backend: std::fmt::Debug {
 
     /// Whether [`Self::back`] has a page to go to.
     ///
-    /// The default is `true`, for a backend that can't tell, so that a back button stays
-    /// usable.
-    fn can_go_back(&self) -> bool {
-        true
-    }
+    /// A backend that can't tell returns `true`, so that a back button stays usable.
+    fn can_go_back(&self) -> bool;
 
     /// Whether [`Self::forward`] has a page to go to. See [`Self::can_go_back`].
-    fn can_go_forward(&self) -> bool {
-        true
-    }
+    fn can_go_forward(&self) -> bool;
 
     /// The half of this page that runs in egui's pass. The webview asks for it once, when it is
     /// created.
     ///
-    /// The default is [`EmbeddedWidget`]. Keep it for a backend with an embedded view, which
-    /// [`Self::place`] positions. A backend that renders into a texture returns a widget that
-    /// paints the texture and passes egui's input on to the page.
-    fn widget(&self) -> Arc<dyn PageWidget> {
-        Arc::new(EmbeddedWidget)
-    }
+    /// A backend with an embedded view, which [`Self::place`] positions, returns
+    /// [`EmbeddedWidget`]. A backend that renders into a texture returns a widget that paints
+    /// the texture and passes egui's input on to the page.
+    fn widget(&self) -> Arc<dyn PageWidget>;
 
     /// Called by [`crate::WebViewInstance::place`] after a pass of the root viewport.
     ///
@@ -110,14 +102,25 @@ pub trait Backend: std::fmt::Debug {
     ///
     /// The rects of `output` are in ui points. Multiply them by [`Context::zoom_factor`] to get
     /// window points, or by [`Context::pixels_per_point`] to get physical pixels.
-    fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {}
+    fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>);
 
     /// Makes the page see `theme` as its `prefers-color-scheme`, like a browser does with the
     /// OS theme. Then web UI frameworks follow egui's theme without any code in the page.
     ///
     /// The webview calls this when it creates the page, and again whenever egui's theme
     /// changes.
-    fn set_theme(&mut self, theme: Theme) {}
+    fn set_theme(&mut self, theme: Theme);
+
+    /// Runs `script` at the start of every document that the page loads from now on, before
+    /// the document's own scripts. It replaces the script of the previous call, and `None`
+    /// only removes that one. The script doesn't run in the current document.
+    ///
+    /// The script only needs to run in the main frame.
+    ///
+    /// The webview uses it to give each document its [`crate::PageStyle`] before the first
+    /// paint. It also runs the script when the page reports that it loads, so a backend that
+    /// ignores the call still gets the style, only later.
+    fn set_document_start_script(&mut self, script: Option<&str>);
 
     /// Gives the page the keyboard focus, because egui's focus moved to the webview.
     ///
@@ -126,24 +129,22 @@ pub trait Backend: std::fmt::Debug {
     /// - [`FocusDirection::Previous`] (Shift-Tab): focus the page's last focusable element.
     /// - Any other direction, such as after [`egui::Response::request_focus`]: keep the element
     ///   the page last had focused.
-    fn focus(&mut self, direction: FocusDirection) {}
+    fn focus(&mut self, direction: FocusDirection);
 
     /// Returns the keyboard focus to egui, because egui's focus left the webview.
     ///
     /// Only move the focus if the page, or another view that belongs to this backend, has it.
     /// Another webview may already hold the focus.
-    fn blur(&mut self) {}
+    fn blur(&mut self);
 
     /// Whether the page has the keyboard focus.
     ///
     /// The webview polls this while it doesn't consider the page focused, to detect the page
     /// taking the focus by itself, such as when the user clicks it.
     ///
-    /// A backend that forwards egui's key events to the page keeps the default `false`: its
-    /// page is focused exactly when the webview has egui's focus.
-    fn has_focus(&self) -> bool {
-        false
-    }
+    /// A backend that forwards egui's key events to the page returns `false`: its page is
+    /// focused exactly when the webview has egui's focus.
+    fn has_focus(&self) -> bool;
 
     /// Returns the direction in which the keyboard focus left the page by itself since the last
     /// call, if it did.
@@ -151,9 +152,7 @@ pub trait Backend: std::fmt::Debug {
     /// [`FocusDirection::Next`] means Tab moved past the page's last element, and
     /// [`FocusDirection::Previous`] means Shift-Tab moved before its first. egui then moves its
     /// focus to the next or previous widget.
-    fn poll_focus_left(&mut self) -> Option<FocusDirection> {
-        None
-    }
+    fn poll_focus_left(&mut self) -> Option<FocusDirection>;
 
     /// Returns the events that occurred since the last call, oldest first.
     fn take_events(&mut self) -> Vec<WebViewEvent>;

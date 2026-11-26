@@ -17,6 +17,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection, Theme};
 use wasm_bindgen::JsCast as _;
@@ -24,7 +25,9 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlCanvasElement, HtmlElement, HtmlIFrameElement, KeyboardEvent, MessageEvent};
 
-use crate::{Backend, Error, WebViewEvent, WebViewSource, reported_url, warn};
+use crate::{
+    Backend, EmbeddedWidget, Error, PageWidget, WebViewEvent, WebViewSource, reported_url, warn,
+};
 
 /// The URL that the browser reports for a [`WebViewSource::Html`] page.
 const HTML_URL: &str = "about:srcdoc";
@@ -159,6 +162,9 @@ pub struct IframeBackend {
     /// The theme from [`Backend::set_theme`]. The `<iframe>` gets it as its `color-scheme`.
     theme: Theme,
 
+    /// See [`Backend::set_document_start_script`]. Only a [`WebViewSource::Html`] page runs it.
+    document_start_script: Option<String>,
+
     /// The [`FocusEdge`]s before and after the `<iframe>`, in that order.
     focus_edges: [FocusEdge; 2],
 
@@ -281,6 +287,7 @@ impl IframeBackend {
             events,
             last_style: None,
             theme: Theme::Light,
+            document_start_script: None,
             focus_edges: [before, after],
             focus_left,
             focus_parked,
@@ -369,7 +376,7 @@ impl Backend for IframeBackend {
                 iframe
                     .set_attribute("sandbox", "allow-scripts allow-forms allow-popups")
                     .map_err(js_error)?;
-                iframe.set_srcdoc(&with_prelude(html));
+                iframe.set_srcdoc(&with_prelude(html, self.document_start_script.as_deref()));
             }
             WebViewSource::Url(url) => {
                 iframe.remove_attribute("sandbox").map_err(js_error)?;
@@ -416,6 +423,18 @@ impl Backend for IframeBackend {
         warn(self.evaluate_script("history.forward()"));
     }
 
+    fn can_go_back(&self) -> bool {
+        true // A cross-origin page doesn't tell the app.
+    }
+
+    fn can_go_forward(&self) -> bool {
+        true // A cross-origin page doesn't tell the app.
+    }
+
+    fn widget(&self) -> Arc<dyn PageWidget> {
+        Arc::new(EmbeddedWidget)
+    }
+
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
         // A hidden page needs no scale, so it doesn't measure the canvas.
         let style = output.map(|output| {
@@ -435,6 +454,19 @@ impl Backend for IframeBackend {
             }
         }
         self.last_style = style;
+    }
+
+    fn set_document_start_script(&mut self, script: Option<&str>) {
+        // The app can't run a script at the start of a document that the browser loads from a
+        // URL. An HTML page gets the script in its prelude.
+        self.document_start_script = script.map(str::to_owned);
+        // Give it to an HTML page that still loads too. Setting `srcdoc` again starts the load
+        // over, which costs little this early, and the browser reports one `load`.
+        if !self.loaded.get()
+            && let WebViewSource::Html(html) = &self.source
+        {
+            self.iframe.set_srcdoc(&with_prelude(html, script));
+        }
     }
 
     fn set_theme(&mut self, theme: Theme) {
@@ -581,8 +613,11 @@ fn url(iframe: &HtmlIFrameElement) -> String {
         .unwrap_or_else(|| iframe.src())
 }
 
-/// Inserts [`HTML_PRELUDE`] at the start of `html`, after the doctype, which must come first.
-fn with_prelude(html: &str) -> String {
+/// Inserts [`HTML_PRELUDE`] and `document_start_script` at the start of `html`, after the
+/// doctype, which must come first.
+///
+/// `document_start_script` must not contain `</script>`.
+fn with_prelude(html: &str, document_start_script: Option<&str>) -> String {
     let trimmed = html.trim_start();
     let doctype_end = trimmed
         .get(..9)
@@ -590,7 +625,10 @@ fn with_prelude(html: &str) -> String {
         .and_then(|_| trimmed.find('>'))
         .map_or(0, |end| end + 1);
     let (doctype, rest) = trimmed.split_at(doctype_end);
-    format!("{doctype}{HTML_PRELUDE}{rest}")
+    let start_script = document_start_script
+        .map(|script| format!("<script>{script}</script>"))
+        .unwrap_or_default();
+    format!("{doctype}{HTML_PRELUDE}{start_script}{rest}")
 }
 
 /// The CSS `color-scheme` of `theme`.
