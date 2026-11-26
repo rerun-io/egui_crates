@@ -165,7 +165,10 @@ impl WebViews {
             {
                 // The builder was told to show something else.
                 if let Ok(instance) = &mut page.instance {
-                    warn(instance.load(new));
+                    warn(
+                        format_args!("load the new source of {id:?}"),
+                        instance.load(new),
+                    );
                 } else {
                     is_new_page = true;
                     page.instance = create_page(create, ctx, id, source.as_deref());
@@ -193,8 +196,16 @@ impl WebViews {
             let mut focus_change = None;
             for command in commands {
                 match command {
-                    Command::Load(source) => warn(instance.load(&source)),
-                    Command::EvaluateScript(script) => warn(instance.evaluate_script(&script)),
+                    Command::Load(source) => {
+                        warn(
+                            format_args!("load a page in {id:?}"),
+                            instance.load(&source),
+                        );
+                    }
+                    Command::EvaluateScript(script) => warn(
+                        format_args!("run a script in {id:?}"),
+                        instance.evaluate_script(&script),
+                    ),
                     Command::Reload => instance.reload(),
                     Command::Back => instance.back(),
                     Command::Forward => instance.forward(),

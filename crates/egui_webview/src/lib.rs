@@ -129,9 +129,11 @@ pub enum WebViewEvent {
 }
 
 /// Logs a warning for a failed call whose error isn't returned to the caller.
-pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
+///
+/// `action` says what failed, as in "failed to {action}".
+pub(crate) fn warn<E: std::fmt::Display>(action: impl std::fmt::Display, result: Result<(), E>) {
     if let Err(err) = result {
-        log::warn!("egui_webview: {err}");
+        log::warn!("egui_webview: failed to {action}: {err}");
     }
 }
 
