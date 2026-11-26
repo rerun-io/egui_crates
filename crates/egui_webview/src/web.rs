@@ -17,6 +17,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use egui::{Context, EmbeddedViewOutput, FocusDirection, Theme};
 use wasm_bindgen::JsCast as _;
@@ -24,7 +25,9 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlCanvasElement, HtmlElement, HtmlIFrameElement, KeyboardEvent, MessageEvent};
 
-use crate::{Backend, Error, WebViewEvent, WebViewSource, reported_url, warn};
+use crate::{
+    Backend, EmbeddedWidget, Error, PageWidget, WebViewEvent, WebViewSource, reported_url, warn,
+};
 
 /// The URL that the browser reports for a [`WebViewSource::Html`] page.
 const HTML_URL: &str = "about:srcdoc";
@@ -418,6 +421,18 @@ impl Backend for IframeBackend {
 
     fn forward(&mut self) {
         warn(self.evaluate_script("history.forward()"));
+    }
+
+    fn can_go_back(&self) -> bool {
+        true // A cross-origin page doesn't tell the app.
+    }
+
+    fn can_go_forward(&self) -> bool {
+        true // A cross-origin page doesn't tell the app.
+    }
+
+    fn widget(&self) -> Arc<dyn PageWidget> {
+        Arc::new(EmbeddedWidget)
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {

@@ -602,6 +602,12 @@ impl Backend for CefBackend {
         }
     }
 
+    fn has_focus(&self) -> bool {
+        // egui forwards its key events to the page, so the page has the focus exactly when the
+        // webview has egui's focus.
+        false
+    }
+
     fn poll_focus_left(&mut self) -> Option<FocusDirection> {
         self.context.state.lock().took_focus_away.take()
     }

@@ -564,6 +564,18 @@ mod tests {
             self.log.borrow_mut().push("forward".to_owned());
         }
 
+        fn can_go_back(&self) -> bool {
+            true
+        }
+
+        fn can_go_forward(&self) -> bool {
+            true
+        }
+
+        fn widget(&self) -> Arc<dyn PageWidget> {
+            Arc::new(EmbeddedWidget)
+        }
+
         fn place(&mut self, _ctx: &Context, output: Option<&EmbeddedViewOutput>) {
             let what = if output.is_some() { "place" } else { "hide" };
             self.log.borrow_mut().push(what.to_owned());
@@ -579,8 +591,16 @@ mod tests {
             self.focused.set(false);
         }
 
+        fn set_theme(&mut self, _theme: egui::Theme) {}
+
+        fn set_document_start_script(&mut self, _script: Option<&str>) {}
+
         fn has_focus(&self) -> bool {
             self.focused.get()
+        }
+
+        fn poll_focus_left(&mut self) -> Option<FocusDirection> {
+            None
         }
 
         fn take_events(&mut self) -> Vec<WebViewEvent> {
