@@ -127,6 +127,45 @@ On Windows, the CEF library is still linked at build time.
 
 The helper processes look for CEF in the same places, so pass the same `cef_dir` in every run of `main`.
 
+#### Where to put CEF
+
+Use a subfolder of your app in the platform's cache folder. CEF can be downloaded again, and a folder of your own makes it clear who owns the files and what to delete on uninstall. The library has no default folder. The examples do this with the [`dirs`](https://crates.io/crates/dirs) crate:
+
+```rust
+let cef_dir = dirs::cache_dir().map(|dir| dir.join("my_app").join("cef"));
+let _runtime = egui_webview::Runtime::with_cef_options(egui_webview::CefInitOptions {
+    cef_dir,
+    ..Default::default()
+});
+```
+
+That is `$XDG_CACHE_HOME` or `~/.cache` on Linux, `~/Library/Caches` on macOS, and `%LOCALAPPDATA%` on Windows.
+
+#### `cef_dir` and `CEF_PATH`
+
+They are two different things:
+
+* `CefInitOptions::cef_dir` is your app's folder, set in code. It is searched first, and it is the only place `cef_install` writes to.
+* `CEF_PATH` is an environment variable of the `cef` crate. At build time it says where the build keeps its CEF, instead of in `target`. At run time it is searched last, as a help for development. Without it, the last place searched is the build's own copy in `target`.
+
+So a build on your machine always finds CEF, and nothing is downloaded during normal development. An app on a user's machine has neither, and finds CEF in `cef_dir` or next to the executable.
+
+#### Trying the download
+
+To see what a user without CEF sees, hide the build's copy:
+
+```sh
+cargo build -p egui_webview --features cef-download --example minimal
+CEF_PATH=/nonexistent target/debug/examples/minimal
+```
+
+Run the binary itself. With `cargo run`, the `CEF_PATH` would also reach the build of the `cef` crate, which would then try to download CEF to `/nonexistent`.
+
+* Click "Download Chromium", or set `EGUI_WEBVIEW_CEF_INSTALL=1` to start the download without a click. The second is a switch of the examples for tests, not of the library.
+* The files land in the examples' cache folder, such as `~/.cache/egui_webview_examples/cef/156.0.26/cef_linux_x86_64` on Linux. Delete that folder to try again. On Linux, `XDG_CACHE_HOME=/tmp/some_folder` moves the cache folder for one run.
+* `CEF_DOWNLOAD_URL=http://127.0.0.1:9` makes the download fail, to see the error and "Try again". The variable replaces CEF's build server with a mirror of your own, and the `cef` crate reads it at build time too.
+* `cargo test -p egui_webview --features cef-download --lib -- --ignored install` runs the download and install into a temporary folder, without a window.
+
 ### Sandbox
 
 By default, CEF's helper processes run without Chromium's sandbox. A page that exploits a bug in Chromium's renderer then runs with the rights of the app's user, so only show pages you trust, or turn the sandbox on: enable the `cef-sandbox` feature and set `CefInitOptions::sandbox` to `true`. The feature alone changes nothing. Where the sandbox can't work, CEF fails to start:

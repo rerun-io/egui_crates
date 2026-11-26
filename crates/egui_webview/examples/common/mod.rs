@@ -14,10 +14,11 @@ pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
     #[cfg(not(feature = "cef"))]
     let _runtime = egui_webview::Runtime::new();
     // CEF is loaded when the first page needs it. If it isn't on this machine, the webview
-    // offers to download it into this folder. A real app would use a cache folder of its own.
+    // offers to download it into `cef_dir`. CEF can be downloaded again, so it belongs in
+    // the cache folder, in a subfolder of the app's own.
     #[cfg(feature = "cef")]
     let _runtime = egui_webview::Runtime::with_cef_options(egui_webview::CefInitOptions {
-        cef_dir: std::env::var_os("EGUI_WEBVIEW_CEF_DIR").map(Into::into),
+        cef_dir: dirs::cache_dir().map(|dir| dir.join("egui_webview_examples").join("cef")),
         ..Default::default()
     });
 

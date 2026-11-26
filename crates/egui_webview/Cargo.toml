@@ -59,6 +59,8 @@ eframe = { workspace = true, default-features = false, features = [
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# The examples put CEF in the platform's cache folder.
+dirs.workspace = true
 env_logger.workspace = true
 
 # The examples start eframe on the web with these.

@@ -6,8 +6,11 @@
 //! [`egui_webview::WebView`] does all of this by itself. See the `minimal` example.
 //!
 //! ```sh
-//! EGUI_WEBVIEW_CEF_DIR=/tmp/cef cargo run -p egui_webview --features cef-download --example cef_install
+//! cargo run -p egui_webview --features cef-download --example cef_install
 //! ```
+//!
+//! `cargo run` finds the CEF that the build downloaded, so nothing is missing. The README
+//! says how to try the download.
 
 mod common;
 

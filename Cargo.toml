@@ -45,6 +45,7 @@ bzip2 = "0.6.1"
 cef = { version = "156.7", default-features = false }
 cef-dll-sys = { version = "156.7", default-features = false }
 cfg_aliases = "0.2.2"
+dirs = "7.0.0"
 document-features = "0.2.12"
 env_logger = { version = "0.11.11", default-features = false, features = [
   "auto-color",
