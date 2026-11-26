@@ -589,7 +589,9 @@ wrap_app! {
             // Pick the Ozone platform of the session, unless the command line picks one.
             #[cfg(target_os = "linux")]
             if command_line.has_switch(Some(&"ozone-platform".into())) == 0 {
-                let platform = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+                // Like winit, take an empty `WAYLAND_DISPLAY` as not set.
+                let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|name| !name.is_empty());
+                let platform = if wayland {
                     "wayland"
                 } else {
                     "x11"
