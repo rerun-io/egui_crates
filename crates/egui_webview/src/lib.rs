@@ -21,13 +21,12 @@
 //! [`WebView`]. It shows a page with one call, and the pages live in a [`WebViews`] that the app
 //! owns.
 //!
-//! Call [`init`] first in `main`, and keep the [`ShutdownGuard`] it returns until
-//! `eframe::run_native` has returned.
+//! Create a [`Runtime`] first in `main`, and keep it until `eframe::run_native` has returned.
 //!
 //! ## CEF
 //!
 //! - Process-wide options, such as a persistent profile directory, go in `CefInitOptions`, passed
-//!   to `cef_init_with`. By default, nothing persists.
+//!   to `Runtime::with_cef_options`. By default, nothing persists.
 //! - CEF's helper processes run without Chromium's sandbox, unless `CefInitOptions::sandbox` is
 //!   `true`, which needs the `cef-sandbox` feature. Without the sandbox, only show pages you
 //!   trust.
@@ -41,60 +40,19 @@ mod backend;
 mod chromium;
 mod instance;
 mod mailbox;
+mod runtime;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
 #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-pub use chromium::{
-    CefInitOptions, CefOptions, CefProcess, init as cef_init, init_with as cef_init_with,
-    run_subprocess as run_cef_subprocess,
-};
+pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess};
 pub use instance::{WebViewInstance, WebViewResponse};
+pub use runtime::Runtime;
 pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};
-
-/// Initializes `egui_webview`. Call this first in `main`, whatever the platform and whichever
-/// features are enabled, and keep the guard until `eframe::run_native` has returned:
-///
-/// ```no_run
-/// let _guard = egui_webview::init();
-/// // … run the app
-/// ```
-///
-/// Currently, it only does something natively with the `cef` feature, where it calls
-/// `egui_webview::cef_init`: CEF starts its helper processes (renderer, GPU, …) from the app's
-/// own executable, and in such a process this function runs the helper and then exits the
-/// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
-pub fn init() -> ShutdownGuard {
-    cfg_select! {
-        all(feature = "cef", not(target_arch = "wasm32")) => { cef_init() }
-        _ => { ShutdownGuard { _runtime: None } }
-    }
-}
-
-/// Keeps the webview runtime alive on the thread that initialized it.
-///
-/// Keep the guard until `eframe::run_native` returns. Repeated calls to [`init`] on that
-/// thread share the runtime. Each CEF webview also holds it until dropped. After the last
-/// owner is dropped, CEF shuts down once its browsers finish closing.
-#[must_use = "keep the guard while using webviews"]
-#[derive(Debug)]
-pub struct ShutdownGuard {
-    _runtime: Option<std::rc::Rc<Shutdown>>,
-}
-
-#[derive(Debug)]
-struct Shutdown;
-
-impl Drop for Shutdown {
-    fn drop(&mut self) {
-        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
-        chromium::shutdown();
-    }
-}
 
 /// What should the webview load?
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -184,6 +142,9 @@ pub(crate) fn reported_url(url: &str) -> Option<Url> {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
+    /// No [`Runtime`] is running on this thread.
+    NoRuntime,
+
     /// No backend supports this platform, or the window handle of [`eframe::EmbeddedViews`] is
     /// not one the platform's backend can use.
     Unsupported,
@@ -202,6 +163,11 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::NoRuntime => write!(
+                f,
+                "No running egui_webview::Runtime. Create one with `egui_webview::Runtime::new()` \
+                 first in `main`, and keep it until `eframe::run_native` returns"
+            ),
             Self::Unsupported => write!(f, "No webview backend is available on this platform"),
             Self::Backend(err) => write!(f, "Webview failed: {err}"),
         }
@@ -211,7 +177,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Unsupported => None,
+            Self::NoRuntime | Self::Unsupported => None,
             Self::Backend(err) => Some(err.as_ref()),
         }
     }

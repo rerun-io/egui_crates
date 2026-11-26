@@ -197,7 +197,7 @@ cfg_select! {
     }
     _ => {
         fn main() -> eframe::Result {
-            let _guard = egui_webview::init();
+            let _runtime = egui_webview::Runtime::new();
             let cef = cfg!(feature = "cef");
 
             let options = eframe::NativeOptions {

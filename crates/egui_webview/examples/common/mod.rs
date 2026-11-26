@@ -7,7 +7,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
     // With CEF, its helper processes run from this executable. A helper process ends here.
-    let _guard = egui_webview::init();
+    let _runtime = egui_webview::Runtime::new();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
@@ -24,7 +24,7 @@ pub fn run(_title: &str, create: eframe::AppCreator<'static>) -> eframe::Result 
     use eframe::wasm_bindgen::JsCast as _;
 
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
-    let _guard = egui_webview::init();
+    let _runtime = egui_webview::Runtime::new();
 
     wasm_bindgen_futures::spawn_local(async move {
         let canvas = web_sys::window()

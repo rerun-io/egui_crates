@@ -39,7 +39,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
-pub use runtime::{CefInitOptions, CefProcess, init, init_with, run_subprocess, shutdown};
+pub use runtime::{CefInitOptions, CefProcess, init_with, run_subprocess, shutdown};
 
 /// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,7 +100,7 @@ pub struct CefBackend {
     told_size: Option<(Vec2, f32)>,
 
     // Drop after the browser and its callbacks have released their CEF references.
-    _runtime: crate::ShutdownGuard,
+    _runtime: crate::Runtime,
 }
 
 impl std::fmt::Debug for CefBackend {
