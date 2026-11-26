@@ -38,17 +38,18 @@ pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
 
 /// Downloads CEF without asking, if `EGUI_WEBVIEW_CEF_INSTALL` is set and CEF is missing. This
 /// is for tests that can't click the page's download button. A real app asks the user first.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "cef-download", not(target_arch = "wasm32")))]
 fn install_cef_if_asked(ctx: &egui::Context) {
-    #[cfg(feature = "cef-download")]
     if std::env::var_os("EGUI_WEBVIEW_CEF_INSTALL").is_some()
         && egui_webview::cef_status() == egui_webview::CefStatus::NotInstalled
     {
         egui_webview::cef_install(ctx);
     }
-    #[cfg(not(feature = "cef-download"))]
-    _ = ctx;
 }
+
+/// Without the `cef-download` feature, there is nothing to install.
+#[cfg(not(any(feature = "cef-download", target_arch = "wasm32")))]
+fn install_cef_if_asked(_ctx: &egui::Context) {}
 
 /// Runs the app that `create` makes, in the canvas of `index.html`.
 #[cfg(target_arch = "wasm32")]
