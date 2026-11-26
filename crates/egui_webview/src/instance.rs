@@ -34,13 +34,20 @@ pub struct WebViewInstance {
     theme: Option<Theme>,
 
     /// See [`Self::set_page_style`].
+    style: StyleState,
+}
+
+/// The [`PageStyle`] of a page, and what the page was last given of it.
+#[derive(Debug, Default)]
+struct StyleState {
+    /// See [`WebViewInstance::set_page_style`].
     page_style: PageStyle,
 
     /// The CSS of [`Self::page_style`] that the page was last given.
-    style_sheet: Option<String>,
+    sheet: Option<String>,
 
-    /// The script that gives a document [`Self::style_sheet`].
-    style_script: Option<String>,
+    /// The script that gives a document [`Self::sheet`].
+    script: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -254,9 +261,7 @@ impl WebViewInstance {
             backend: Box::new(backend),
             page_focused: false,
             theme: None,
-            page_style: PageStyle::default(),
-            style_sheet: None,
-            style_script: None,
+            style: StyleState::default(),
         }
     }
 
@@ -269,29 +274,34 @@ impl WebViewInstance {
     ///
     /// With [`PageStyle::Egui`], [`Self::place`] keeps the page up to date with egui's style.
     pub fn set_page_style(&mut self, ctx: &Context, style: PageStyle) {
-        if self.page_style != style {
-            self.page_style = style;
+        if self.style.page_style != style {
+            self.style.page_style = style;
             self.update_style_sheet(ctx);
         }
     }
 
     /// See [`Self::set_page_style`].
     pub fn page_style(&self) -> &PageStyle {
-        &self.page_style
+        &self.style.page_style
     }
 
     fn update_style_sheet(&mut self, ctx: &Context) {
-        if self.page_style == PageStyle::Browser && self.style_sheet.is_none() {
+        let StyleState {
+            page_style,
+            sheet,
+            script: _,
+        } = &self.style;
+        if *page_style == PageStyle::Browser && sheet.is_none() {
             return;
         }
-        let css = self.page_style.css(ctx);
-        if self.style_sheet != css {
+        let css = page_style.css(ctx);
+        if *sheet != css {
             let script = crate::style::script(css.as_deref());
             self.backend
                 .set_document_start_script(css.is_some().then_some(&script));
             self.apply_style(&script);
-            self.style_script = css.is_some().then_some(script);
-            self.style_sheet = css;
+            self.style.script = css.is_some().then_some(script);
+            self.style.sheet = css;
         }
     }
 
@@ -486,7 +496,7 @@ impl WebViewInstance {
     /// The events from the page since the last call, oldest first.
     pub(crate) fn take_events(&mut self) -> Vec<WebViewEvent> {
         let events = self.backend.take_events();
-        // A backend without `Backend::set_document_start_script` gets the style here, and
+        // A backend that ignores `Backend::set_document_start_script` gets the style here, and
         // so does a document that started to load before the backend had the script.
         let new_document = events.iter().any(|event| {
             matches!(
@@ -494,7 +504,7 @@ impl WebViewInstance {
                 WebViewEvent::Loading { .. } | WebViewEvent::Loaded { .. }
             )
         });
-        if new_document && let Some(script) = self.style_script.clone() {
+        if new_document && let Some(script) = self.style.script.clone() {
             self.apply_style(&script);
         }
         events
