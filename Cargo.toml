@@ -51,7 +51,7 @@ image = { version = "0.25.10", default-features = false, features = ["gif"] }
 insta = "1.49"
 itertools = "0.15.0"
 js-sys = "0.3.107"
-log = { version = "0.4.29", features = ["std"] }
+log = { version = "0.4.35", features = ["std"] }
 parking_lot = "0.12.5"
 ron = "0.12.2"
 rmcp = { version = "3.9", features = ["server", "macros", "transport-io", "schemars"] }
