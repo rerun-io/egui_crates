@@ -1,7 +1,8 @@
 //! Checks for the build tools that the `cef` feature needs.
 //!
-//! `cef-dll-sys` builds CEF's C++ wrapper with `CMake` and Ninja. Without them it fails with an
-//! opaque `CMake` error, so we report the missing tool and how to install it instead.
+//! On Windows and macOS, `cef-dll-sys` builds CEF's C++ wrapper with `CMake` and Ninja. Without
+//! them it fails with an opaque `CMake` error, so we report the missing tool and how to install
+//! it instead. On Linux it only links `libcef.so` dynamically and needs neither.
 //!
 //! Cargo does not order this script before the one in `cef-dll-sys`, but this one has nothing
 //! to compile and nothing to download, so in practice it fails first.
@@ -59,7 +60,9 @@ fn main() {
     let is_wasm = env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|arch| arch == "wasm32");
     // docs.rs builds with `cef/dox`, which builds nothing.
     let is_docs_rs = env::var_os("DOCS_RS").is_some();
-    if !has_cef || is_wasm || is_docs_rs {
+    // `cef-dll-sys` builds no C++ wrapper on Linux.
+    let is_linux = env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "linux");
+    if !has_cef || is_wasm || is_docs_rs || is_linux {
         return;
     }
 

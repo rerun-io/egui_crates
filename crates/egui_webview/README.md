@@ -100,7 +100,8 @@ So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind'
 
 ## CEF
 
-The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built, and builds a small C++ wrapper library, which requires CMake and Ninja.
+The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built.
+On Windows and macOS it also builds a small C++ wrapper library, which requires CMake and Ninja; on Linux it links `libcef.so` directly.
 Set `CEF_PATH` to share one download between projects.
 
 CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
