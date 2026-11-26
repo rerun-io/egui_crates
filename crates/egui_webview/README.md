@@ -2,25 +2,25 @@
 
 Web pages as [egui](https://www.egui.rs/) widgets.
 
-This crate is a work in progress.
+> [!WARNING]
+> This crate is a work in progress.
 
-The app creates a `WebViewInstance` once, keeps it, and calls `WebViewInstance::ui` in every pass in which the page should be shown.
-After the pass, it places the page from eframe's output hook:
+# Backends
 
-```rust,ignore
-impl eframe::App for MyApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.webview.ui(ui, ui.available_size());
-    }
+| Backend | Feature | Windows          | macOS             | Linux | Web |
+|---------|---------|------------------|-------------------|-------|-----|
+| Wry     |  `wry`  | ✅<br>(WebView2) | ✅<br>(WKWebView) | ❌    | ❌  |
+| CEF     |  `cef`  | ✅               | ✅                | ✅    | ❌  |
+| iframe  |   N/A   | ❌               | ❌                | ❌    | ✅  |
 
-    fn output_hook(&mut self, ctx: &egui::Context, output: &mut egui::FullOutput) {
-        self.webview.place(ctx, &output.platform_output.embedded_views);
-    }
-}
-```
+Using the `default_backend` feature (enabled by default) will choose the first supported backend, in order of the table above.
 
-Tab and Shift-Tab move the keyboard focus between egui widgets and the page's elements.
-`examples/minimal_instance.rs` is a complete app of this shape.
+Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
+So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
+
+# Getting Started
+
+
 
 ## Initialization
 
@@ -33,10 +33,28 @@ fn main() {
 }
 ```
 
-## Showing a page without keeping it
+## Showing a WebViewInstance
 
-A `WebViewInstance` isn't `Send`, so not every piece of code can keep one.
-`WebView` shows a page with one call and keeps nothing:
+Create and store a `WebViewInstance` in your app, call `WebViewInstance::ui` to show it, and call `WebViewInstance::place` from eframe's output hook.
+
+```rust,ignore
+impl eframe::App for MyApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.webview.ui(ui, ui.available_size());
+    }
+
+    fn output_hook(&mut self, ctx: &egui::Context, output: &mut egui::FullOutput) {
+        self.webview.place(ctx, &output.platform_output.embedded_views);
+    }
+}
+```
+> [!TIP]
+> See `examples/minimal_instance.rs` for a full example using `WebViewInstance`.
+
+## Showing a WebView
+
+A `WebViewInstance` isn't `Send`, which can be annoying to persist.
+`WebView` lets you show a page with a single call:
 
 ```rust,ignore
 let response = egui_webview::WebView::new(egui::Id::unique("docs"))
@@ -44,7 +62,7 @@ let response = egui_webview::WebView::new(egui::Id::unique("docs"))
     .show(ui);
 ```
 
-The pages then live in a `WebViews` that the app owns and updates from eframe's output hook:
+The pages are stored for you in `WebViews`, which the app owns & updates from eframe's output hook:
 
 ```rust,ignore
 impl eframe::App for MyApp {
@@ -54,13 +72,14 @@ impl eframe::App for MyApp {
 }
 ```
 
-`examples/minimal.rs` is a complete app of this shape.
+> [!TIP]
+> See `examples/minimal.rs` for a full example using `WebView`/`WebViews`.
 
 * The id is global. The same id shows the same page from anywhere in the app.
 * A page lives only while it is shown. Call `WebView::keep_alive` in every frame to keep a hidden page.
 * `WebView::reload`, `WebView::load` and the other commands take the id, so they work from anywhere too.
 
-## Running the examples
+# Running the examples
 
 Natively:
 
@@ -69,7 +88,7 @@ cargo run -p egui_webview --example minimal
 cargo run -p egui_webview --example minimal_instance
 ```
 
-The examples run on the web with [Trunk](https://github.com/trunk-rs/trunk):
+On the web with [Trunk](https://github.com/trunk-rs/trunk):
 
 ```sh
 cd crates/egui_webview
@@ -79,83 +98,29 @@ trunk serve --example minimal_instance
 
 `crates/egui_webview_demo` is a bigger demo, with a browser bar, pages in egui windows and a log of the pages' events.
 
-## Backends
-
-* Web: an `<iframe>` below egui's canvas.
-* macOS, with the `wry` feature (on by default): a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
-  It needs eframe's wgpu renderer.
-* Windows, with the `wry` feature: a WebView2, created through wry, below egui's surface.
-  It needs a transparent window, and eframe's wgpu renderer on DX12, configured with `platform::win32::apply_wgpu_configuration`.
-* Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
-  `WebViewInstance::new` uses it on platforms without another backend, such as Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
-  With both `wry` and `cef` enabled, `wry` wins on macOS and Windows unless that variable is set.
-  `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
-  `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
-
-The embedded views (web, macOS, Windows) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
-egui windows and popups above a page paint over it and receive the pointer input there.
-
-Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
-So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
-
-## Architecture
-
-```mermaid
-flowchart TB
-    App["<b>your eframe::App</b><br/>ui() shows widgets · output_hook() places pages"]
-
-    subgraph egui_webview
-        WebView["<b>WebView</b><br/>widget; holds no page"]
-        Mailbox["<b>Mailbox</b><br/>commands ↓ · events ↑"]
-        WebViews["<b>WebViews</b><br/>registry; owns the pages"]
-        Instance["<b>WebViewInstance</b><br/>one page"]
-        PageWidget{{"<b>trait PageWidget</b><br/>runs in egui's pass"}}
-        Backend{{"<b>trait Backend</b><br/>the page itself"}}
-        EmbeddedWidget["<b>EmbeddedWidget</b><br/>widget of Wry + Iframe"]
-        CefWidget["<b>chromium::Context</b><br/>widget of Cef; paints a texture"]
-        Wry["<b>WryBackend</b> (macOS, Windows)<br/>WKWebView / WebView2 below egui"]
-        Iframe["<b>IframeBackend</b> (web)<br/>&lt;iframe&gt; below the canvas"]
-        Cef["<b>CefBackend</b> (feature cef)<br/>off-screen Chromium"]
-    end
-
-    subgraph egui
-        EmbeddedView["<b>EmbeddedView</b><br/>clears its rect to transparent"]
-        Output["<b>EmbeddedViewOutput</b><br/>rect · visible · z_index"]
-    end
-
-    App -- in the pass --> WebView
-    App -- after the pass --> WebViews
-    WebView <--> Mailbox <--> WebViews
-    WebViews -- owns 0..n --> Instance
-    WebView --> PageWidget
-    Instance --> PageWidget
-    Instance --> Backend
-    PageWidget -. impl .-> EmbeddedWidget & CefWidget
-    Backend -. impl .-> Wry & Iframe & Cef
-    EmbeddedWidget == "ui.add()" ==> EmbeddedView
-    EmbeddedView == end of pass ==> Output
-    Output == "Backend::place()" ==> Wry & Iframe
-```
-
-In every pass, a `PageWidget` allocates the page's rect.
-For the embedded backends (web, macOS) it is an `egui::EmbeddedView`, which egui clears to transparent and reports as an `EmbeddedViewOutput` after the pass.
-`Backend::place` then moves the page there.
-The CEF backend paints the page as a texture instead, and its `place` always gets `None`.
 
 ## CEF
 
-The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built, and builds a small C++ wrapper library, which requires CMake and Ninja.
-Set `CEF_PATH` to share one download between projects.
+CEF forks helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
+With CEF enabled it calls `egui_webview::cef_init`, which runs CEF and exits for the spawned helper processes, and for the app process it returns right away.
 
-CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
-With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns right away.
+### Known Limitations
 
-`egui_webview::run_cef_subprocess` does the same as `cef_init` without exiting, and returns the helper's exit code.
+- Pages are rendered on the CPU and uploaded as textures.
+- JavaScript dialogs, file pickers, and drag and drop are not yet supported.
 
-* Linux and Windows: the build copies CEF's files next to the binaries in `target/<profile>`.
+### Building
+
+The [`cef`](https://crates.io/crates/cef) crate downloads CEF to `CEF_PATH` (~1 GB) if not already present.
+
+On Windows & macOS, it also builds a small C++ wrapper library which requires CMake and Ninja.
+> [!NOTE]
+> See cef-rs' README [here](https://github.com/tauri-apps/cef-rs/tree/dev#usage) for more details on building.
+
+### Packaging
+
+* Linux & Windows: the build copies CEF's files next to the binaries in `target/<profile>`.
   A packaged app ships them next to its executable.
 * macOS: during development, the app loads CEF from where the build put it.
   A packaged app needs CEF in its app bundle, together with CEF's helper apps.
 
-Pages are rendered on the CPU and uploaded as textures.
-JavaScript dialogs, file pickers and drag and drop aren't supported yet.
