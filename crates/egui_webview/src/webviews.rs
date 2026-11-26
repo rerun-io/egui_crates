@@ -515,6 +515,10 @@ mod tests {
     }
 
     impl Backend for FakeBackend {
+        fn name(&self) -> &'static str {
+            "fake"
+        }
+
         fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
             self.log
                 .borrow_mut()

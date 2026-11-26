@@ -85,17 +85,64 @@ trunk serve --example minimal_instance
 ## Backends
 
 * Web: an `<iframe>` below egui's canvas.
-    * egui clears its rect to transparent so the page shows through.
-    * egui windows and popups above a page paint over it and receive the pointer input there.
-* Any native platform, with the `cef` feature: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
-  `WebViewInstance::new` and `WebViewInstance::new_cef` use it on every native platform.
+* macOS: a `WKWebView`, created through [wry](https://github.com/tauri-apps/wry), below egui's surface.
+  It needs eframe's wgpu renderer.
+* Other native platforms, such as Linux and Windows: Chromium, through [CEF](https://github.com/chromiumembedded/cef), renders the page off screen into an egui texture, so it works with every egui renderer.
+  On macOS, the `cef` feature builds it too, and `WebViewInstance::new` uses it when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`.
+  `WebViewInstance::new_cef` uses it on any platform, for example to render with Vulkan on Windows.
   `WebViewInstance::new_cef_with_options` also takes `CefOptions`: the page's frame rate, and the background color of pages that set none, which is white by default.
 
+The embedded views (web, macOS) lie below egui's surface, and egui clears their rects to transparent so the pages show through.
+egui windows and popups above a page paint over it and receive the pointer input there.
 
 When a page asks for a new window (`window.open`, or a link with `target="_blank"`), the CEF backend opens nothing and sends `WebViewEvent::NewWindowRequested` instead. The app decides what to do with the URL, for example load it with `load_url` or open it in the system browser. On the web, the browser handles new windows itself.
 
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
 So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    App["<b>your eframe::App</b><br/>ui() shows widgets · output_hook() places pages"]
+
+    subgraph egui_webview
+        WebView["<b>WebView</b><br/>widget; holds no page"]
+        Mailbox["<b>Mailbox</b><br/>commands ↓ · events ↑"]
+        WebViews["<b>WebViews</b><br/>registry; owns the pages"]
+        Instance["<b>WebViewInstance</b><br/>one page"]
+        PageWidget{{"<b>trait PageWidget</b><br/>runs in egui's pass"}}
+        Backend{{"<b>trait Backend</b><br/>the page itself"}}
+        EmbeddedWidget["<b>EmbeddedWidget</b><br/>widget of Wry + Iframe"]
+        CefWidget["<b>chromium::Context</b><br/>widget of Cef; paints a texture"]
+        Wry["<b>WryBackend</b> (macOS)<br/>WKWebView below egui"]
+        Iframe["<b>IframeBackend</b> (web)<br/>&lt;iframe&gt; below the canvas"]
+        Cef["<b>CefBackend</b> (not macOS, or feature cef)<br/>off-screen Chromium"]
+    end
+
+    subgraph egui
+        EmbeddedView["<b>EmbeddedView</b><br/>clears its rect to transparent"]
+        Output["<b>EmbeddedViewOutput</b><br/>rect · visible · z_index"]
+    end
+
+    App -- in the pass --> WebView
+    App -- after the pass --> WebViews
+    WebView <--> Mailbox <--> WebViews
+    WebViews -- owns 0..n --> Instance
+    WebView --> PageWidget
+    Instance --> PageWidget
+    Instance --> Backend
+    PageWidget -. impl .-> EmbeddedWidget & CefWidget
+    Backend -. impl .-> Wry & Iframe & Cef
+    EmbeddedWidget == "ui.add()" ==> EmbeddedView
+    EmbeddedView == end of pass ==> Output
+    Output == "Backend::place()" ==> Wry & Iframe
+```
+
+In every pass, a `PageWidget` allocates the page's rect.
+For the embedded backends (web, macOS) it is an `egui::EmbeddedView`, which egui clears to transparent and reports as an `EmbeddedViewOutput` after the pass.
+`Backend::place` then moves the page there.
+The CEF backend paints the page as a texture instead, and its `place` always gets `None`.
 
 ## CEF
 
@@ -104,7 +151,7 @@ On Windows and macOS it also builds a small C++ wrapper library, which requires 
 Set `CEF_PATH` to share one download between projects.
 
 CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
-With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns the shutdown guard.
+Where CEF is built, it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns the shutdown guard.
 
 `egui_webview::cef_init_with` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
 

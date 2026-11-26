@@ -1,14 +1,59 @@
 //! Web pages as [egui](https://www.egui.rs/) widgets.
 //!
+//! ## Example
+//! Create the page once, show it in `ui`, and place it in `output_hook`:
+//!
+//! ```no_run
+//! use egui_webview::{WebViewInstance, WebViewSource};
+//!
+//! struct MyApp {
+//!     webview: WebViewInstance,
+//! }
+//!
+//! impl eframe::App for MyApp {
+//!     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+//!         egui::CentralPanel::default().show(ui, |ui| {
+//!             self.webview.ui(ui, ui.available_size());
+//!         });
+//!     }
+//!
+//!     fn output_hook(&mut self, ctx: &egui::Context, output: &mut egui::FullOutput) {
+//!         self.webview.place(ctx, &output.platform_output.embedded_views);
+//!     }
+//! }
+//!
+//! fn main() -> eframe::Result {
+//!     let _guard = egui_webview::init(); // Must come first, see `init`.
+//!
+//!     eframe::run_native(
+//!         "My app",
+//!         eframe::NativeOptions::default(),
+//!         Box::new(|cc| {
+//!             let source = WebViewSource::Url("https://www.egui.rs".parse()?);
+//!             let webview = WebViewInstance::new(
+//!                 &cc.egui_ctx,
+//!                 egui::Id::unique("page"),
+//!                 &source,
+//!                 cc.embedded_views(),
+//!             )?;
+//!             Ok(Box::new(MyApp { webview }))
+//!         }),
+//!     )
+//! }
+//! ```
+//!
+//! ## How it works
+//!
 //! The app creates a [`WebViewInstance`] once, keeps it, calls [`WebViewInstance::ui`] in every
 //! pass in which the page should be shown, and [`WebViewInstance::place`] from
 //! [`eframe::App::output_hook`].
 //!
 //! A [`WebViewInstance`] shows its page through a [`Backend`], in one of two ways:
 //!
-//! - Off-screen rendering (CEF, with the `cef` feature): the page renders into a texture that egui
+//! - Off-screen rendering (CEF, except on macOS without the `cef` feature): the page renders into a texture that egui
 //!   paints like any other image, and the widget forwards egui's input to the page.
-//! - An embedded view (an `<iframe>` on the web): the page lies below egui's surface. Its rect is an [`egui::EmbeddedView`], which clears the rect to
+//! - An embedded view (`WKWebView` on macOS, an `<iframe>` on the web): the page lies below egui's
+//!   surface. Its rect is an [`egui::EmbeddedView`], which clears the rect to
 //!   transparent so the page shows through. After every pass of the root viewport,
 //!   [`WebViewInstance::place`] moves the page to where egui put that rect, which egui reports
 //!   as an [`egui::EmbeddedViewOutput`]. egui layers above the page (windows, popups, …) paint
@@ -35,18 +80,25 @@
 //!   nothing.
 //! - While a CEF webview exists, egui repaints at least every 100 ms, because CEF's message loop
 //!   runs in egui's passes.
+//!
+//! ## Feature flags
+#![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 
 mod backend;
-#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+#[cfg(cef_backend)]
 mod chromium;
 mod instance;
+#[cfg(wry_backend)]
+mod macos;
 mod mailbox;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod webviews;
+#[cfg(wry_backend)]
+mod wry_page;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
-#[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+#[cfg(cef_backend)]
 pub use chromium::{
     CefInitOptions, CefOptions, CefProcess, init as cef_init, init_with as cef_init_with,
     run_subprocess as run_cef_subprocess,
@@ -64,13 +116,13 @@ pub use url::{self, Url};
 /// // … run the app
 /// ```
 ///
-/// Currently, it only does something natively with the `cef` feature, where it calls
+/// Currently, it only does something where CEF is built, and then it calls
 /// `egui_webview::cef_init`: CEF starts its helper processes (renderer, GPU, …) from the app's
 /// own executable, and in such a process this function runs the helper and then exits the
-/// process instead of returning. Without the `cef` feature, and on the web, it does nothing.
+/// process instead of returning. Elsewhere, such as on the web, it does nothing.
 pub fn init() -> ShutdownGuard {
     cfg_select! {
-        all(feature = "cef", not(target_arch = "wasm32")) => { cef_init() }
+        cef_backend => { cef_init() }
         _ => { ShutdownGuard { _runtime: None } }
     }
 }
@@ -91,7 +143,7 @@ struct Shutdown;
 
 impl Drop for Shutdown {
     fn drop(&mut self) {
-        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        #[cfg(cef_backend)]
         chromium::shutdown();
     }
 }
@@ -129,7 +181,7 @@ pub enum WebViewEvent {
     /// A page started loading.
     Loading {
         /// The URL of the page. For a page given as [`WebViewSource::Html`], this is
-        /// `about:srcdoc`, `about:blank` or a `data:` URL, depending on the backend.
+        /// `about:srcdoc` on the web, and a `data:` URL elsewhere.
         url: Url,
     },
 
@@ -171,7 +223,7 @@ pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
 /// Parses a URL that a backend's engine reported for a [`WebViewEvent`].
 ///
 /// Engines report valid URLs, so this only logs a warning for one that doesn't parse.
-#[cfg(any(target_arch = "wasm32", feature = "cef"))]
+#[cfg(any(cef_backend, platform_backend))]
 pub(crate) fn reported_url(url: &str) -> Option<Url> {
     Url::parse(url)
         .inspect_err(|err| {

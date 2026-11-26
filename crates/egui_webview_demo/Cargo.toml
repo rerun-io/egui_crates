@@ -12,7 +12,8 @@ version = "0.1.0"
 workspace = true
 
 [features]
-## Enable the CEF (Chromium) backend, which the demo uses natively.
+## Also build the CEF (Chromium) backend on macOS, which the demo then uses when
+## `EGUI_WEBVIEW_BACKEND=cef` is set. Other native platforms always use CEF.
 cef = ["egui_webview/cef"]
 
 [dependencies]

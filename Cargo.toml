@@ -41,6 +41,7 @@ accesskit_consumer = "0.39.2" # Must match the accesskit version egui uses
 ahash = { version = "0.8.12", default-features = false }
 arboard = { version = "3.7", default-features = false }
 base64 = "0.23.1"
+cfg_aliases = "0.2.2"
 cef = { version = "156.7", default-features = false }
 document-features = "0.2.12"
 env_logger = { version = "0.11.11", default-features = false, features = [
@@ -53,6 +54,7 @@ itertools = "0.15.0"
 js-sys = "0.3.107"
 log = { version = "0.4.35", features = ["std"] }
 parking_lot = "0.12.5" # 0.13 would duplicate the 0.12 that eframe, arboard, and others pull in. Bump once they move.
+profiling = { version = "1.0.18", default-features = false }
 ron = "0.12.3"
 rmcp = { version = "3.11", features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2"

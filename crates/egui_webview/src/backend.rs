@@ -52,6 +52,10 @@ impl PageWidget for EmbeddedWidget {
 /// All methods are called on the thread that runs egui, so a backend doesn't need to be `Send`.
 #[expect(unused_variables)] // The default implementations ignore their arguments.
 pub trait Backend: std::fmt::Debug {
+    /// A short name of the engine that shows the page, such as `"CEF"`, for the app to show
+    /// to the user.
+    fn name(&self) -> &'static str;
+
     /// Load a page.
     ///
     /// # Errors
@@ -171,7 +175,7 @@ pub trait Backend: std::fmt::Debug {
 ///
 /// [`FocusDirection::Next`]: egui::FocusDirection::Next
 /// [`FocusDirection::Previous`]: egui::FocusDirection::Previous
-#[cfg(any(target_arch = "wasm32", feature = "cef"))]
+#[cfg(any(target_arch = "wasm32", cef_backend))]
 pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     let index = match direction {
         egui::FocusDirection::Next => 0,
@@ -195,4 +199,17 @@ pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     order.at({index})?.focus();
 }})();"#
     ))
+}
+
+/// Returns a base64 `data:` URL of the HTML document `html`.
+///
+/// Unlike an HTML string loaded directly, such a URL gets a session history entry that
+/// `WebKit` can navigate back to.
+#[cfg(any(cef_backend, wry_backend))]
+pub(crate) fn html_data_url(html: &str) -> String {
+    use base64::Engine as _;
+
+    let mut url = String::from("data:text/html;charset=utf-8;base64,");
+    base64::engine::general_purpose::STANDARD.encode_string(html, &mut url);
+    url
 }

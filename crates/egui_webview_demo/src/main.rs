@@ -1,5 +1,12 @@
 //! A demo of [`egui_webview::WebViewInstance`]: one page in the central panel, and more in egui
 //! windows above it, each with a browser bar.
+//!
+//! The menu bar names the backend that shows the pages. The target platform picks it: the
+//! system webview on macOS, an `<iframe>` on the web, and CEF elsewhere. To use CEF on macOS:
+//!
+//! ```sh
+//! EGUI_WEBVIEW_BACKEND=cef cargo run -p egui_webview_demo --features cef
+//! ```
 
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -186,8 +193,8 @@ impl Browser {
             let line = match event {
                 WebViewEvent::Loading { url } => format!("Loading {}", short_url(&url)),
                 WebViewEvent::Loaded { url } => {
-                    // Don't show the URL of a page given as HTML (`about:srcdoc`,
-                    // `about:blank` or a `data:` URL) in the URL field.
+                    // Don't show the URL of a page given as HTML (`about:srcdoc` or a
+                    // `data:` URL) in the URL field.
                     if !matches!(url.scheme(), "about" | "data") {
                         self.url = url.to_string();
                     }
@@ -289,6 +296,8 @@ impl eframe::App for DemoApp {
             // The menu bar takes the whole row, so the browser controls go inside it.
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.strong("🌐 egui_webview");
+                ui.weak(main.webview.backend_name())
+                    .on_hover_text("The backend that shows the pages");
                 ui.menu_button("Windows", |ui| {
                     let new_window = egui::Button::new("New browser window")
                         .shortcut_text(ui.ctx().format_shortcut(&NEW_WINDOW));
@@ -330,6 +339,7 @@ impl eframe::App for DemoApp {
             egui::Panel::bottom("log").resizable(true).show(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .stick_to_bottom(true)
+                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         for line in log.iter() {
                             ui.monospace(line);
