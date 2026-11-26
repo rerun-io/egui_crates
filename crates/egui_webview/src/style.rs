@@ -21,8 +21,9 @@ const LAYER: &str = "egui-webview";
 /// forbids inline styles doesn't get it. On the web, neither does a cross-origin page.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum PageStyle {
-    /// The browser's defaults: a serif font of 16 pixels, and a white or dark background that
-    /// follows egui's theme.
+    /// The browser's defaults, and a white or dark background that follows egui's theme.
+    ///
+    /// No standard sets the default font, but every major browser uses a 16-pixel serif font.
     #[default]
     Browser,
 
