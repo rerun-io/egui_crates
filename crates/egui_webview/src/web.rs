@@ -25,6 +25,7 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlCanvasElement, HtmlElement, HtmlIFrameElement, KeyboardEvent, MessageEvent};
 
+use crate::trust::ISOLATED_SANDBOX;
 use crate::{
     Backend, EmbeddedWidget, Error, PageWidget, WebViewEvent, WebViewSource, reported_url, warn,
 };
@@ -364,22 +365,29 @@ impl IframeBackend {
 
 impl Backend for IframeBackend {
     fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
+        if let WebViewSource::Url { url, trust } = source {
+            trust.check(&app_origin()?, url)?;
+        }
         self.loaded.set(false);
         // Scripts queued for the previous page must not run in the new one.
         self.pending_scripts.borrow_mut().clear();
         let iframe = &self.iframe;
         match source {
             WebViewSource::Html(html) => {
-                // Without `allow-same-origin`, the sandbox gives the page an opaque origin, so
-                // it can't access the app's document. A change to `sandbox` takes effect at the
-                // next navigation, so set it before `srcdoc`.
+                // A change to `sandbox` takes effect at the next navigation, so set it before
+                // `srcdoc`.
                 iframe
-                    .set_attribute("sandbox", "allow-scripts allow-forms allow-popups")
+                    .set_attribute("sandbox", ISOLATED_SANDBOX)
                     .map_err(js_error)?;
                 iframe.set_srcdoc(&with_prelude(html, self.document_start_script.as_deref()));
             }
-            WebViewSource::Url(url) => {
-                iframe.remove_attribute("sandbox").map_err(js_error)?;
+            WebViewSource::Url { url, trust } => {
+                // As for `srcdoc`, set `sandbox` before `src`.
+                match trust.sandbox() {
+                    Some(sandbox) => iframe.set_attribute("sandbox", sandbox),
+                    None => iframe.remove_attribute("sandbox"),
+                }
+                .map_err(js_error)?;
                 // `srcdoc` takes precedence over `src`, and removing `srcdoc` navigates to
                 // `src`. Set `src` first, or the `<iframe>` loads its old `src` (`about:blank`
                 // if it had none) and then the URL.
@@ -392,7 +400,7 @@ impl Backend for IframeBackend {
         self.source = source.clone();
         let url = match source {
             WebViewSource::Html(_) => reported_url(HTML_URL),
-            WebViewSource::Url(url) => Some(url.clone()),
+            WebViewSource::Url { url, .. } => Some(url.clone()),
         };
         if let Some(url) = url {
             self.events.borrow_mut().push(WebViewEvent::Loading { url });
@@ -570,6 +578,15 @@ fn css_pixels_per_point(ctx: &Context, canvas: &web_sys::DomRect) -> f32 {
     } else {
         ctx.zoom_factor()
     }
+}
+
+/// The origin of the app's document.
+fn app_origin() -> Result<String, Error> {
+    web_sys::window()
+        .ok_or_else(|| Error::backend("No window"))?
+        .location()
+        .origin()
+        .map_err(js_error)
 }
 
 /// Runs `script` in the loaded page of `iframe`.

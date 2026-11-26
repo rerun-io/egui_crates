@@ -98,6 +98,26 @@ When a page asks for a new window (`window.open`, or a link with `target="_blank
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
 So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
 
+## Trust on the web
+
+On the web, a page is an `<iframe>` in the app's own document, so the browser has to keep it apart from the app.
+A page given as HTML always runs in a sandbox, with an origin of its own.
+For a page from a URL, `UrlTrust` says how much the app trusts it:
+
+* `UrlTrust::Isolated` (the default): the same sandbox as for HTML. The page has no cookies and no storage, so a user can't sign in to it. Use it for a URL from anywhere, such as one a user typed.
+* `UrlTrust::OwnOrigin`: the same sandbox, but the page keeps the origin of its URL, with its cookies and storage. A URL with the app's own origin is refused.
+* `UrlTrust::Full`: no sandbox. Only use it for a URL that the app chose itself.
+
+```rust,ignore
+let response = egui_webview::WebView::new(egui::Id::unique("dashboard"))
+    .url(&url)
+    .url_trust(egui_webview::UrlTrust::OwnOrigin)
+    .show(ui);
+```
+
+A page in the sandbox can't navigate the app's window, show dialogs such as `alert`, or download files, and it can only be loaded from an `http` or `https` URL.
+The native backends ignore the trust: there the engine keeps every page apart from the app.
+
 ## CEF
 
 The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the first time it is built.

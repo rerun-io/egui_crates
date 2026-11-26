@@ -42,6 +42,7 @@ mod instance;
 mod mailbox;
 mod runtime;
 mod style;
+mod trust;
 #[cfg(platform_backend)]
 mod web;
 mod webviews;
@@ -52,6 +53,7 @@ pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use runtime::Runtime;
 pub use style::{PageStyle, style_sheet};
+pub use trust::UrlTrust;
 pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};
@@ -71,23 +73,37 @@ pub enum WebViewSource {
     /// An HTML document, given as its source text.
     Html(String),
 
-    /// The URL of a page.
-    Url(Url),
+    /// The page at a URL.
+    Url {
+        /// The URL of the page.
+        url: Url,
+
+        /// How much the app trusts the page. Only the web backend uses it.
+        trust: UrlTrust,
+    },
 }
 
 impl WebViewSource {
+    /// The page at `url`, with the least trust: [`UrlTrust::Isolated`].
+    pub fn url(url: Url) -> Self {
+        Self::Url {
+            url,
+            trust: UrlTrust::default(),
+        }
+    }
+
     /// Returns the HTML source if this is [`Self::Html`].
     pub fn html(&self) -> Option<&str> {
         match self {
             Self::Html(html) => Some(html),
-            Self::Url(_) => None,
+            Self::Url { .. } => None,
         }
     }
 }
 
 impl From<Url> for WebViewSource {
     fn from(url: Url) -> Self {
-        Self::Url(url)
+        Self::url(url)
     }
 }
 
@@ -162,6 +178,23 @@ pub enum Error {
 
     /// The backend reported an error.
     Backend(Box<dyn std::error::Error + Send + Sync>),
+
+    /// On the web, only a page with [`UrlTrust::Full`] can be loaded from a URL that is
+    /// neither `http` nor `https`.
+    UnsupportedScheme {
+        /// The URL that wasn't loaded.
+        url: Url,
+    },
+
+    /// On the web, a page with [`UrlTrust::OwnOrigin`] can't be loaded from the app's own
+    /// origin, because it could remove its sandbox and then control the app.
+    ///
+    /// Load the URL with [`UrlTrust::Isolated`] to keep the page apart from the app, or with
+    /// [`UrlTrust::Full`] if the app trusts the page.
+    SameOriginAsApp {
+        /// The URL that wasn't loaded.
+        url: Url,
+    },
 }
 
 impl Error {
@@ -181,6 +214,13 @@ impl std::fmt::Display for Error {
             ),
             Self::Unsupported => write!(f, "No webview backend is available on this platform"),
             Self::Backend(err) => write!(f, "Webview failed: {err}"),
+            Self::UnsupportedScheme { url } => {
+                write!(f, "Only http and https URLs can be loaded: {url}")
+            }
+            Self::SameOriginAsApp { url } => write!(
+                f,
+                "Refused to load a page from the app's own origin, where it could control the app: {url}"
+            ),
         }
     }
 }
@@ -188,7 +228,10 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoRuntime | Self::Unsupported => None,
+            Self::NoRuntime
+            | Self::Unsupported
+            | Self::UnsupportedScheme { .. }
+            | Self::SameOriginAsApp { .. } => None,
             Self::Backend(err) => Some(err.as_ref()),
         }
     }

@@ -8,7 +8,7 @@ use egui::{Context, EmbeddedViewOutput, Id, Sense, Ui, Vec2, ViewportId};
 use crate::instance::show_widget;
 use crate::mailbox::{Command, Mailbox};
 use crate::{
-    Error, PageStyle, PageWidget, Url, WebViewEvent, WebViewInstance, WebViewResponse,
+    Error, PageStyle, PageWidget, Url, UrlTrust, WebViewEvent, WebViewInstance, WebViewResponse,
     WebViewSource, warn,
 };
 
@@ -286,6 +286,7 @@ fn create_page(
 pub struct WebView<'a> {
     id: Id,
     source: Option<SourceRef<'a>>,
+    url_trust: UrlTrust,
     style: &'a PageStyle,
     size: Option<Vec2>,
 }
@@ -293,14 +294,20 @@ pub struct WebView<'a> {
 /// A [`WebViewSource`] that borrows its content.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SourceRef<'a> {
-    Url(&'a Url),
+    Url { url: &'a Url, trust: UrlTrust },
     Html(&'a str),
 }
 
 impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
     fn eq(&self, other: &S) -> bool {
         match (self, other.as_ref()) {
-            (Self::Url(a), WebViewSource::Url(b)) => *a == b,
+            (
+                Self::Url { url, trust },
+                WebViewSource::Url {
+                    url: other_url,
+                    trust: other_trust,
+                },
+            ) => *url == other_url && trust == other_trust,
             (Self::Html(a), WebViewSource::Html(b)) => a == b,
             _ => false,
         }
@@ -310,7 +317,10 @@ impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
 impl From<SourceRef<'_>> for WebViewSource {
     fn from(val: SourceRef<'_>) -> Self {
         match val {
-            SourceRef::Url(url) => Self::Url(url.clone()),
+            SourceRef::Url { url, trust } => Self::Url {
+                url: url.clone(),
+                trust,
+            },
             SourceRef::Html(html) => Self::Html(html.to_owned()),
         }
     }
@@ -323,18 +333,34 @@ impl<'a> WebView<'a> {
         Self {
             id: id.into(),
             source: None,
+            url_trust: UrlTrust::default(),
             style: &PageStyle::Browser,
             size: None,
         }
     }
 
-    /// Shows the page at `url`.
+    /// Shows the page at `url`, with the trust of [`Self::url_trust`].
     ///
     /// The page is loaded when the value you pass changes. It isn't loaded again when the user
     /// navigates somewhere else in the page. Use [`Self::load_url`] for that.
     #[inline]
     pub fn url(mut self, url: &'a Url) -> Self {
-        self.source = Some(SourceRef::Url(url));
+        self.source = Some(SourceRef::Url {
+            url,
+            trust: self.url_trust,
+        });
+        self
+    }
+
+    /// How much the app trusts the page of [`Self::url`]. Default: [`UrlTrust::Isolated`].
+    ///
+    /// The page is loaded again when the trust changes.
+    #[inline]
+    pub fn url_trust(mut self, url_trust: UrlTrust) -> Self {
+        self.url_trust = url_trust;
+        if let Some(SourceRef::Url { trust, .. }) = &mut self.source {
+            *trust = url_trust;
+        }
         self
     }
 
@@ -351,7 +377,7 @@ impl<'a> WebView<'a> {
     #[inline]
     pub fn source(self, source: &'a WebViewSource) -> Self {
         match source {
-            WebViewSource::Url(url) => self.url(url),
+            WebViewSource::Url { url, trust } => self.url(url).url_trust(*trust),
             WebViewSource::Html(html) => self.html(html),
         }
     }
@@ -379,6 +405,7 @@ impl<'a> WebView<'a> {
         let Self {
             id,
             source: new_source,
+            url_trust: _,
             style,
             size,
         } = self;
@@ -461,9 +488,10 @@ impl WebView<'_> {
         push_command(ctx, id.into(), Command::Load(source));
     }
 
-    /// Loads the page at `url` in the page of `id`.
+    /// Loads the page at `url` in the page of `id`, with the least trust:
+    /// [`UrlTrust::Isolated`].
     pub fn load_url(ctx: &Context, id: impl Into<Id>, url: Url) {
-        Self::load(ctx, id, WebViewSource::Url(url));
+        Self::load(ctx, id, WebViewSource::url(url));
     }
 
     /// Runs `script` in the page of `id`. See [`WebViewInstance::evaluate_script`].
@@ -686,19 +714,29 @@ mod tests {
     }
 
     /// What the log says about `source`.
-    fn describe(source: &WebViewSource) -> &str {
+    fn describe(source: &WebViewSource) -> String {
         match source {
-            WebViewSource::Url(url) => url.as_str(),
-            WebViewSource::Html(html) => html,
+            WebViewSource::Url {
+                url,
+                trust: UrlTrust::Isolated,
+            } => url.to_string(),
+            WebViewSource::Url { url, trust } => format!("{url} with {trust:?}"),
+            WebViewSource::Html(html) => html.clone(),
         }
     }
 
     /// Shows the page at `https://{name}.example/`.
     fn show(ui: &mut Ui, name: &str) -> WebViewResponse {
+        show_with_trust(ui, name, UrlTrust::default())
+    }
+
+    /// Shows the page at `https://{name}.example/`, with `trust`.
+    fn show_with_trust(ui: &mut Ui, name: &str, trust: UrlTrust) -> WebViewResponse {
         let url = format!("https://{name}.example/");
         let url = Url::parse(&url).unwrap_or_else(|err| panic!("Invalid URL {url:?}: {err}"));
         WebView::new(id())
             .url(&url)
+            .url_trust(trust)
             .size(vec2(100.0, 100.0))
             .show(ui)
     }
@@ -720,6 +758,28 @@ mod tests {
             show(ui, "a");
         });
         assert_eq!(harness.log(), ["create https://a.example/", "place"]);
+    }
+
+    #[test]
+    fn a_page_is_loaded_again_when_its_trust_changes() {
+        let mut harness = Harness::new(false);
+        harness.frame(vec![], |ui| {
+            show_with_trust(ui, "a", UrlTrust::OwnOrigin);
+        });
+        assert_eq!(
+            harness.log(),
+            ["create https://a.example/ with OwnOrigin", "place"]
+        );
+
+        harness.frame(vec![], |ui| {
+            show_with_trust(ui, "a", UrlTrust::OwnOrigin);
+        });
+        assert_eq!(harness.log(), ["place"]);
+
+        harness.frame(vec![], |ui| {
+            show(ui, "a");
+        });
+        assert_eq!(harness.log(), ["load https://a.example/", "place"]);
     }
 
     #[test]
