@@ -1,9 +1,7 @@
 //! CEF's process-wide initialization, the entry point of its helper processes, and the external
 //! message pump that egui's passes drive.
 
-use std::cell::RefCell;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Weak};
 use std::thread::ThreadId;
@@ -25,7 +23,7 @@ use egui::Ui;
 use tempfile::TempDir;
 
 use super::context::Context;
-use crate::{Error, Shutdown, ShutdownGuard};
+use crate::{Error, Runtime, runtime::Engine};
 
 /// The name of the process message that brings the text of a page's
 /// `window.ipc.postMessage(text)` from the render process to the browser process.
@@ -48,11 +46,6 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
 static STATE: std::sync::Mutex<State> = std::sync::Mutex::new(State::Unchecked);
 
-thread_local! {
-    /// Guards and backends on the initialization thread share one shutdown owner.
-    static OWNER: RefCell<std::rc::Weak<Shutdown>> = const { RefCell::new(std::rc::Weak::new()) };
-}
-
 /// Whether the last owner timed out waiting for an asynchronous browser close.
 static SHUTDOWN_PENDING: AtomicBool = AtomicBool::new(false);
 
@@ -68,7 +61,7 @@ static OPEN_BROWSERS: AtomicUsize = AtomicUsize::new(0);
 #[expect(clippy::disallowed_types)] // egui's `Mutex` has no `const` constructor for a `static`.
 static PAGES: std::sync::Mutex<Vec<Weak<Context>>> = std::sync::Mutex::new(Vec::new());
 
-/// Options for CEF that apply to the whole process. Pass them to [`crate::cef_init_with`].
+/// Options for CEF that apply to the whole process. Pass them to [`Runtime::with_cef_options`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CefInitOptions {
     /// The directory of the browser profile: cookies, `localStorage`, the HTTP cache, and so on.
@@ -78,7 +71,7 @@ pub struct CefInitOptions {
     ///
     /// With `None`, the default, the profile lives in memory and nothing persists. CEF still
     /// needs a directory for some files. It gets a new one in the system's temporary directory,
-    /// which the [`ShutdownGuard`] deletes.
+    /// which is deleted when CEF shuts down.
     pub cache_dir: Option<PathBuf>,
 
     /// Whether CEF's helper processes run in Chromium's sandbox. The default is `false`.
@@ -102,9 +95,9 @@ pub enum CefProcess {
         exit_code: i32,
     },
 
-    /// This is the app's own process. Start the app, and drop the guard after
+    /// This is the app's own process. Start the app, and keep the runtime until
     /// `eframe::run_native` returns.
-    App(ShutdownGuard),
+    App(Runtime),
 }
 
 /// Where CEF is in its life.
@@ -113,7 +106,12 @@ enum State {
     Unchecked,
 
     /// CEF starts with these options when the first page needs it.
-    Ready(CefInitOptions),
+    Ready {
+        options: CefInitOptions,
+
+        /// CEF starts on the thread that created the [`Runtime`].
+        thread: ThreadId,
+    },
 
     Running {
         /// CEF shuts down on the thread that initialized it.
@@ -131,63 +129,34 @@ enum State {
 }
 
 /// Runs this process as a CEF helper process and exits, if Chromium started it as one. Otherwise
-/// it returns a guard that shuts CEF down when dropped.
-///
-/// This is [`init_with`] with the default options.
-pub fn init() -> ShutdownGuard {
-    init_with(CefInitOptions::default())
-}
-
-/// Like [`init`], with `options` for when the first webview starts CEF.
-///
-/// The first call sets the process-wide options.
-///
-/// It runs this process as a CEF helper process and exits, if Chromium started it as one.
-/// Otherwise it returns a guard that shuts CEF down when dropped.
-///
-/// CEF starts its helper processes (renderer, GPU, …) from the app's own executable, so this
-/// must run first in `main`. Keep the guard until `eframe::run_native` returns:
-///
-/// ```no_run
-/// let options = egui_webview::CefInitOptions {
-///     cache_dir: Some("my_app_profile".into()),
-///     ..Default::default()
-/// };
-/// let _guard = egui_webview::cef_init_with(options);
-/// // … run the app
-/// ```
-///
-/// To handle the helper's exit code yourself, call [`crate::run_cef_subprocess`] instead.
-pub fn init_with(options: CefInitOptions) -> ShutdownGuard {
+/// it returns the [`Runtime`]. See [`Runtime::with_cef_options`].
+pub fn init(options: CefInitOptions) -> Runtime {
     match run_subprocess(options) {
         CefProcess::Helper { exit_code } => {
             #[expect(clippy::exit)] // A helper process has nothing of the app to unwind.
             std::process::exit(exit_code);
         }
-        CefProcess::App(guard) => guard,
+        CefProcess::App(runtime) => runtime,
     }
 }
 
 /// Runs this process as a CEF helper process, if Chromium started it as one, and returns its exit
 /// code. Otherwise it keeps `options` for when the first webview starts CEF.
 ///
-/// This is [`crate::cef_init_with`] without the exit. Call it at the start of `main`:
+/// This is [`Runtime::with_cef_options`] without the exit. Call it at the start of `main`:
 ///
 /// ```no_run
-/// let _guard = match egui_webview::run_cef_subprocess(Default::default()) {
+/// let _runtime = match egui_webview::run_cef_subprocess(Default::default()) {
 ///     egui_webview::CefProcess::Helper { exit_code } => std::process::exit(exit_code),
-///     egui_webview::CefProcess::App(guard) => guard,
+///     egui_webview::CefProcess::App(runtime) => runtime,
 /// };
 /// // … run the app
 /// ```
 pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     let mut state = lock_state();
     if !matches!(*state, State::Unchecked) {
-        let runtime = OWNER.with_borrow(std::rc::Weak::upgrade);
-        if runtime.is_none() {
-            log::warn!("egui_webview: init must run on the original thread before shutdown");
-        }
-        return CefProcess::App(ShutdownGuard { _runtime: runtime });
+        drop(state); // `Runtime::start` may panic.
+        return CefProcess::App(Runtime::start());
     }
     let args = cef::args::Args::new();
     // macOS helpers must enter the sandbox before loading the CEF framework.
@@ -219,12 +188,12 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
         }
     }
 
-    let runtime = Rc::new(Shutdown);
-    OWNER.with_borrow_mut(|owner| *owner = Rc::downgrade(&runtime));
-    *state = State::Ready(options);
-    CefProcess::App(ShutdownGuard {
-        _runtime: Some(runtime),
-    })
+    *state = State::Ready {
+        options,
+        thread: std::thread::current().id(),
+    };
+    drop(state); // `Runtime::start` may panic.
+    CefProcess::App(Runtime::start())
 }
 
 /// Whether Chromium launched this executable as a helper.
@@ -318,18 +287,21 @@ fn load_framework() -> Result<(), String> {
 /// each of its passes.
 ///
 /// # Errors
-/// If [`run_subprocess`] hasn't run, if the CEF library can't be loaded, if CEF fails to
+/// [`Error::NoRuntime`] if no [`Runtime`] runs on this thread. [`Error::Backend`] if CEF runs, or
+/// is to start, on another thread, if the CEF library can't be loaded, if CEF fails to
 /// initialize, or if CEF has shut down. The first failure is kept, so later calls fail in the
 /// same way.
-pub fn initialize(ctx: &egui::Context) -> Result<ShutdownGuard, Error> {
+pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
+    let engine = Runtime::engine()?;
     let mut state = lock_state();
-    let owner = OWNER.with_borrow(std::rc::Weak::upgrade);
-    if matches!(*state, State::Ready(_) | State::Running { .. }) && owner.is_none() {
+    if let State::Ready { thread, .. } | State::Running { thread, .. } = &*state
+        && *thread != std::thread::current().id()
+    {
         return Err(Error::backend(
-            "CEF needs a live guard on the initialization thread",
+            "CEF: create webviews on the thread that created the `egui_webview::Runtime`",
         ));
     }
-    if let State::Ready(options) = &*state {
+    if let State::Ready { options, .. } = &*state {
         let options = options.clone();
         *state = match start(&options) {
             Ok(temp_dir) => {
@@ -346,14 +318,16 @@ pub fn initialize(ctx: &egui::Context) -> Result<ShutdownGuard, Error> {
         State::Running { .. } => {
             // egui ignores a second plugin of the same type.
             ctx.add_plugin(CefPlugin);
-            return Ok(ShutdownGuard { _runtime: owner });
+            return Ok(engine);
         }
         // CEF starts its helper processes from this executable. Refuse to start them before the
         // app has shown that its `main` handles being one.
-        State::Unchecked | State::Ready(_) => "call `egui_webview::init` first in `main`",
+        State::Unchecked | State::Ready { .. } => {
+            "create the `egui_webview::Runtime` with `Runtime::new` first in `main`"
+        }
         State::Failed(err) => err.as_str(),
         State::ShutDown => {
-            "CEF has shut down, because the guard returned by `egui_webview::init` was dropped. \
+            "CEF has shut down, because the `egui_webview::Runtime` was dropped. \
              Keep it until `eframe::run_native` returns"
         }
     };
@@ -446,23 +420,25 @@ fn in_app_bundle(exe: &Path) -> bool {
         .is_some_and(|dir| dir.join("../Frameworks").exists())
 }
 
-/// Shuts CEF down, if it runs. Called when the [`ShutdownGuard`] is dropped.
+/// Shuts CEF down, if it runs. Called when the [`Runtime`] and the last webview are dropped.
 ///
 /// If closing takes longer than [`SHUTDOWN_TIMEOUT`], a later message pump finishes shutdown.
 /// The temporary cache directory is deleted after shutdown. CEF can't start again in this process.
 pub fn shutdown() {
     let mut state = lock_state();
-    let State::Running { thread, temp_dir } = &mut *state else {
+    let this_thread = std::thread::current().id();
+    // CEF belongs to the thread that created the first `Runtime`. Dropping the runtime of
+    // another thread leaves CEF alone.
+    if let State::Ready { thread, .. } | State::Running { thread, .. } = &*state
+        && *thread != this_thread
+    {
+        return;
+    }
+    let State::Running { temp_dir, .. } = &mut *state else {
+        // CEF never started, so there is nothing to shut down. It can't start later either.
         *state = State::ShutDown;
         return;
     };
-    if *thread != std::thread::current().id() {
-        log::warn!(
-            "egui_webview: not shutting CEF down, because the guard was dropped on another thread \
-             than the one that initialized CEF"
-        );
-        return;
-    }
 
     // Closing a browser takes a few turns of the message loop.
     let deadline = Instant::now() + SHUTDOWN_TIMEOUT;

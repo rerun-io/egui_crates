@@ -148,14 +148,17 @@ impl WebViewInstance {
     /// `id` must be unique in `ctx`: it is the id of both the widget and its embedded view.
     ///
     /// # Errors
-    /// [`Error::Unsupported`] if no backend supports this platform or the window of
-    /// `embedded_views`, and [`Error::Backend`] if the backend fails to create the page.
+    /// [`Error::NoRuntime`] natively without a running [`crate::Runtime`], [`Error::Unsupported`] if no
+    /// backend supports this platform or the window of `embedded_views`, and
+    /// [`Error::Backend`] if the backend fails to create the page.
     pub fn new(
         ctx: &Context,
         id: impl Into<Id>,
         source: &WebViewSource,
         embedded_views: &EmbeddedViews,
     ) -> Result<Self, Error> {
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::Runtime::engine()?;
         match DefaultBackend::pick() {
             DefaultBackend::Cef => {
                 _ = embedded_views;
@@ -200,13 +203,13 @@ impl WebViewInstance {
     ///
     /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
     /// native platform, and [`Self::new`] uses it there. It requires the `cef` feature, and a
-    /// call to [`crate::init`] first in `main`.
+    /// running [`crate::Runtime`].
     ///
     /// `id` must be unique in `ctx`.
     ///
     /// # Errors
-    /// [`Error::Backend`] if [`crate::init`] hasn't run, or if CEF fails to initialize or to
-    /// create the browser.
+    /// [`Error::NoRuntime`] without a running [`crate::Runtime`], and [`Error::Backend`] if CEF
+    /// fails to initialize or to create the browser.
     #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
     pub fn new_cef(
         ctx: &Context,

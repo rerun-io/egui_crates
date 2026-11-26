@@ -224,8 +224,10 @@ impl Drop for App {
 }
 
 pub fn run() -> eframe::Result {
-    // With CEF, its helper processes run from this executable. A helper process ends here.
-    let _guard = egui_webview::init();
+    // Start the webview runtime before anything else. With CEF, Chromium
+    // runs its helper processes (renderer, GPU, …) from this same executable. In such a
+    // process, this call runs the helper and then exits, so nothing below runs there.
+    let _runtime = egui_webview::Runtime::new();
 
     let args = Args::parse();
 

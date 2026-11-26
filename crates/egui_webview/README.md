@@ -24,16 +24,17 @@ Tab and Shift-Tab move the keyboard focus between egui widgets and the page's el
 
 ## Initialization
 
-Call `egui_webview::init` first in `main`, and keep the guard it returns until `eframe::run_native` has returned:
+Create an `egui_webview::Runtime` at the start of `main`, right after initializing logging, and keep it until `eframe::run_native` has returned:
 
 ```rust,ignore
 fn main() -> eframe::Result {
-    let _guard = egui_webview::init();
+    env_logger::init();
+    let _runtime = egui_webview::Runtime::new();
     eframe::run_native(/* … */)
 }
 ```
 
-The first call sets the process-wide options. Guards on the initialization thread and live webviews share the runtime. After the last owner is dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
+Natively, creating a webview without a running `Runtime` fails with `Error::NoRuntime`, which `WebView` shows in the page's rect. On the web, `Runtime` does nothing. Natively, only one `Runtime` may be alive at a time, and creating a second one panics. Live webviews keep CEF running. After the `Runtime` and the last webview are dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
 
 ## Showing a page without keeping it
 
@@ -103,12 +104,13 @@ The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the f
 On Windows and macOS it also builds a small C++ wrapper library, which requires CMake and Ninja; on Linux it links `libcef.so` directly.
 Set `CEF_PATH` to share one download between projects.
 
-CEF runs its helper processes from the app's own executable, which is why `egui_webview::init` must run first in `main`.
-With the `cef` feature it calls `egui_webview::cef_init`: in a helper process that runs CEF and exits, and otherwise it returns the shutdown guard.
+CEF launches its helper processes (renderer, GPU, …) from the app's own executable, so `main` also runs in each of them. That is why `egui_webview::Runtime::new` must run at the start of `main`, before anything but logging: in a helper process, it hands the process over to CEF and exits when the helper is done. In the app's own process, it returns the `Runtime`.
 
-`egui_webview::cef_init_with` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
+Creating the `Runtime` is cheap. It starts no engine, process, or thread. CEF itself starts when the first CEF webview is created, so there is no reason to create the `Runtime` later than at the start of `main`.
 
-`egui_webview::run_cef_subprocess` does the same as `cef_init_with` without exiting. It returns `CefProcess::Helper` with the helper's exit code, or `CefProcess::App` with the guard.
+`egui_webview::Runtime::with_cef_options` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
+
+`egui_webview::run_cef_subprocess` does the same as `Runtime::with_cef_options` without exiting. It returns `CefProcess::Helper` with the helper's exit code, or `CefProcess::App` with the `Runtime`.
 
 ### Sandbox
 

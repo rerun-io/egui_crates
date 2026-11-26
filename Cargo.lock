@@ -1725,6 +1725,7 @@ dependencies = [
  "cef",
  "eframe 0.37.0",
  "egui 0.37.0",
+ "env_logger",
  "js-sys",
  "log",
  "tempfile",

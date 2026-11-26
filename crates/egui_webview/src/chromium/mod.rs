@@ -11,8 +11,8 @@
 //! page, and writes down the pass's input. The page half is [`CefBackend`]. It owns the browser,
 //! and sends it that input after the pass.
 //!
-//! CEF starts its helper processes from the app's own executable, so apps must call
-//! [`crate::init`] first in `main`.
+//! CEF starts its helper processes from the app's own executable, so apps must create a
+//! [`crate::Runtime`] at the start of `main`.
 
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 
@@ -40,7 +40,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
-pub use runtime::{CefInitOptions, CefProcess, init, init_with, run_subprocess, shutdown};
+pub use runtime::{CefInitOptions, CefProcess, init, run_subprocess, shutdown};
 
 /// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,7 +135,7 @@ pub struct CefBackend {
     frame_rate: FrameRate,
 
     // Drop after the browser and its callbacks have released their CEF references.
-    _runtime: crate::ShutdownGuard,
+    _engine: crate::runtime::Engine,
 }
 
 /// The frame rate of a [`CefBackend`]'s browser.
@@ -195,7 +195,7 @@ impl CefBackend {
         source: &WebViewSource,
         options: CefOptions,
     ) -> Result<Self, Error> {
-        let runtime = runtime::initialize(ctx)?;
+        let engine = runtime::initialize(ctx)?;
 
         let (context, events) = Context::new(ctx);
         let window_info = WindowInfo {
@@ -235,7 +235,7 @@ impl CefBackend {
                 told: frame_rate,
                 resized_at: None,
             },
-            _runtime: runtime,
+            _engine: engine,
         })
     }
 

@@ -51,6 +51,9 @@ eframe = { workspace = true, default-features = false, features = [
   "wayland",       # Required for Linux and CI.
 ] }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+env_logger.workspace = true
+
 # The examples start eframe on the web with these.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-futures.workspace = true

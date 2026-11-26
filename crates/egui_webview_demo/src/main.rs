@@ -434,8 +434,10 @@ fn report(log: &mut Vec<String>, result: Result<(), egui_webview::Error>) {
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    // With CEF, its helper processes run from this executable. A helper process ends here.
-    let _guard = egui_webview::init();
+    // Start the webview runtime right after logging, before anything else. With CEF, Chromium
+    // runs its helper processes (renderer, GPU, …) from this same executable. In such a
+    // process, this call runs the helper and then exits, so nothing below runs there.
+    let _runtime = egui_webview::Runtime::new();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]),
@@ -457,7 +459,7 @@ fn main() {
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-    let _guard = egui_webview::init();
+    let _runtime = egui_webview::Runtime::new();
 
     let search = web_sys::window()
         .and_then(|window| window.location().search().ok())
