@@ -515,13 +515,16 @@ fn placeholder(
     if let Some(text) = text
         && ui.is_rect_visible(rect)
     {
-        ui.painter_at(rect).text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            text,
+        // Wrapped, because an error with a path in it is often wider than the page.
+        let galley = ui.painter().layout(
+            text.to_owned(),
             egui::TextStyle::Body.resolve(ui.style()),
             ui.visuals().error_fg_color,
+            rect.width(),
         );
+        let pos = rect.center() - galley.size() / 2.0;
+        ui.painter_at(rect)
+            .galley(pos, galley, ui.visuals().error_fg_color);
     }
     WebViewResponse { events, response }
 }

@@ -27,6 +27,10 @@
 //!
 //! - Process-wide options, such as a persistent profile directory, go in `CefInitOptions`, passed
 //!   to `Runtime::with_cef_options`. By default, nothing persists.
+//! - CEF is loaded when the first webview needs it. On Linux and macOS, the app starts without
+//!   CEF's files, which are over 1 GB. `cef_status` says whether they are on the machine, and
+//!   `CefInitOptions::cef_dir` says where they go. With the `cef-download` feature,
+//!   `cef_install` downloads them there. Ask the user first.
 //! - CEF's helper processes run without Chromium's sandbox, unless `CefInitOptions::sandbox` is
 //!   `true`, which needs the `cef-sandbox` feature. Without the sandbox, only show pages you
 //!   trust.
