@@ -21,6 +21,7 @@ rust-version = "1.95.0" # The highest MSRV of the crates in this repo
 [workspace.dependencies]
 egui_inspection_tools = { version = "0.1.0", path = "crates/egui_inspection_tools" }
 egui_table = { version = "0.11.0", path = "crates/egui_table", default-features = false }
+egui_webview = { version = "0.1.0", path = "crates/egui_webview" }
 
 # NOTE: egui itself is deliberately not in here. `kittest_inspector` rides the
 # `lucas/kittest-inspect` branch of egui (old `inspector_api` protocol) while every other
@@ -29,30 +30,36 @@ egui_table = { version = "0.11.0", path = "crates/egui_table", default-features 
 # `crates/kittest_inspector` names its git dependencies itself.
 eframe = { version = "0.37.0", default-features = false }
 egui = { version = "0.37.0", default-features = false }
+egui_demo_lib = { version = "0.37.0" }
+egui_extras = { version = "0.37.0" }
 egui_inspection = { version = "0.37.0", default-features = false }
 egui_kittest = { version = "0.37.0" }
 
 # `enumn` gives `Role::n`, used to validate a role string against the full AccessKit role set.
-accesskit = { version = "0.25.0", features = ["enumn"] } # Must match the accesskit version egui uses
-accesskit_consumer = "0.39.0" # Must match the accesskit version egui uses
-arboard = { version = "3.6.1", default-features = false }
+accesskit = { version = "0.25.2", features = ["enumn"] } # Must match the accesskit version egui uses
+accesskit_consumer = "0.39.2" # Must match the accesskit version egui uses
+ahash = { version = "0.8.12", default-features = false }
+arboard = { version = "3.7", default-features = false }
 base64 = "0.23.1"
-cef = { version = "156.3.0", default-features = false }
+cef = { version = "156.7", default-features = false }
 document-features = "0.2.12"
-env_logger = { version = "0.11.8", default-features = false, features = [
+env_logger = { version = "0.11.11", default-features = false, features = [
   "auto-color",
   "humantime",
 ] }
-image = { version = "0.25.6", default-features = false, features = ["gif"] }
-insta = "1.48"
+image = { version = "0.25.10", default-features = false, features = ["gif"] }
+insta = "1.49"
+itertools = "0.15.0"
 js-sys = "0.3.107"
-log = { version = "0.4.29", features = ["std"] }
-rmcp = { version = "3.9", features = ["server", "macros", "transport-io", "schemars"] }
+log = { version = "0.4.35", features = ["std"] }
+parking_lot = "0.12.5" # 0.13 would duplicate the 0.12 that eframe, arboard, and others pull in. Bump once they move.
+ron = "0.12.3"
+rmcp = { version = "3.11", features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3.27"
-tokio = { version = "1.53", features = [
+tokio = { version = "1.54", features = [
   "rt-multi-thread",
   "io-std",
   "io-util",
@@ -63,8 +70,8 @@ tokio = { version = "1.53", features = [
   "signal",
 ] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-url = "2.5.9"
-vec1 = { version = "1.12.1", default-features = false }
+url = "2.5"
+vec1 = { version = "1.12", default-features = false }
 wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.64"
 web-sys = "0.3.91"

@@ -16,7 +16,7 @@ workspace = true
 cef = ["egui_webview/cef"]
 
 [dependencies]
-egui_webview = { path = "../egui_webview" }
+egui_webview.workspace = true
 
 egui.workspace = true
 eframe = { workspace = true, default-features = false, features = [
