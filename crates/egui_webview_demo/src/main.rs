@@ -459,8 +459,7 @@ fn main() {
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-    // The app outlives `main` on the web, so keep the runtime forever.
-    Box::leak(Box::new(egui_webview::Runtime::new()));
+    let _runtime = egui_webview::Runtime::new();
 
     let search = web_sys::window()
         .and_then(|window| window.location().search().ok())

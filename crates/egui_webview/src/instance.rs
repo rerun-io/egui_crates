@@ -148,7 +148,7 @@ impl WebViewInstance {
     /// `id` must be unique in `ctx`: it is the id of both the widget and its embedded view.
     ///
     /// # Errors
-    /// [`Error::NoRuntime`] without a running [`crate::Runtime`], [`Error::Unsupported`] if no
+    /// [`Error::NoRuntime`] natively without a running [`crate::Runtime`], [`Error::Unsupported`] if no
     /// backend supports this platform or the window of `embedded_views`, and
     /// [`Error::Backend`] if the backend fails to create the page.
     pub fn new(
@@ -157,6 +157,7 @@ impl WebViewInstance {
         source: &WebViewSource,
         embedded_views: &EmbeddedViews,
     ) -> Result<Self, Error> {
+        #[cfg(not(target_arch = "wasm32"))]
         let _runtime = crate::Runtime::current()?;
         match DefaultBackend::pick() {
             DefaultBackend::Cef => {

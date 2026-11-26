@@ -142,7 +142,7 @@ pub(crate) fn reported_url(url: &str) -> Option<Url> {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
-    /// No [`Runtime`] is running on this thread.
+    /// No [`Runtime`] is running on this thread. Never happens on the web.
     NoRuntime,
 
     /// No backend supports this platform, or the window handle of [`eframe::EmbeddedViews`] is

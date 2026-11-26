@@ -1,10 +1,12 @@
 //! [`Runtime`], which keeps the webview engine alive.
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+#[cfg(not(target_arch = "wasm32"))]
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
-use crate::Error;
-
+#[cfg(not(target_arch = "wasm32"))]
 thread_local! {
     /// The runtime of this thread, while some [`Runtime`] keeps it alive.
     static CURRENT: RefCell<Weak<Owner>> = const { RefCell::new(Weak::new()) };
@@ -21,14 +23,18 @@ thread_local! {
 /// // … run the app
 /// ```
 ///
-/// Without a running [`Runtime`], creating a webview fails with [`Error::NoRuntime`].
+/// Natively, creating a webview without a running [`Runtime`] fails with
+/// [`crate::Error::NoRuntime`]. On the web, the browser is the engine, and a [`Runtime`] does
+/// nothing.
 ///
 /// Clones, and later calls to [`Self::new`] on the same thread, share the runtime. Each CEF
 /// webview also keeps it until dropped. After the last owner is dropped, CEF shuts down once its
 /// browsers finish closing, and can't start again in this process.
 #[must_use = "keep the runtime until `eframe::run_native` returns"]
 #[derive(Clone, Debug)]
+#[cfg_attr(target_arch = "wasm32", expect(missing_copy_implementations))] // Not `Copy` natively.
 pub struct Runtime {
+    #[cfg(not(target_arch = "wasm32"))]
     _owner: Rc<Owner>,
 }
 
@@ -43,9 +49,8 @@ impl Runtime {
     #[expect(clippy::new_without_default)] // Starting a runtime is more than a default value.
     pub fn new() -> Self {
         cfg_select! {
-            all(feature = "cef", not(target_arch = "wasm32")) => {
-                Self::with_cef_options(crate::CefInitOptions::default())
-            }
+            target_arch = "wasm32" => { Self {} }
+            feature = "cef" => { Self::with_cef_options(crate::CefInitOptions::default()) }
             _ => { Self::start() }
         }
     }
@@ -71,6 +76,7 @@ impl Runtime {
     }
 
     /// Shares the running runtime of this thread, or starts a new one.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn start() -> Self {
         CURRENT.with_borrow_mut(|current| {
             let owner = current.upgrade().unwrap_or_else(|| {
@@ -85,29 +91,33 @@ impl Runtime {
     /// The running runtime of this thread.
     ///
     /// # Errors
-    /// [`Error::NoRuntime`] if no [`Runtime`] on this thread is alive.
-    pub(crate) fn current() -> Result<Self, Error> {
+    /// [`crate::Error::NoRuntime`] if no [`Runtime`] on this thread is alive.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn current() -> Result<Self, crate::Error> {
         CURRENT
             .with_borrow(Weak::upgrade)
             .map(|owner| Self { _owner: owner })
-            .ok_or(Error::NoRuntime)
+            .ok_or(crate::Error::NoRuntime)
     }
 }
 
 /// Shuts the engine down when the last [`Runtime`] is dropped.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 struct Owner;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for Owner {
     fn drop(&mut self) {
-        #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+        #[cfg(feature = "cef")]
         crate::chromium::shutdown();
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+    use crate::Error;
 
     #[test]
     fn current_needs_a_live_runtime() {

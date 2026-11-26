@@ -28,8 +28,7 @@ pub fn run(_title: &str, create: eframe::AppCreator<'static>) -> eframe::Result 
     use eframe::wasm_bindgen::JsCast as _;
 
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
-    // The app outlives `main` on the web, so keep the runtime forever.
-    Box::leak(Box::new(egui_webview::Runtime::new()));
+    let _runtime = egui_webview::Runtime::new();
 
     wasm_bindgen_futures::spawn_local(async move {
         let canvas = web_sys::window()

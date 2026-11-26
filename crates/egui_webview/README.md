@@ -34,7 +34,7 @@ fn main() -> eframe::Result {
 }
 ```
 
-Without a running `Runtime`, creating a webview fails with `Error::NoRuntime`, which `WebView` shows in the page's rect. Clones of the `Runtime`, later calls to `Runtime::new` on the same thread, and live webviews share the runtime. After the last owner is dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
+Natively, creating a webview without a running `Runtime` fails with `Error::NoRuntime`, which `WebView` shows in the page's rect. On the web, `Runtime` does nothing. Clones of the `Runtime`, later calls to `Runtime::new` on the same thread, and live webviews share the runtime. After the last owner is dropped, CEF shuts down once all browsers have closed and deletes its temporary files.
 
 ## Showing a page without keeping it
 
