@@ -28,6 +28,11 @@ thread_local! {
 /// // … run the app
 /// ```
 ///
+/// Creating a [`Runtime`] is cheap. It starts no engine, process, or thread. CEF starts when the
+/// first CEF webview is created. So don't wait with the [`Runtime`] until a webview is shown:
+/// CEF's helper processes run the app's `main`, and must reach [`Runtime::new`] before the app
+/// does anything else.
+///
 /// Natively, creating a webview without a running [`Runtime`] fails with
 /// [`crate::Error::NoRuntime`]. On the web, the browser is the engine, and a [`Runtime`] does
 /// nothing.
@@ -53,16 +58,19 @@ pub(crate) struct Engine {
 }
 
 impl Runtime {
-    /// Starts the webview runtime. Call this at the start of `main`, right after initializing
+    /// Creates the webview runtime. Call this at the start of `main`, right after initializing
     /// logging.
+    ///
+    /// This is cheap: it doesn't start CEF or any of its processes. That happens when the first
+    /// CEF webview is created.
+    ///
+    /// With the `cef` feature, this is `Self::with_cef_options` with the default options. CEF
+    /// launches its helper processes (renderer, GPU, …) from the app's own executable, so `main`
+    /// also runs in each of them. In a helper process, this call hands the process over to CEF,
+    /// and exits the process when the helper is done, instead of returning.
     ///
     /// # Panics
     /// Natively, if another [`Runtime`] is alive.
-    ///
-    /// Currently, it only does something natively with the `cef` feature, where it is
-    /// `Self::with_cef_options` with the default options: CEF starts its helper processes
-    /// (renderer, GPU, …) from the app's own executable, and in such a process this runs the
-    /// helper and then exits the process instead of returning.
     #[expect(clippy::new_without_default)] // Starting a runtime is more than a default value.
     pub fn new() -> Self {
         cfg_select! {

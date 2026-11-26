@@ -104,8 +104,9 @@ The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the f
 On Windows and macOS it also builds a small C++ wrapper library, which requires CMake and Ninja; on Linux it links `libcef.so` directly.
 Set `CEF_PATH` to share one download between projects.
 
-CEF runs its helper processes from the app's own executable, which is why `egui_webview::Runtime::new` must run at the start of `main`, before anything but logging.
-With the `cef` feature, in a helper process it runs CEF and exits, and otherwise it returns the `Runtime`.
+CEF launches its helper processes (renderer, GPU, …) from the app's own executable, so `main` also runs in each of them. That is why `egui_webview::Runtime::new` must run at the start of `main`, before anything but logging: in a helper process, it hands the process over to CEF and exits when the helper is done. In the app's own process, it returns the `Runtime`.
+
+Creating the `Runtime` is cheap. It starts no engine, process, or thread. CEF itself starts when the first CEF webview is created, so there is no reason to create the `Runtime` later than at the start of `main`.
 
 `egui_webview::Runtime::with_cef_options` takes `CefInitOptions`, which apply to the whole process. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
 
