@@ -87,6 +87,19 @@ impl Grid {
         self.children.iter().filter_map(|c| c.as_ref())
     }
 
+    /// The index into [`Self::children`] storage of the `n`:th child, skipping holes.
+    ///
+    /// If there are `n` children or fewer, this is one past the last slot,
+    /// which is where [`Self::insert_at`] appends.
+    pub(crate) fn slot_of_nth_child(&self, n: usize) -> usize {
+        self.children
+            .iter()
+            .enumerate()
+            .filter(|(_, child)| child.is_some())
+            .nth(n)
+            .map_or(self.children.len(), |(slot, _)| slot)
+    }
+
     pub fn add_child(&mut self, child: TileId) {
         self.children.push(Some(child));
     }
