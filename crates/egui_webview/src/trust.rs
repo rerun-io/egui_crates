@@ -76,7 +76,7 @@ impl UrlTrust {
     /// serializes it.
     ///
     /// # Errors
-    /// [`Error::UnsupportedScheme`] and [`Error::AppOrigin`]. See the variants of [`Self`].
+    /// [`Error::UnsupportedScheme`] and [`Error::SameOriginAsApp`]. See the variants of [`Self`].
     pub(crate) fn check(self, app_origin: &str, url: &Url) -> Result<(), Error> {
         let refuses_app_origin = match self {
             Self::Isolated => false,
@@ -90,7 +90,7 @@ impl UrlTrust {
             return Err(Error::UnsupportedScheme { url: url.clone() });
         }
         if refuses_app_origin && url.origin().ascii_serialization() == app_origin {
-            return Err(Error::AppOrigin { url: url.clone() });
+            return Err(Error::SameOriginAsApp { url: url.clone() });
         }
         Ok(())
     }
@@ -165,7 +165,7 @@ mod tests {
             assert!(
                 matches!(
                     check(UrlTrust::OwnOrigin, url),
-                    Err(Error::AppOrigin { .. })
+                    Err(Error::SameOriginAsApp { .. })
                 ),
                 "{url:?} has the app's origin"
             );

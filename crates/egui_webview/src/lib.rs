@@ -187,8 +187,11 @@ pub enum Error {
     },
 
     /// On the web, a page with [`UrlTrust::OwnOrigin`] can't be loaded from the app's own
-    /// origin.
-    AppOrigin {
+    /// origin, because it could remove its sandbox and then control the app.
+    ///
+    /// Load the URL with [`UrlTrust::Isolated`] to keep the page apart from the app, or with
+    /// [`UrlTrust::Full`] if the app trusts the page.
+    SameOriginAsApp {
         /// The URL that wasn't loaded.
         url: Url,
     },
@@ -214,9 +217,9 @@ impl std::fmt::Display for Error {
             Self::UnsupportedScheme { url } => {
                 write!(f, "Only http and https URLs can be loaded: {url}")
             }
-            Self::AppOrigin { url } => write!(
+            Self::SameOriginAsApp { url } => write!(
                 f,
-                "A page from the app's own origin can't be loaded with `UrlTrust::OwnOrigin`: {url}"
+                "Refused to load a page from the app's own origin, where it could control the app: {url}"
             ),
         }
     }
@@ -228,7 +231,7 @@ impl std::error::Error for Error {
             Self::NoRuntime
             | Self::Unsupported
             | Self::UnsupportedScheme { .. }
-            | Self::AppOrigin { .. } => None,
+            | Self::SameOriginAsApp { .. } => None,
             Self::Backend(err) => Some(err.as_ref()),
         }
     }
