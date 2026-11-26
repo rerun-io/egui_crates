@@ -249,6 +249,33 @@ impl<Pane> Tiles<Pane> {
         id
     }
 
+    /// A structural copy of these tiles, with each pane replaced by its own [`TileId`].
+    ///
+    /// Neither layout nor simplification ever looks at a pane's contents, so this carries
+    /// everything needed to speculatively re-arrange and lay out the tree — which is what the
+    /// animated drag preview does, without touching the real tree at all.
+    ///
+    /// Panes carry their original id as their payload, so they can still be identified after
+    /// the speculative edits have moved them around, however many times.
+    pub(super) fn skeleton(&self) -> Tiles<TileId> {
+        Tiles {
+            next_tile_id: self.next_tile_id,
+            tiles: self
+                .tiles
+                .iter()
+                .map(|(&id, tile)| {
+                    let tile = match tile {
+                        Tile::Pane(_) => Tile::Pane(id),
+                        Tile::Container(container) => Tile::Container(container.clone()),
+                    };
+                    (id, tile)
+                })
+                .collect(),
+            invisible: self.invisible.clone(),
+            rects: Default::default(),
+        }
+    }
+
     #[must_use]
     pub fn insert_pane(&mut self, pane: Pane) -> TileId {
         self.insert_new(Tile::Pane(pane))

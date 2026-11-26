@@ -308,8 +308,14 @@ impl Tabs {
             crate::cover_tile_if_dragged(tree, behavior, ui, active);
         }
 
-        // We have only laid out the active tab, so we need to switch active tab _after_ the ui pass above:
-        self.active = next_active;
+        // We have only laid out the active tab, so we need to switch active tab _after_ the ui pass above.
+        //
+        // Mid-drag the tab bar draws the tabs this container _would_ have, so `next_active` can
+        // name a tile that is on its way in but is not a child yet. Committing that would leave
+        // this container pointing at a tile it does not contain.
+        if next_active.is_none_or(|active| self.children.contains(&active)) {
+            self.active = next_active;
+        }
     }
 
     /// Returns the next active tab (e.g. the one clicked, or the current).
@@ -323,6 +329,21 @@ impl Tabs {
         tile_id: TileId,
     ) -> Option<TileId> {
         let mut next_active = self.active;
+
+        // Mid-drag, show this container as it _would_ be if the tile were dropped now.
+        let shown = tree.preview_tabs(tile_id).cloned().unwrap_or_else(|| {
+            // Either nothing is being dragged, or this container is absent from the previewed
+            // tree because dropping would collapse it. In the latter case still drop the tile
+            // that is leaving, so the remaining tabs close the gap rather than holding a slot
+            // open for it.
+            let mut shown = self.clone();
+            if let Some(dragged) = drop_context.dragged_tile_id {
+                shown.children.retain(|&child| child != dragged);
+                shown.ensure_active(&tree.tiles);
+            }
+            shown
+        });
+        let tab_children = shown.children.clone();
 
         let tab_bar_height = behavior.tab_bar_height(ui.style());
         let arrow_size = egui::Vec2::splat(tab_bar_height);
@@ -402,14 +423,14 @@ impl Tabs {
 
                         ui.spacing_mut().item_spacing.x = 0.0; // Tabs have spacing built-in
 
-                        for (i, &child_id) in self.children.iter().enumerate() {
+                        for (i, &child_id) in tab_children.iter().enumerate() {
                             if !tree.is_visible_in_layout(child_id) {
                                 continue;
                             }
 
                             let is_being_dragged = is_being_dragged(ui, tree.id, child_id);
 
-                            let selected = self.is_active(child_id);
+                            let selected = shown.is_active(child_id);
                             let id = child_id.egui_id(tree.id);
                             let tab_state = TabState {
                                 active: selected,
@@ -460,8 +481,11 @@ impl Tabs {
         let preview_thickness = 6.0;
         let after_rect = |rect: Rect| {
             let dragged_size = if let Some(dragged_index) = dragged_index {
-                // We actually know the size of this thing
-                button_rects[&self.children[dragged_index]].size()
+                tab_children
+                    .get(dragged_index)
+                    .and_then(|id| button_rects.get(id))
+                    .map(|r| r.size())
+                    .unwrap_or_else(|| rect.size())
             } else {
                 rect.size() // guess that the size is the same as the last button
             };
@@ -472,7 +496,7 @@ impl Tabs {
         };
         super::linear::drop_zones(
             preview_thickness,
-            &self.children,
+            &tab_children,
             dragged_index,
             super::LinearDir::Horizontal,
             |tile_id| button_rects.get(&tile_id).copied(),
