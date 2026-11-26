@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use egui::{Color32, Context, FontDefinitions, FontFamily, FontId, Style, TextStyle, ViewportId};
+use egui::{Color32, Context, FontDefinitions, FontFamily, FontId, Style, TextStyle};
 
 /// The id of the `<style>` element that holds the [`PageStyle`].
 const ELEMENT_ID: &str = "egui-webview-style";
@@ -58,12 +58,7 @@ impl PageStyle {
 /// falls back to the system's default font.
 pub fn style_sheet(ctx: &Context) -> String {
     let style = ctx.global_style();
-    if 0 < ctx.cumulative_pass_nr_for(ViewportId::ROOT) {
-        ctx.fonts(|fonts| style_sheet_of(&style, fonts.definitions()))
-    } else {
-        // egui has no fonts before its first pass, so guess that it will use the default ones.
-        style_sheet_of(&style, &FontDefinitions::default())
-    }
+    ctx.fonts(|fonts| style_sheet_of(&style, fonts.definitions()))
 }
 
 fn style_sheet_of(style: &Style, fonts: &FontDefinitions) -> String {
