@@ -12,10 +12,11 @@ thread_local! {
 
 /// Keeps the webview engine alive on the thread that created it.
 ///
-/// Create it first in `main`, whatever the platform and whichever features are enabled, and keep
-/// it until `eframe::run_native` has returned:
+/// Create it at the start of `main`, right after initializing logging, whatever the platform and
+/// whichever features are enabled. Keep it until `eframe::run_native` has returned:
 ///
 /// ```no_run
+/// // Initialize logging first, so that CEF's helper processes log too.
 /// let _runtime = egui_webview::Runtime::new();
 /// // … run the app
 /// ```
@@ -32,7 +33,8 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// Starts the webview runtime. Call this first in `main`.
+    /// Starts the webview runtime. Call this at the start of `main`, right after initializing
+    /// logging.
     ///
     /// Currently, it only does something natively with the `cef` feature, where it is
     /// `Self::with_cef_options` with the default options: CEF starts its helper processes
@@ -65,7 +67,7 @@ impl Runtime {
     /// [`crate::run_cef_subprocess`] instead.
     #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
     pub fn with_cef_options(options: crate::CefInitOptions) -> Self {
-        crate::chromium::init_with(options)
+        crate::chromium::init(options)
     }
 
     /// Shares the running runtime of this thread, or starts a new one.

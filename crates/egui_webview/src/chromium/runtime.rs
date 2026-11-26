@@ -130,7 +130,7 @@ enum State {
 
 /// Runs this process as a CEF helper process and exits, if Chromium started it as one. Otherwise
 /// it returns the [`Runtime`]. See [`Runtime::with_cef_options`].
-pub fn init_with(options: CefInitOptions) -> Runtime {
+pub fn init(options: CefInitOptions) -> Runtime {
     match run_subprocess(options) {
         CefProcess::Helper { exit_code } => {
             #[expect(clippy::exit)] // A helper process has nothing of the app to unwind.
@@ -425,17 +425,18 @@ fn in_app_bundle(exe: &Path) -> bool {
 pub fn shutdown() {
     let mut state = lock_state();
     let this_thread = std::thread::current().id();
-    let State::Running { thread, temp_dir } = &mut *state else {
-        // Only the runtime of the thread that is to start CEF stops it.
-        if !matches!(&*state, State::Ready { thread, .. } if *thread != this_thread) {
-            *state = State::ShutDown;
-        }
-        return;
-    };
-    if *thread != this_thread {
-        // The runtime of another thread than the one that runs CEF.
+    // CEF belongs to the thread that created the first `Runtime`. Dropping the runtime of
+    // another thread leaves CEF alone.
+    if let State::Ready { thread, .. } | State::Running { thread, .. } = &*state
+        && *thread != this_thread
+    {
         return;
     }
+    let State::Running { temp_dir, .. } = &mut *state else {
+        // CEF never started, so there is nothing to shut down. It can't start later either.
+        *state = State::ShutDown;
+        return;
+    };
 
     // Closing a browser takes a few turns of the message loop.
     let deadline = Instant::now() + SHUTDOWN_TIMEOUT;

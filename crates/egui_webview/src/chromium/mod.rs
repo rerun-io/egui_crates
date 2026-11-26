@@ -11,8 +11,8 @@
 //! page, and writes down the pass's input. The page half is [`CefBackend`]. It owns the browser,
 //! and sends it that input after the pass.
 //!
-//! CEF starts its helper processes from the app's own executable, so apps must call
-//! [`crate::init`] first in `main`.
+//! CEF starts its helper processes from the app's own executable, so apps must create a
+//! [`crate::Runtime`] at the start of `main`.
 
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 
@@ -39,7 +39,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
-pub use runtime::{CefInitOptions, CefProcess, init_with, run_subprocess, shutdown};
+pub use runtime::{CefInitOptions, CefProcess, init, run_subprocess, shutdown};
 
 /// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
