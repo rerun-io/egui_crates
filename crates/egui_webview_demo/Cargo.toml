@@ -20,6 +20,7 @@ egui_webview.workspace = true
 
 egui.workspace = true
 eframe = { workspace = true, default-features = false, features = [
+    "clipboard",     # Without it, egui sends no paste events, and pasting into a page does nothing.
     "default_fonts", # Embed the default egui fonts.
     "system_fonts",  # emoji support
     "glow",          # The default renderer on the web.

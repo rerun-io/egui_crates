@@ -48,6 +48,7 @@ url.workspace = true
 
 [dev-dependencies]
 eframe = { workspace = true, default-features = false, features = [
+  "clipboard",     # Without it, egui sends no paste events, and pasting into a page does nothing.
   "default_fonts", # Embed the default egui fonts.
   "glow",          # The default renderer on the web.
   "wgpu",          # The renderer natively.

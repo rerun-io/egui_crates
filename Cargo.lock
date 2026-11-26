@@ -1530,6 +1530,7 @@ dependencies = [
  "profiling",
  "raw-window-handle",
  "serde",
+ "smithay-clipboard",
  "web-time",
  "windows-sys 0.61.2",
  "winit",

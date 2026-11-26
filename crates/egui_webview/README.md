@@ -125,3 +125,4 @@ By default, CEF's helper processes run without Chromium's sandbox. A page that e
 * Pages are rendered on the CPU and uploaded as textures.
 * JavaScript dialogs, file pickers and drag and drop aren't supported yet.
 * While a CEF webview exists, egui repaints at least every 100 ms, because CEF's message loop runs in egui's passes.
+* Keep eframe's `clipboard` feature on. It is a default feature, so this only matters if you turn the defaults off. Without it, egui sends no paste events, and pasting into a page does nothing.
