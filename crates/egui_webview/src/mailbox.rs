@@ -14,6 +14,12 @@ use egui::{Context, Id, IdMap, ViewportId};
 use crate::instance::FocusChange;
 use crate::{PageWidget, WebViewEvent, WebViewSource};
 
+/// How many passes of the root viewport may go by without [`crate::WebViews::update`], before
+/// the widgets tell the user that it is missing.
+///
+/// A frame can have several passes, and `update` only runs once per frame.
+const MAX_PASSES_WITHOUT_UPDATE: u64 = 10;
+
 /// The mailbox itself. The widget and the registry each hold a clone.
 #[derive(Clone)]
 pub(crate) struct Mailbox(Arc<Mutex<Inner>>);
@@ -25,13 +31,26 @@ pub(crate) struct Inner {
 
     /// The state of each webview, by its id.
     pub webviews: IdMap<WebViewState>,
+
+    /// The number of the root viewport's next pass, when [`crate::WebViews::update`] last ran,
+    /// or when the registry was created.
+    pub updated_pass: u64,
+}
+
+impl Inner {
+    /// Whether [`crate::WebViews::update`] hasn't run for so long that the app most likely
+    /// doesn't call it. `pass` is the number of the root viewport's current pass.
+    pub fn is_update_overdue(&self, pass: u64) -> bool {
+        self.updated_pass + MAX_PASSES_WITHOUT_UPDATE < pass
+    }
 }
 
 impl Mailbox {
-    pub fn new(fallback: Option<Arc<dyn PageWidget>>) -> Self {
+    pub fn new(ctx: &Context, fallback: Option<Arc<dyn PageWidget>>) -> Self {
         Self(Arc::new(Mutex::new(Inner {
             fallback,
             webviews: IdMap::default(),
+            updated_pass: ctx.cumulative_pass_nr_for(ViewportId::ROOT),
         })))
     }
 

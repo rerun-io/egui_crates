@@ -103,7 +103,7 @@ impl WebViews {
     }
 
     fn from_parts(ctx: &Context, fallback: Option<Arc<dyn PageWidget>>, create: Create) -> Self {
-        let mailbox = Mailbox::new(fallback);
+        let mailbox = Mailbox::new(ctx, fallback);
         mailbox.install(ctx);
         Self {
             mailbox,
@@ -128,6 +128,7 @@ impl WebViews {
 
         let pass = ctx.cumulative_pass_nr_for(ViewportId::ROOT);
         let alive = self.mailbox.with(|mail| {
+            mail.updated_pass = pass;
             // Close the webviews that were neither shown nor kept alive in the latest pass.
             mail.webviews
                 .retain(|_, state| state.was_alive(pass) || state.was_shown(pass));
@@ -374,10 +375,17 @@ impl<'a> WebView<'a> {
         let size = size.unwrap_or_else(|| ui.available_size());
 
         let Some(mailbox) = Mailbox::of(ui.ctx()) else {
-            let text = "This app has no `egui_webview::WebViews`";
+            let text = "This app has no `egui_webview::WebViews`. Create one when the app \
+                        starts, and call its `update` from `eframe::App::output_hook`";
             return placeholder(ui, id, size, Some(text), Vec::new());
         };
         let pass = ui.ctx().cumulative_pass_nr_for(ViewportId::ROOT);
+        if mailbox.with(|inner| inner.is_update_overdue(pass)) {
+            // Without `update`, no page is created, placed, or closed.
+            let text = "`egui_webview::WebViews::update` doesn't run. Call it from \
+                        `eframe::App::output_hook` in every frame";
+            return placeholder(ui, id, size, Some(text), Vec::new());
+        }
 
         let (page, events, pending_focus_change) = mailbox.with(|inner| {
             let fallback = inner.fallback.clone();
@@ -885,6 +893,24 @@ mod tests {
         harness.frame(vec![tab()], &mut ui);
         harness.frame(vec![], &mut ui);
         assert!(harness.log().contains(&"blur".to_owned()));
+    }
+
+    #[test]
+    fn a_missing_update_is_noticed() {
+        let harness = Harness::new(false);
+        let mailbox = Mailbox::of(&harness.ctx).expect("the registry installs the mailbox");
+        let is_overdue = || {
+            let pass = harness.ctx.cumulative_pass_nr_for(ViewportId::ROOT);
+            mailbox.with(|inner| inner.is_update_overdue(pass))
+        };
+        for _ in 0..10 {
+            let mut output = harness.ctx.run_ui(egui::RawInput::default(), |_| {});
+            output.textures_delta.clear();
+        }
+        assert!(!is_overdue());
+        let mut output = harness.ctx.run_ui(egui::RawInput::default(), |_| {});
+        output.textures_delta.clear();
+        assert!(is_overdue());
     }
 
     #[test]
