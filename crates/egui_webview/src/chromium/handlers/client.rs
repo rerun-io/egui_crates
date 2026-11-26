@@ -7,47 +7,58 @@ use cef::rc::Rc as _;
 use cef::{
     Browser, CefString, Client, ContextMenuHandler, DisplayHandler, FocusHandler, ImplClient,
     ImplFrame as _, ImplListValue as _, ImplProcessMessage as _, LifeSpanHandler, LoadHandler,
-    RenderHandler, WrapClient, wrap_client,
+    RenderHandler, RequestHandler, WrapClient, wrap_client,
 };
 
 use crate::WebViewEvent;
 use crate::chromium::context::Context;
 use crate::chromium::runtime::{FOCUSED_NODE_MESSAGE, IPC_MESSAGE};
 
+/// The handlers that [`EguiClient`] hands to CEF.
+#[derive(Clone)]
+pub struct Handlers {
+    pub render: RenderHandler,
+    pub display: DisplayHandler,
+    pub load: LoadHandler,
+    pub life_span: LifeSpanHandler,
+    pub context_menu: ContextMenuHandler,
+    pub focus: FocusHandler,
+    pub request: RequestHandler,
+}
+
 wrap_client! {
     pub struct EguiClient {
         context: Arc<Context>,
-        render: RenderHandler,
-        display: DisplayHandler,
-        load: LoadHandler,
-        life_span: LifeSpanHandler,
-        context_menu: ContextMenuHandler,
-        focus: FocusHandler,
+        handlers: Handlers,
     }
 
     impl Client {
         fn render_handler(&self) -> Option<RenderHandler> {
-            Some(self.render.clone())
+            Some(self.handlers.render.clone())
         }
 
         fn display_handler(&self) -> Option<DisplayHandler> {
-            Some(self.display.clone())
+            Some(self.handlers.display.clone())
         }
 
         fn load_handler(&self) -> Option<LoadHandler> {
-            Some(self.load.clone())
+            Some(self.handlers.load.clone())
         }
 
         fn life_span_handler(&self) -> Option<LifeSpanHandler> {
-            Some(self.life_span.clone())
+            Some(self.handlers.life_span.clone())
         }
 
         fn context_menu_handler(&self) -> Option<ContextMenuHandler> {
-            Some(self.context_menu.clone())
+            Some(self.handlers.context_menu.clone())
         }
 
         fn focus_handler(&self) -> Option<FocusHandler> {
-            Some(self.focus.clone())
+            Some(self.handlers.focus.clone())
+        }
+
+        fn request_handler(&self) -> Option<RequestHandler> {
+            Some(self.handlers.request.clone())
         }
 
         /// Turns the text that the main frame passed to `window.ipc.postMessage(text)` into a

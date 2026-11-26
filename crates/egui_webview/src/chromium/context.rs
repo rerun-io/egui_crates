@@ -90,6 +90,9 @@ pub struct State {
     /// Whether the element that last gained focus in any of the page's frames is editable, as
     /// the render process reports it. See [`State::editable`].
     pub focused_node_editable: bool,
+    /// Whether the main frame's current load failed, so that its end isn't reported as
+    /// [`crate::WebViewEvent::Loaded`].
+    pub load_failed: bool,
     /// The text cursor at the end of the IME composition, in view points, for placing the IME's
     /// candidate window.
     pub text_cursor: Option<Rect>,
@@ -159,6 +162,7 @@ impl Context {
             tooltip: None,
             keyboard_requested: false,
             focused_node_editable: false,
+            load_failed: false,
             text_cursor: None,
             context_menu: None,
             took_focus_away: None,

@@ -106,6 +106,34 @@ pub enum WebViewEvent {
         url: Url,
     },
 
+    /// A page failed to load, for example because its server can't be reached.
+    ///
+    /// No [`Self::Loaded`] follows. A page that the server answers with an HTTP error status,
+    /// such as 404, still counts as loaded.
+    ///
+    /// Only the CEF backend sends this. On the web, the browser doesn't tell the app whether an
+    /// `<iframe>` loaded its page, so a failed load is reported as [`Self::Loaded`]. That includes
+    /// a page that refuses to be shown in an `<iframe>`.
+    LoadFailed {
+        /// The URL that failed to load.
+        url: Url,
+
+        /// The engine's description of the failure, such as `ERR_NAME_NOT_RESOLVED`.
+        error: String,
+    },
+
+    /// The process that runs the page ended, for example because it crashed or ran out of
+    /// memory.
+    ///
+    /// The page is gone, and its rect stays blank until the app loads a page again, such as
+    /// with [`WebViewInstance::reload`].
+    ///
+    /// Only the CEF backend sends this.
+    Crashed {
+        /// The engine's description of why the process ended.
+        reason: String,
+    },
+
     /// The page asked for a new window, with `window.open` or a link with `target="_blank"`.
     ///
     /// The webview opens no window and doesn't navigate. The app decides what to do, for example
