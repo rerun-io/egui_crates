@@ -74,7 +74,10 @@ fn source(url: &str) -> WebViewSource {
     if url.is_empty() {
         WebViewSource::Html(PAGE.to_owned())
     } else {
-        WebViewSource::Url(url.to_owned())
+        url.parse().map_or_else(
+            |err| WebViewSource::Html(format!("Invalid URL {url:?}: {err}")),
+            WebViewSource::Url,
+        )
     }
 }
 
@@ -95,7 +98,7 @@ impl Browser {
         let webview = WebViewInstance::new(ctx, egui::Id::unique(&name), source, embedded_views)
             .map_err(|err| format!("No webview: {err}"))?;
         let url = match source {
-            WebViewSource::Url(url) => url.clone(),
+            WebViewSource::Url(url) => url.to_string(),
             WebViewSource::Html(_) => String::new(),
         };
         Ok(Self { name, webview, url })
@@ -115,19 +118,21 @@ impl Browser {
     fn nav_buttons(&mut self, ui: &mut egui::Ui) {
         let webview = &mut self.webview;
         let side = ui.spacing().interact_size.y;
-        let nav = |ui: &mut egui::Ui, glyph: &str, hover: &str| {
+        let nav = |ui: &mut egui::Ui, enabled: bool, glyph: &str, hover: &str| {
             let button = egui::Button::new(glyph)
                 .frame_when_inactive(false)
                 .min_size(egui::Vec2::splat(side));
-            ui.add(button).on_hover_text(hover).clicked()
+            ui.add_enabled(enabled, button)
+                .on_hover_text(hover)
+                .clicked()
         };
-        if nav(ui, "⏴", "Back") {
+        if nav(ui, webview.can_go_back(), "⏴", "Back") {
             webview.back();
         }
-        if nav(ui, "⏵", "Forward") {
+        if nav(ui, webview.can_go_forward(), "⏵", "Forward") {
             webview.forward();
         }
-        if nav(ui, "⟳", "Reload") {
+        if nav(ui, true, "⟳", "Reload") {
             webview.reload();
         }
     }
@@ -167,7 +172,10 @@ impl Browser {
             let entered =
                 field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
             if go_clicked || entered {
-                report(log, self.webview.load_url(self.url.clone()));
+                match self.url.parse() {
+                    Ok(url) => report(log, self.webview.load_url(url)),
+                    Err(err) => log.push(format!("Invalid URL {:?}: {err}", self.url)),
+                }
             }
         });
     }
@@ -175,23 +183,27 @@ impl Browser {
     fn page(&mut self, ui: &mut egui::Ui, log: &mut Vec<String>) {
         let response = self.webview.ui(ui, ui.available_size());
         for event in response.events {
-            log.push(format!(
-                "{}: {}",
-                self.name,
-                match event {
-                    WebViewEvent::Loading { url } => format!("Loading {}", short_url(&url)),
-                    WebViewEvent::Loaded { url } => {
-                        // Don't show the URL of a page given as HTML (`about:srcdoc`,
-                        // `about:blank` or a `data:` URL) in the URL field.
-                        if !url.starts_with("about:") && !url.starts_with("data:") {
-                            self.url.clone_from(&url);
-                        }
-                        format!("Loaded {}", short_url(&url))
+            let line = match event {
+                WebViewEvent::Loading { url } => format!("Loading {}", short_url(&url)),
+                WebViewEvent::Loaded { url } => {
+                    // Don't show the URL of a page given as HTML (`about:srcdoc`,
+                    // `about:blank` or a `data:` URL) in the URL field.
+                    if !matches!(url.scheme(), "about" | "data") {
+                        self.url = url.to_string();
                     }
-                    WebViewEvent::Message(message) => format!("Message: {message}"),
-                    other => format!("{other:?}"),
+                    format!("Loaded {}", short_url(&url))
                 }
-            ));
+                WebViewEvent::NewWindowRequested { url, user_gesture } => {
+                    // Open the page here, unless it is a popup that no click asked for.
+                    if user_gesture {
+                        report(log, self.webview.load(&WebViewSource::Url(url.clone())));
+                    }
+                    format!("New window requested: {}", short_url(&url))
+                }
+                WebViewEvent::Message(message) => format!("Message: {message}"),
+                other => format!("{other:?}"),
+            };
+            log.push(format!("{}: {line}", self.name));
         }
     }
 }
@@ -403,11 +415,11 @@ impl eframe::App for DemoApp {
 
 /// Shortens `url` for the log. CEF loads a page given as HTML from a `data:` URL that contains
 /// the whole document.
-fn short_url(url: &str) -> &str {
-    if url.starts_with("data:") {
+fn short_url(url: &egui_webview::Url) -> &str {
+    if url.scheme() == "data" {
         "data:…"
     } else {
-        url
+        url.as_str()
     }
 }
 
@@ -421,6 +433,9 @@ fn report(log: &mut Vec<String>, result: Result<(), egui_webview::Error>) {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+
+    // With CEF, its helper processes run from this executable. A helper process ends here.
+    let _guard = egui_webview::init();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 700.0]),
@@ -441,6 +456,8 @@ fn main() {
 
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+
+    let _guard = egui_webview::init();
 
     let search = web_sys::window()
         .and_then(|window| window.location().search().ok())

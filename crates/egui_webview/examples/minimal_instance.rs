@@ -3,6 +3,14 @@
 //! The app creates the page once and keeps it. It shows the page in [`eframe::App::ui`] and
 //! places it in [`eframe::App::output_hook`].
 //!
+//! Native:
+//!
+//! ```sh
+//! cargo run -p egui_webview --example minimal_instance
+//! ```
+//!
+//! Web:
+//!
 //! ```sh
 //! cd crates/egui_webview && trunk serve --example minimal_instance
 //! ```
@@ -35,7 +43,7 @@ fn main() -> eframe::Result {
             let webview = WebViewInstance::new(
                 &cc.egui_ctx,
                 egui::Id::unique("page"),
-                &WebViewSource::Url("https://www.egui.rs".to_owned()),
+                &WebViewSource::Url("https://www.egui.rs".parse()?),
                 cc.embedded_views(),
             )?;
             Ok(Box::new(App { webview }))

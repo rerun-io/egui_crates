@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use eframe::EmbeddedViews;
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Ui, Vec2};
+use egui::{
+    Context, EmbeddedViewOutput, FocusDirection, Id, Key, Modifiers, Response, Theme, Ui, Vec2,
+};
 
-use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
+use crate::{Backend, Error, PageWidget, Url, WebViewEvent, WebViewSource};
 
 /// A web page shown as an egui widget.
 ///
@@ -26,6 +28,10 @@ pub struct WebViewInstance {
     /// Set when egui's focus moves to the webview, or when the backend reports that the page
     /// took the focus itself. Cleared when the focus leaves the page or the webview.
     page_focused: bool,
+
+    /// The theme last given to [`Backend::set_theme`], or `None` before the first
+    /// [`Self::place`].
+    theme: Option<Theme>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,11 +89,58 @@ pub struct WebViewResponse {
     pub response: Response,
 }
 
+/// The backends that [`WebViewInstance::new`] chooses from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DefaultBackend {
+    /// The platform's own webview in an embedded view: an `<iframe>` on the web.
+    Embedded,
+
+    /// CEF, which renders the page off screen. Requires the `cef` feature.
+    Cef,
+}
+
+impl DefaultBackend {
+    /// The environment variable that overrides [`Self::FOR_TARGET`] at run time.
+    const ENV_VAR: &str = "EGUI_WEBVIEW_BACKEND";
+
+    /// The backend of the target platform, chosen at compile time: the `<iframe>` on the web,
+    /// and CEF natively.
+    const FOR_TARGET: Self = if cfg!(target_arch = "wasm32") {
+        Self::Embedded
+    } else {
+        Self::Cef
+    };
+
+    /// The backend that [`Self::ENV_VAR`] names, if it is set to a known one.
+    fn from_env() -> Option<Self> {
+        let name = std::env::var(Self::ENV_VAR).ok()?;
+        if name == "cef" {
+            Some(Self::Cef)
+        } else {
+            log::warn!(
+                "egui_webview: ignoring {}={name:?}, expected `cef`",
+                Self::ENV_VAR
+            );
+            None
+        }
+    }
+
+    /// The backend that [`WebViewInstance::new`] uses.
+    fn pick() -> Self {
+        Self::from_env().unwrap_or(Self::FOR_TARGET)
+    }
+}
+
 impl WebViewInstance {
     /// Creates a webview with the platform's default backend, in the root window that
     /// `embedded_views` belongs to.
     ///
+    /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
+    /// - Natively: CEF, as with `Self::new_cef`. This requires the `cef` feature.
+    ///
+    /// Setting the `EGUI_WEBVIEW_BACKEND` environment variable to `cef` overrides that choice
+    /// at run time.
     ///
     /// The page lives in the root window. Only call [`Self::ui`] in the root viewport, and call
     /// [`Self::place`] from [`eframe::App::output_hook`].
@@ -103,28 +156,82 @@ impl WebViewInstance {
         source: &WebViewSource,
         embedded_views: &EmbeddedViews,
     ) -> Result<Self, Error> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
-            Ok(Self::with_backend(id, backend))
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            _ = (ctx, id, source, embedded_views);
-            Err(Error::Unsupported)
+        match DefaultBackend::pick() {
+            DefaultBackend::Cef => {
+                _ = embedded_views;
+                #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+                {
+                    Self::new_cef(ctx, id, source)
+                }
+                #[cfg(not(all(feature = "cef", not(target_arch = "wasm32"))))]
+                {
+                    _ = (ctx, id, source);
+                    Err(Error::Unsupported)
+                }
+            }
+            DefaultBackend::Embedded => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
+                    Ok(Self::with_backend(id, backend))
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    _ = (ctx, id, source, embedded_views);
+                    Err(Error::Unsupported)
+                }
+            }
         }
     }
 
     /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
     ///
-    /// On the web every page is an embedded view. It needs nothing from the page to reserve
-    /// its rect, so this is known before the page exists.
+    /// A page in an embedded view (the web) needs nothing from the page to reserve its rect, so
+    /// this is known before the page exists. A CEF page has nothing to paint
+    /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
-        if cfg!(target_arch = "wasm32") {
-            Some(Arc::new(crate::EmbeddedWidget))
-        } else {
-            None
+        match DefaultBackend::pick() {
+            DefaultBackend::Embedded => Some(Arc::new(crate::EmbeddedWidget)),
+            DefaultBackend::Cef => None,
         }
+    }
+
+    /// Creates a webview that CEF (Chromium) renders off screen into an egui texture.
+    ///
+    /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
+    /// native platform, and [`Self::new`] uses it there. It requires the `cef` feature, and a
+    /// call to [`crate::init`] first in `main`.
+    ///
+    /// `id` must be unique in `ctx`.
+    ///
+    /// # Errors
+    /// [`Error::Backend`] if [`crate::init`] hasn't run, or if CEF fails to initialize or to
+    /// create the browser.
+    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    pub fn new_cef(
+        ctx: &Context,
+        id: impl Into<Id>,
+        source: &WebViewSource,
+    ) -> Result<Self, Error> {
+        Self::new_cef_with_options(ctx, id, source, crate::CefOptions::default())
+    }
+
+    /// Like [`Self::new_cef`], with `options` for how CEF renders the page.
+    ///
+    /// To give the pages of a [`crate::WebViews`] options, create it with
+    /// [`crate::WebViews::with_factory`] and call this from the factory.
+    ///
+    /// # Errors
+    /// See [`Self::new_cef`].
+    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    pub fn new_cef_with_options(
+        ctx: &Context,
+        id: impl Into<Id>,
+        source: &WebViewSource,
+        options: crate::CefOptions,
+    ) -> Result<Self, Error> {
+        let backend = crate::chromium::CefBackend::new(ctx, source, options)?;
+        Ok(Self::with_backend(id, backend))
     }
 
     /// Creates a webview that shows its page through `backend`.
@@ -136,6 +243,7 @@ impl WebViewInstance {
             widget: backend.widget(),
             backend: Box::new(backend),
             page_focused: false,
+            theme: None,
         }
     }
 
@@ -147,7 +255,15 @@ impl WebViewInstance {
     ///
     /// Call it for a backend that renders into a texture too. It has no view to place, but it
     /// uses the call to stop rendering a page that isn't shown.
+    ///
+    /// This also gives the page egui's theme, the first time and whenever it changes.
     pub fn place(&mut self, ctx: &Context, outputs: &[EmbeddedViewOutput]) {
+        let theme = ctx.theme();
+        if self.theme != Some(theme) {
+            self.backend.set_theme(theme);
+            self.theme = Some(theme);
+        }
+
         // egui also reports a view that only touches the clip rect, with nothing to see.
         let output = outputs
             .iter()
@@ -173,8 +289,8 @@ impl WebViewInstance {
     ///
     /// # Errors
     /// See [`Self::load`].
-    pub fn load_url(&mut self, url: impl Into<String>) -> Result<(), Error> {
-        self.load(&WebViewSource::Url(url.into()))
+    pub fn load_url(&mut self, url: Url) -> Result<(), Error> {
+        self.load(&WebViewSource::Url(url))
     }
 
     /// Runs `script` in the page.
@@ -208,6 +324,19 @@ impl WebViewInstance {
     /// Navigates forward in the webview's session history. See [`Self::back`] for the web.
     pub fn forward(&mut self) {
         self.backend.forward();
+    }
+
+    /// Whether [`Self::back`] has a page to go to.
+    ///
+    /// On the web this is always `true`, because the app can't read the history of the
+    /// `<iframe>`.
+    pub fn can_go_back(&self) -> bool {
+        self.backend.can_go_back()
+    }
+
+    /// Whether [`Self::forward`] has a page to go to. See [`Self::can_go_back`] for the web.
+    pub fn can_go_forward(&self) -> bool {
+        self.backend.can_go_forward()
     }
 
     /// Shows the page in a rect of `size`, and returns the page's events since the last call.

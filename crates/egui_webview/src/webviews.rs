@@ -8,7 +8,7 @@ use egui::{Context, EmbeddedViewOutput, Id, Sense, Ui, Vec2, ViewportId};
 use crate::instance::show_widget;
 use crate::mailbox::{Command, Mailbox};
 use crate::{
-    Error, PageWidget, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource, warn,
+    Error, PageWidget, Url, WebViewEvent, WebViewInstance, WebViewResponse, WebViewSource, warn,
 };
 
 type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInstance, Error>>;
@@ -20,12 +20,14 @@ type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInsta
 /// ```ignore
 /// struct MyApp {
 ///     webviews: egui_webview::WebViews,
+///     docs_url: egui_webview::Url,
 /// }
 ///
 /// impl MyApp {
-///     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+///     fn new(cc: &eframe::CreationContext<'_>, docs_url: egui_webview::Url) -> Self {
 ///         Self {
 ///             webviews: egui_webview::WebViews::new(&cc.egui_ctx, cc.embedded_views()),
+///             docs_url,
 ///         }
 ///     }
 /// }
@@ -33,7 +35,7 @@ type Create = Box<dyn FnMut(&Context, Id, &WebViewSource) -> Result<WebViewInsta
 /// impl eframe::App for MyApp {
 ///     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
 ///         egui_webview::WebView::new(egui::Id::unique("docs"))
-///             .url("https://docs.rs/egui")
+///             .url(&self.docs_url)
 ///             .show(ui);
 ///     }
 ///
@@ -248,8 +250,9 @@ fn create_page(
 /// A web page, shown with one call:
 ///
 /// ```ignore
+/// let url = egui_webview::Url::parse("https://docs.rs/egui")?;
 /// let response = egui_webview::WebView::new(egui::Id::unique("docs"))
-///     .url("https://docs.rs/egui")
+///     .url(&url)
 ///     .show(ui);
 /// ```
 ///
@@ -274,19 +277,18 @@ pub struct WebView<'a> {
     size: Option<Vec2>,
 }
 
-/// A [`WebViewSource`] that borrows its text.
+/// A [`WebViewSource`] that borrows its content.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SourceRef<'a> {
-    Url(&'a str),
+    Url(&'a Url),
     Html(&'a str),
 }
 
 impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
     fn eq(&self, other: &S) -> bool {
         match (self, other.as_ref()) {
-            (Self::Url(a), WebViewSource::Url(b)) | (Self::Html(a), WebViewSource::Html(b)) => {
-                a == b
-            }
+            (Self::Url(a), WebViewSource::Url(b)) => *a == b,
+            (Self::Html(a), WebViewSource::Html(b)) => a == b,
             _ => false,
         }
     }
@@ -295,7 +297,7 @@ impl<S: AsRef<WebViewSource>> PartialEq<S> for SourceRef<'_> {
 impl From<SourceRef<'_>> for WebViewSource {
     fn from(val: SourceRef<'_>) -> Self {
         match val {
-            SourceRef::Url(url) => Self::Url(url.to_owned()),
+            SourceRef::Url(url) => Self::Url(url.clone()),
             SourceRef::Html(html) => Self::Html(html.to_owned()),
         }
     }
@@ -317,7 +319,7 @@ impl<'a> WebView<'a> {
     /// The page is loaded when the value you pass changes. It isn't loaded again when the user
     /// navigates somewhere else in the page. Use [`Self::load_url`] for that.
     #[inline]
-    pub fn url(mut self, url: &'a str) -> Self {
+    pub fn url(mut self, url: &'a Url) -> Self {
         self.source = Some(SourceRef::Url(url));
         self
     }
@@ -371,11 +373,11 @@ impl<'a> WebView<'a> {
             let state = inner.webviews.entry(id).or_default();
 
             state.mark_shown(pass);
-            // Only copy the text when it changed.
+            // Only copy the source when it changed.
             let unchanged =
                 new_source.is_some_and(|new| state.source.as_ref().is_some_and(|cur| new == cur));
             if !unchanged {
-                state.source = new_source.map(|new| Arc::new(new.into()));
+                state.source = new_source.map(|source| Arc::new(source.into()));
             }
 
             (
@@ -435,8 +437,8 @@ impl WebView<'_> {
     }
 
     /// Loads the page at `url` in the page of `id`.
-    pub fn load_url(ctx: &Context, id: impl Into<Id>, url: impl Into<String>) {
-        Self::load(ctx, id, WebViewSource::Url(url.into()));
+    pub fn load_url(ctx: &Context, id: impl Into<Id>, url: Url) {
+        Self::load(ctx, id, WebViewSource::Url(url));
     }
 
     /// Runs `script` in the page of `id`. See [`WebViewInstance::evaluate_script`].
@@ -514,7 +516,9 @@ mod tests {
 
     impl Backend for FakeBackend {
         fn load(&mut self, source: &WebViewSource) -> Result<(), Error> {
-            self.log.borrow_mut().push(format!("load {source:?}"));
+            self.log
+                .borrow_mut()
+                .push(format!("load {}", describe(source)));
             Ok(())
         }
 
@@ -590,7 +594,8 @@ mod tests {
                 let (log, events) = (Rc::clone(&log), Rc::clone(&events));
                 let (fail, focused) = (Rc::clone(&fail), Rc::clone(&focused));
                 Box::new(move |_ctx, id, source| {
-                    log.borrow_mut().push(format!("create {source:?}"));
+                    log.borrow_mut()
+                        .push(format!("create {}", describe(source)));
                     if fail.get() {
                         return Err(Error::Unsupported);
                     }
@@ -635,9 +640,20 @@ mod tests {
         Id::unique("page")
     }
 
-    fn show(ui: &mut Ui, url: &str) -> WebViewResponse {
+    /// What the log says about `source`.
+    fn describe(source: &WebViewSource) -> &str {
+        match source {
+            WebViewSource::Url(url) => url.as_str(),
+            WebViewSource::Html(html) => html,
+        }
+    }
+
+    /// Shows the page at `https://{name}.example/`.
+    fn show(ui: &mut Ui, name: &str) -> WebViewResponse {
+        let url = format!("https://{name}.example/");
+        let url = Url::parse(&url).unwrap_or_else(|err| panic!("Invalid URL {url:?}: {err}"));
         WebView::new(id())
-            .url(url)
+            .url(&url)
             .size(vec2(100.0, 100.0))
             .show(ui)
     }
@@ -658,7 +674,7 @@ mod tests {
         harness.frame(vec![], |ui| {
             show(ui, "a");
         });
-        assert_eq!(harness.log(), ["create Url(\"a\")", "place"]);
+        assert_eq!(harness.log(), ["create https://a.example/", "place"]);
     }
 
     #[test]
@@ -706,7 +722,7 @@ mod tests {
         harness.frame(vec![], |ui| {
             show(ui, "a");
         });
-        assert_eq!(harness.log(), ["create Url(\"a\")", "place"]);
+        assert_eq!(harness.log(), ["create https://a.example/", "place"]);
     }
 
     #[test]
@@ -769,7 +785,7 @@ mod tests {
         harness.frame(vec![], |ui| {
             show(ui, "b");
         });
-        assert_eq!(harness.log(), ["create Url(\"b\")", "hide"]);
+        assert_eq!(harness.log(), ["create https://b.example/", "hide"]);
     }
 
     #[test]
@@ -798,7 +814,7 @@ mod tests {
         harness.frame(vec![], |ui| {
             show(ui, "a");
         });
-        assert_eq!(harness.log(), ["create Url(\"a\")", "place"]);
+        assert_eq!(harness.log(), ["create https://a.example/", "place"]);
     }
 
     #[test]
@@ -815,7 +831,7 @@ mod tests {
         harness.frame(vec![], |ui| {
             show(ui, "b");
         });
-        assert_eq!(harness.log(), ["load Url(\"b\")", "place"]);
+        assert_eq!(harness.log(), ["load https://b.example/", "place"]);
     }
 
     #[test]
@@ -868,12 +884,12 @@ mod tests {
                 show(ui, "a");
             });
         }
-        assert_eq!(harness.log(), ["create Url(\"a\")"]);
+        assert_eq!(harness.log(), ["create https://a.example/"]);
 
         harness.frame(vec![], |ui| {
             show(ui, "b");
         });
-        assert_eq!(harness.log(), ["create Url(\"b\")"]);
+        assert_eq!(harness.log(), ["create https://b.example/"]);
     }
 
     #[test]
@@ -897,6 +913,6 @@ mod tests {
         harness.frame(vec![], |ui| {
             show(ui, "a");
         });
-        assert_eq!(harness.log(), ["create Url(\"a\")", "place"]);
+        assert_eq!(harness.log(), ["create https://a.example/", "place"]);
     }
 }

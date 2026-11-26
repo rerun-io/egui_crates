@@ -18,15 +18,30 @@ version = "0.1.0"
 workspace = true
 
 [package.metadata.docs.rs]
-all-features = true
+# `cef/dox` skips the CEF download, which docs.rs can't do without network access.
+features = ["cef", "cef/dox"]
 
 [lib]
+
+
+[features]
+default = []
+
+## Render pages off screen with CEF (Chromium) into egui textures. `WebViewInstance::new` uses it
+## on every native platform.
+## The build downloads CEF (about 1 GB), and on Windows and macOS requires CMake and Ninja.
+cef = ["dep:base64", "dep:cef", "dep:tempfile", "dep:winit"]
+
+## Make Chromium's sandbox available to CEF's helper processes. On its own, it changes nothing:
+## the app turns the sandbox on with `CefInitOptions::sandbox`.
+cef-sandbox = ["cef", "cef/sandbox"]
 
 
 [dependencies]
 eframe = { workspace = true, default-features = false }
 egui = { workspace = true, default-features = false }
 log.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 eframe = { workspace = true, default-features = false, features = [
@@ -44,6 +59,7 @@ wasm-bindgen-futures.workspace = true
 js-sys.workspace = true
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = [
+  "CssStyleDeclaration",
   "Document",
   "DomRect",
   "Element",
@@ -59,3 +75,19 @@ web-sys = { workspace = true, features = [
   "Window",
 ] }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+base64 = { workspace = true, optional = true }
+cef = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+# Converts egui keys to the platform scancodes that CEF expects, which egui's key events don't
+# carry.
+winit = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend
+# feature such as `x11`.
+winit = { workspace = true, features = ["x11"], optional = true }
+
+[[example]]
+name = "cef_input_test"
+required-features = ["cef"]

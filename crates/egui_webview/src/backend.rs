@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Response, Ui, Vec2};
+use egui::{Context, EmbeddedViewOutput, FocusDirection, Id, Response, Theme, Ui, Vec2};
 
 use crate::{Error, WebViewEvent, WebViewSource};
 
@@ -76,6 +76,19 @@ pub trait Backend: std::fmt::Debug {
     /// Navigates forward in the webview's history. See [`crate::WebViewInstance::forward`].
     fn forward(&mut self);
 
+    /// Whether [`Self::back`] has a page to go to.
+    ///
+    /// The default is `true`, for a backend that can't tell, so that a back button stays
+    /// usable.
+    fn can_go_back(&self) -> bool {
+        true
+    }
+
+    /// Whether [`Self::forward`] has a page to go to. See [`Self::can_go_back`].
+    fn can_go_forward(&self) -> bool {
+        true
+    }
+
     /// The half of this page that runs in egui's pass. The webview asks for it once, when it is
     /// created.
     ///
@@ -98,6 +111,13 @@ pub trait Backend: std::fmt::Debug {
     /// The rects of `output` are in ui points. Multiply them by [`Context::zoom_factor`] to get
     /// window points, or by [`Context::pixels_per_point`] to get physical pixels.
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {}
+
+    /// Makes the page see `theme` as its `prefers-color-scheme`, like a browser does with the
+    /// OS theme. Then web UI frameworks follow egui's theme without any code in the page.
+    ///
+    /// The webview calls this when it creates the page, and again whenever egui's theme
+    /// changes.
+    fn set_theme(&mut self, theme: Theme) {}
 
     /// Gives the page the keyboard focus, because egui's focus moved to the webview.
     ///
@@ -151,7 +171,7 @@ pub trait Backend: std::fmt::Debug {
 ///
 /// [`FocusDirection::Next`]: egui::FocusDirection::Next
 /// [`FocusDirection::Previous`]: egui::FocusDirection::Previous
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", feature = "cef"))]
 pub fn focus_script(direction: egui::FocusDirection) -> Option<String> {
     let index = match direction {
         egui::FocusDirection::Next => 0,
