@@ -154,8 +154,10 @@ pub enum Error {
     /// No [`Runtime`] is running on this thread. Never happens on the web.
     NoRuntime,
 
-    /// No backend supports this platform, or the window handle of [`eframe::EmbeddedViews`] is
-    /// not one the platform's backend can use.
+    /// This build has no backend for this platform, or the window handle of
+    /// [`eframe::EmbeddedViews`] is not one the platform's backend can use.
+    ///
+    /// Natively, the backend is CEF, which needs the `cef` feature. See [`is_supported`].
     Unsupported,
 
     /// The backend reported an error.
@@ -177,8 +179,18 @@ impl std::fmt::Display for Error {
                 "No running egui_webview::Runtime. Create one with `egui_webview::Runtime::new()` \
                  first in `main`, and keep it until `eframe::run_native` returns"
             ),
-            Self::Unsupported => write!(f, "No webview backend is available on this platform"),
-            Self::Backend(err) => write!(f, "Webview failed: {err}"),
+            Self::Unsupported => {
+                let hint = if is_supported() {
+                    ""
+                } else {
+                    ". Enable its `cef` feature"
+                };
+                write!(
+                    f,
+                    "This build of `egui_webview` has no backend that can show a page here{hint}"
+                )
+            }
+            Self::Backend(err) => err.fmt(f),
         }
     }
 }
@@ -187,7 +199,8 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::NoRuntime | Self::Unsupported => None,
-            Self::Backend(err) => Some(err.as_ref()),
+            // `Display` already shows `err`, so don't report it a second time as the source.
+            Self::Backend(err) => err.source(),
         }
     }
 }
