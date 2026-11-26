@@ -91,8 +91,17 @@ wrap_render_handler! {
             {
                 let mut state = self.context.state.lock();
                 let is_popup = *type_.as_ref() == sys::cef_paint_element_type_t::PET_POPUP;
-                if !is_popup && !state.is_frame_current([width, height]) {
-                    return;
+                if !is_popup {
+                    let is_current = state.is_frame_current([width, height]);
+                    // The `resize_bench` example reads this.
+                    log::trace!(
+                        target: crate::chromium::FRAMES_LOG_TARGET,
+                        "painted {height} {}",
+                        if is_current { "kept" } else { "stale" }
+                    );
+                    if !is_current {
+                        return;
+                    }
                 }
                 let layer = if is_popup {
                     &mut state.popup
