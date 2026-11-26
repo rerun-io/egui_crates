@@ -101,6 +101,7 @@ impl WryBackend {
         source: &WebViewSource,
         window: &impl raw_window_handle::HasWindowHandle,
     ) -> Result<Self, Error> {
+        profiling::function_scope!();
         let handle = window.window_handle().map_err(Error::backend)?;
         if !matches!(handle.as_raw(), RawWindowHandle::Win32(_)) {
             return Err(Error::Unsupported);
@@ -295,6 +296,7 @@ impl Backend for WryBackend {
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
+        profiling::function_scope!();
         self.page.set_zoom(ctx.zoom_factor());
         let placed = output.map(|output| Self::placed(ctx, output));
         if placed.is_some() {
@@ -361,6 +363,7 @@ impl Backend for WryBackend {
 
 impl Drop for WryBackend {
     fn drop(&mut self) {
+        profiling::function_scope!();
         // Destroying the focused window leaves no window with the keyboard focus, so give the
         // focus to egui's window first.
         self.blur();
