@@ -1723,11 +1723,13 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "cef",
+ "cef-dll-sys",
  "cfg_aliases",
  "eframe 0.37.0",
  "egui 0.37.0",
  "env_logger",
  "js-sys",
+ "libloading 0.9.0",
  "log",
  "tempfile",
  "url",

@@ -30,7 +30,7 @@ default = []
 ## Render pages off screen with CEF (Chromium) into egui textures. `WebViewInstance::new` uses it
 ## on every native platform.
 ## The build downloads CEF (about 1 GB), and on Windows and macOS requires CMake and Ninja.
-cef = ["dep:base64", "dep:cef", "dep:tempfile", "dep:winit"]
+cef = ["dep:base64", "dep:cef", "dep:cef-dll-sys", "dep:libloading", "dep:tempfile", "dep:winit"]
 
 ## Make Chromium's sandbox available to CEF's helper processes. On its own, it changes nothing:
 ## the app turns the sandbox on with `CefInitOptions::sandbox`.
@@ -90,6 +90,10 @@ tempfile = { workspace = true, optional = true }
 winit = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# A direct dependency, so that the build script learns where the CEF headers are.
+cef-dll-sys = { workspace = true, optional = true }
+# Loads `libcef.so` at run time.
+libloading = { workspace = true, optional = true }
 # On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend
 # feature such as `x11`.
 winit = { workspace = true, features = ["x11"], optional = true }

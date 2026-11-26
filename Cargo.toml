@@ -42,6 +42,7 @@ ahash = { version = "0.8.12", default-features = false }
 arboard = { version = "3.7", default-features = false }
 base64 = "0.23.1"
 cef = { version = "156.7", default-features = false }
+cef-dll-sys = { version = "156.7", default-features = false }
 cfg_aliases = "0.2.2"
 document-features = "0.2.12"
 env_logger = { version = "0.11.11", default-features = false, features = [
@@ -52,6 +53,7 @@ image = { version = "0.25.10", default-features = false, features = ["gif"] }
 insta = "1.49"
 itertools = "0.15.0"
 js-sys = "0.3.107"
+libloading = "0.9.0"
 log = { version = "0.4.35", features = ["std"] }
 parking_lot = "0.12.5" # 0.13 would duplicate the 0.12 that eframe, arboard, and others pull in. Bump once they move.
 ron = "0.12.3"

@@ -1,13 +1,16 @@
-//! Checks for the build tools that the `cef` feature needs.
+//! Checks for the build tools that the `cef` feature needs, and writes the stubs that load CEF
+//! at run time on Linux.
 //!
 //! On Windows and macOS, `cef-dll-sys` builds CEF's C++ wrapper with `CMake` and Ninja. Without
 //! them it fails with an opaque `CMake` error, so we report the missing tool and how to install
-//! it instead. On Linux it only links `libcef.so` dynamically and needs neither.
+//! it instead. On Linux it builds no wrapper and needs neither.
 //!
 //! Cargo does not order this script before the one in `cef-dll-sys`, but this one has nothing
 //! to compile and nothing to download, so in practice it fails first.
 
 use std::env;
+use std::fmt::Write as _;
+use std::path::Path;
 
 /// A build tool that the `cef` feature requires.
 struct Tool {
@@ -70,7 +73,22 @@ fn main() {
     let is_docs_rs = env::var_os("DOCS_RS").is_some();
     // `cef-dll-sys` builds no C++ wrapper on Linux.
     let is_linux = env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "linux");
-    if !has_cef || is_wasm || is_docs_rs || is_linux {
+    if !has_cef || is_wasm {
+        return;
+    }
+    if is_docs_rs {
+        // There is no CEF to read the function names from, and nothing is linked.
+        if is_linux {
+            write_out_file(
+                "cef_stubs.rs",
+                "pub const NAMES: [&std::ffi::CStr; 0] = [];\n",
+            );
+        }
+        return;
+    }
+    if is_linux {
+        // No build tools needed, but the stubs.
+        write_stubs();
         return;
     }
 
@@ -84,6 +102,134 @@ fn main() {
             );
         }
     }
+}
+
+/// Writes `contents` to `name` in the build's output directory.
+fn write_out_file(name: &str, contents: &str) {
+    let Some(out_dir) = env::var_os("OUT_DIR") else {
+        return;
+    };
+    let path = Path::new(&out_dir).join(name);
+    if let Err(err) = std::fs::write(&path, contents) {
+        println!("cargo::error=failed to write {}: {err}", path.display());
+    }
+}
+
+/// Writes `cef_stubs.rs`, which `src/chromium/loader.rs` includes. It defines every function
+/// that `libcef.so` exports as a stub that jumps to the real function.
+///
+/// `cef-dll-sys` links `libcef.so`, so a binary would need the library just to start. With the
+/// stubs in the binary, nothing refers to the library anymore, and the linker leaves it out.
+/// We load it with `dlopen` when the first webview needs it.
+fn write_stubs() {
+    println!("cargo::rerun-if-env-changed=DEP_CEF_DLL_WRAPPER_CEF_DIR");
+    // `cef-dll-sys` tells us where it downloaded CEF. Its headers declare the exported
+    // functions.
+    let Some(cef_dir) = env::var_os("DEP_CEF_DLL_WRAPPER_CEF_DIR") else {
+        println!("cargo::error=`cef-dll-sys` didn't report where the CEF headers are");
+        return;
+    };
+    let include = Path::new(&cef_dir).join("include");
+    println!("cargo::rerun-if-changed={}", include.display());
+    let mut names = Vec::new();
+    if let Err(err) = exported_functions(&include, &mut names) {
+        println!(
+            "cargo::error=failed to read the CEF headers in {}: {err}",
+            include.display()
+        );
+        return;
+    }
+    names.sort();
+    names.dedup();
+    if names.is_empty() {
+        println!(
+            "cargo::error=found no exported functions in the CEF headers in {}",
+            include.display()
+        );
+        return;
+    }
+
+    let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let mut source = String::new();
+    _ = writeln!(
+        source,
+        "pub const NAMES: [&std::ffi::CStr; {}] = [",
+        names.len()
+    );
+    for name in &names {
+        _ = writeln!(source, "    c\"{name}\",");
+    }
+    _ = writeln!(source, "];\n");
+    _ = writeln!(source, "std::arch::global_asm!(");
+    _ = writeln!(
+        source,
+        "    \".pushsection .text.egui_webview_cef_stubs,\\\"ax\\\",@progbits\","
+    );
+    // `loader.rs` refers to this symbol, so that the linker takes the stubs with the loader.
+    for symbol in std::iter::once("egui_webview_cef_stubs").chain(names.iter().map(String::as_str))
+    {
+        // Hidden, so that the binary doesn't export the stubs. `libcef.so` calls some of its
+        // own exports by name, and would otherwise end up in our stubs.
+        _ = writeln!(source, "    \".globl {symbol}\",");
+        _ = writeln!(source, "    \".hidden {symbol}\",");
+        _ = writeln!(source, "    \".type {symbol},@function\",");
+        _ = writeln!(source, "    \"{symbol}:\",");
+        if symbol == "egui_webview_cef_stubs" {
+            continue;
+        }
+        let offset = 8 * names.iter().position(|name| name == symbol).unwrap_or(0);
+        match arch.as_str() {
+            "x86_64" => {
+                _ = writeln!(
+                    source,
+                    "    \"jmp qword ptr [rip + {{slots}} + {offset}]\","
+                );
+            }
+            "aarch64" => {
+                // x16 is the register that the ABI sets aside for stubs like this one.
+                _ = writeln!(source, "    \"adrp x16, {{slots}}\",");
+                _ = writeln!(source, "    \"add x16, x16, :lo12:{{slots}}\",");
+                _ = writeln!(source, "    \"ldr x16, [x16, #{offset}]\",");
+                _ = writeln!(source, "    \"br x16\",");
+            }
+            _ => {
+                println!("cargo::error=the `cef` feature doesn't support `{arch}` on Linux");
+                return;
+            }
+        }
+    }
+    _ = writeln!(source, "    \".popsection\",");
+    _ = writeln!(source, "    slots = sym super::SLOTS,");
+    _ = writeln!(source, ");");
+
+    write_out_file("cef_stubs.rs", &source);
+}
+
+/// Collects the names of the functions that the headers in `dir` declare with `CEF_EXPORT`.
+fn exported_functions(dir: &Path, names: &mut Vec<String>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            exported_functions(&path, names)?;
+        } else if path.extension().is_some_and(|extension| extension == "h") {
+            let header = String::from_utf8_lossy(&std::fs::read(&path)?).into_owned();
+            // A declaration looks like `CEF_EXPORT int cef_initialize(…);`. The return type
+            // can be several words, and the name can be on the next line.
+            for declaration in header.split("CEF_EXPORT").skip(1) {
+                let before_arguments = declaration.split(['(', ';', '{', '#']).next();
+                let name = before_arguments.and_then(|text| text.split_whitespace().last());
+                if let Some(name) = name.map(|name| name.trim_start_matches('*'))
+                    && name.starts_with("cef_")
+                    && name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                {
+                    names.push(name.to_owned());
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn is_available(tool: &Tool) -> bool {

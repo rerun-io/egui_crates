@@ -21,6 +21,8 @@ mod handlers;
 mod input;
 mod keys;
 mod layer;
+#[cfg(target_os = "linux")]
+mod loader;
 mod runtime;
 
 use std::sync::Arc;
