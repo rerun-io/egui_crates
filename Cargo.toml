@@ -39,9 +39,9 @@ egui_kittest = { version = "0.37.0" }
 accesskit = { version = "0.25.0", features = ["enumn"] } # Must match the accesskit version egui uses
 accesskit_consumer = "0.39.0" # Must match the accesskit version egui uses
 ahash = { version = "0.8.12", default-features = false }
-arboard = { version = "3.6.1", default-features = false }
+arboard = { version = "3.6", default-features = false }
 base64 = "0.23.1"
-cef = { version = "156.3.0", default-features = false }
+cef = { version = "156.3", default-features = false }
 document-features = "0.2.12"
 env_logger = { version = "0.11.8", default-features = false, features = [
   "auto-color",
@@ -70,8 +70,8 @@ tokio = { version = "1.53", features = [
   "signal",
 ] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-url = "2.5.9"
-vec1 = { version = "1.12.1", default-features = false }
+url = "2.5"
+vec1 = { version = "1.12", default-features = false }
 wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.64"
 web-sys = "0.3.91"
