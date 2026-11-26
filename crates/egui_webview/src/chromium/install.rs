@@ -211,7 +211,11 @@ mod download {
         // library in it is always a complete install.
         let partial = dest.with_extension("partial");
         remove_dir(&partial)?;
-        download_and_unpack(&partial, ctx)?;
+        if let Err(err) = download_and_unpack(&partial, ctx) {
+            // Don't leave up to 1.5 GB of a failed download behind.
+            _ = remove_dir(&partial);
+            return Err(err);
+        }
         let archive_json = format!(
             "{{\n  \"type\": \"minimal\",\n  \"name\": \"{ARCHIVE}\",\n  \"sha1\": \"{ARCHIVE_SHA1}\"\n}}"
         );

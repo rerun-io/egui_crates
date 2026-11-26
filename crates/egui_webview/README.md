@@ -112,6 +112,19 @@ Creating the `Runtime` is cheap. It starts no engine, process, or thread. CEF it
 
 `egui_webview::run_cef_subprocess` does the same as `Runtime::with_cef_options` without exiting. It returns `CefProcess::Helper` with the helper's exit code, or `CefProcess::App` with the `Runtime`.
 
+### Shipping an app without CEF
+
+CEF is over 1 GB unpacked, so you may not want it in your installer.
+On Linux and macOS, the app starts without CEF's files, and CEF is loaded when the first webview needs it.
+On Windows, the CEF library is still linked at build time.
+
+* `CefInitOptions::cef_dir` is a folder of your choice for CEF, such as your app's cache folder. CEF for this build goes in `<cef_dir>/<CEF version>/cef_<os>_<arch>`. CEF is also found next to the executable, and where the `cef` crate put it at build time.
+* `egui_webview::cef_status` says whether CEF is there.
+* With the `cef-download` feature, `egui_webview::cef_install` downloads the CEF build that the crate was built with into `cef_dir`, on its own thread. For Linux on x86-64, that is about 330 MB, and 1.5 GB unpacked. Nothing is downloaded unless you call it, so ask the user first.
+* A `WebView` whose page can't be created because CEF is missing says so in the page's place, offers the download, shows its progress, and shows the page once CEF is there. `WebViewInstance::new` returns `Error::CefNotInstalled`.
+
+The helper processes look for CEF in the same places, so pass the same `cef_dir` in every run of `main`.
+
 ### Sandbox
 
 By default, CEF's helper processes run without Chromium's sandbox. A page that exploits a bug in Chromium's renderer then runs with the rights of the app's user, so only show pages you trust, or turn the sandbox on: enable the `cef-sandbox` feature and set `CefInitOptions::sandbox` to `true`. The feature alone changes nothing. Where the sandbox can't work, CEF fails to start:
