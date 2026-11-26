@@ -47,7 +47,7 @@ env_logger = { version = "0.11.11", default-features = false, features = [
   "auto-color",
   "humantime",
 ] }
-image = { version = "0.25.6", default-features = false, features = ["gif"] }
+image = { version = "0.25.10", default-features = false, features = ["gif"] }
 insta = "1.48"
 itertools = "0.15.0"
 js-sys = "0.3.107"
