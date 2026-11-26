@@ -42,6 +42,7 @@ ahash = { version = "0.8.12", default-features = false }
 arboard = { version = "3.7", default-features = false }
 base64 = "0.23.1"
 cef = { version = "156.7", default-features = false }
+cfg_aliases = "0.2.2"
 document-features = "0.2.12"
 env_logger = { version = "0.11.11", default-features = false, features = [
   "auto-color",

@@ -75,7 +75,7 @@ impl Runtime {
     pub fn new() -> Self {
         cfg_select! {
             target_arch = "wasm32" => { Self {} }
-            feature = "cef" => { Self::with_cef_options(crate::CefInitOptions::default()) }
+            cef_backend => { Self::with_cef_options(crate::CefInitOptions::default()) }
             _ => { Self::start() }
         }
     }
@@ -95,7 +95,7 @@ impl Runtime {
     ///
     /// To handle the exit code of a helper process yourself, call
     /// [`crate::run_cef_subprocess`] instead.
-    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    #[cfg(cef_backend)]
     pub fn with_cef_options(options: crate::CefInitOptions) -> Self {
         crate::chromium::init(options)
     }
@@ -152,7 +152,7 @@ struct Owner;
 #[cfg(not(target_arch = "wasm32"))]
 impl Drop for Owner {
     fn drop(&mut self) {
-        #[cfg(feature = "cef")]
+        #[cfg(cef_backend)]
         crate::chromium::shutdown();
     }
 }

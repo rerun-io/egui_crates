@@ -37,6 +37,9 @@ cef = ["dep:base64", "dep:cef", "dep:tempfile", "dep:winit"]
 cef-sandbox = ["cef", "cef/sandbox"]
 
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 eframe = { workspace = true, default-features = false }
 egui = { workspace = true, default-features = false }

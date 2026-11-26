@@ -162,23 +162,23 @@ impl WebViewInstance {
         match DefaultBackend::pick() {
             DefaultBackend::Cef => {
                 _ = embedded_views;
-                #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+                #[cfg(cef_backend)]
                 {
                     Self::new_cef(ctx, id, source)
                 }
-                #[cfg(not(all(feature = "cef", not(target_arch = "wasm32"))))]
+                #[cfg(not(cef_backend))]
                 {
                     _ = (ctx, id, source);
                     Err(Error::Unsupported)
                 }
             }
             DefaultBackend::Embedded => {
-                #[cfg(target_arch = "wasm32")]
+                #[cfg(platform_backend)]
                 {
                     let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
                     Ok(Self::with_backend(id, backend))
                 }
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(platform_backend))]
                 {
                     _ = (ctx, id, source, embedded_views);
                     Err(Error::Unsupported)
@@ -210,7 +210,7 @@ impl WebViewInstance {
     /// # Errors
     /// [`Error::NoRuntime`] without a running [`crate::Runtime`], and [`Error::Backend`] if CEF
     /// fails to initialize or to create the browser.
-    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    #[cfg(cef_backend)]
     pub fn new_cef(
         ctx: &Context,
         id: impl Into<Id>,
@@ -226,7 +226,7 @@ impl WebViewInstance {
     ///
     /// # Errors
     /// See [`Self::new_cef`].
-    #[cfg(all(feature = "cef", not(target_arch = "wasm32")))]
+    #[cfg(cef_backend)]
     pub fn new_cef_with_options(
         ctx: &Context,
         id: impl Into<Id>,
