@@ -14,6 +14,9 @@
 //!
 //! An invisible [`FocusEdge`] before and after each `<iframe>` lets the browser's own Tab move
 //! the keyboard focus into and out of the page. This works for pages from any origin.
+//!
+//! The key events of a focused page don't reach the canvas, so the app's shortcuts need
+//! [`KEY_FORWARDING_FUNCTION`]. A cross-origin page keeps all of its key events.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -45,6 +48,36 @@ window.addEventListener("message", (event) => {
     }
 });
 </script>"#;
+
+/// A function that every page that runs the app's scripts calls when it loads, with
+/// [`FORWARDED_KEY`] as its argument.
+///
+/// The key events of a focused page go to the page's document, so eframe, which listens on the
+/// canvas, never sees them. The function posts the page's key events to the app, and
+/// [`dispatch_shortcut`] dispatches the shortcuts among them on the canvas, so that app shortcuts
+/// like Cmd-T work while the page has the focus. A key-down that the page cancels isn't posted.
+const KEY_FORWARDING_FUNCTION: &str = r#"(messageKey) => {
+    const forward = (event) => {
+        if (event.type === "keydown" && event.defaultPrevented) {
+            return;
+        }
+        window.parent.postMessage({ [messageKey]: {
+            type: event.type,
+            key: event.key,
+            code: event.code,
+            altKey: event.altKey,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+            shiftKey: event.shiftKey,
+            repeat: event.repeat,
+        } }, "*");
+    };
+    window.addEventListener("keydown", forward);
+    window.addEventListener("keyup", forward);
+}"#;
+
+/// The key in a message from [`KEY_FORWARDING_FUNCTION`] that holds the key event.
+const FORWARDED_KEY: &str = "__egui_webview_key";
 
 /// An invisible, focusable `<div>` just before or after the `<iframe>` in the sequential focus
 /// navigation order.
@@ -228,6 +261,10 @@ impl IframeBackend {
             let events = Rc::clone(&events);
             Closure::<dyn FnMut()>::new(move || {
                 loaded.set(true);
+                let forward_keys = format!("({KEY_FORWARDING_FUNCTION})({FORWARDED_KEY:?})");
+                if let Err(err) = run_script(&iframe, &forward_keys) {
+                    log::debug!("egui_webview: can't forward the page's shortcuts: {err}");
+                }
                 for script in pending_scripts.take() {
                     warn(run_script(&iframe, &script));
                 }
@@ -243,6 +280,7 @@ impl IframeBackend {
         // `<iframe>`'s page.
         let on_message = {
             let ctx = ctx.clone();
+            let canvas = canvas.clone();
             let iframe = iframe.clone();
             let events = Rc::clone(&events);
             Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
@@ -250,9 +288,21 @@ impl IframeBackend {
                     .source()
                     .zip(iframe.content_window())
                     .is_some_and(|(source, page)| JsValue::from(source) == JsValue::from(page));
-                if let Some(text) = event.data().as_string().filter(|_| from_page) {
+                if !from_page {
+                    return;
+                }
+                let data = event.data();
+                if let Some(text) = data.as_string() {
                     events.borrow_mut().push(WebViewEvent::Message(text));
                     ctx.request_repaint();
+                } else if let Some(key) = js_sys::Reflect::get(&data, &FORWARDED_KEY.into())
+                    .ok()
+                    .filter(|key| key.is_object())
+                    // Only a page with the focus gets key events, so a page without it can't
+                    // press the app's shortcuts.
+                    && is_active(&iframe)
+                {
+                    warn(dispatch_shortcut(&canvas, &key));
                 }
             })
         };
@@ -339,19 +389,8 @@ impl IframeBackend {
     /// as one does while the focus is parked there,
     /// or for a moment when Tab moves the focus out of it.
     fn is_focused(&self, or_edge: bool) -> bool {
-        let Some(active) = web_sys::window()
-            .and_then(|window| window.document())
-            .and_then(|document| document.active_element())
-        else {
-            return false;
-        };
-        let active = JsValue::from(active);
-        active == JsValue::from(&self.iframe)
-            || (or_edge
-                && self
-                    .focus_edges
-                    .iter()
-                    .any(|edge| active == JsValue::from(&edge.element)))
+        is_active(&self.iframe)
+            || (or_edge && self.focus_edges.iter().any(|edge| is_active(&edge.element)))
     }
 }
 
@@ -566,6 +605,60 @@ fn run_script(iframe: &HtmlIFrameElement, script: &str) -> Result<(), Error> {
             .map(drop)
             .map_err(js_error)
     }
+}
+
+/// Whether `element` has the keyboard focus of its document.
+fn is_active(element: &web_sys::Element) -> bool {
+    web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.active_element())
+        .is_some_and(|active| &active == element)
+}
+
+/// Dispatches a key event that [`KEY_FORWARDING_FUNCTION`] posted on `canvas`, where eframe
+/// listens for key events.
+///
+/// Only shortcuts (keys pressed with Ctrl or Cmd) are dispatched, so a page can't type text
+/// into egui. The key-ups of Ctrl and Cmd are dispatched too, so that egui doesn't see the keys
+/// of a shortcut as held down forever.
+fn dispatch_shortcut(canvas: &HtmlCanvasElement, key_event: &JsValue) -> Result<(), Error> {
+    let string = |name: &str| {
+        js_sys::Reflect::get(key_event, &name.into())
+            .ok()
+            .and_then(|value| value.as_string())
+            .unwrap_or_default()
+    };
+    let flag = |name: &str| {
+        js_sys::Reflect::get(key_event, &name.into())
+            .ok()
+            .and_then(|value| value.as_bool())
+            .unwrap_or_default()
+    };
+
+    let event_type = string("type");
+    if event_type != "keydown" && event_type != "keyup" {
+        log::debug!("egui_webview: a page posted a key event of type {event_type:?}");
+        return Ok(());
+    }
+    let key = string("key");
+    let (ctrl, meta) = (flag("ctrlKey"), flag("metaKey"));
+    if !ctrl && !meta && key != "Control" && key != "Meta" {
+        return Ok(());
+    }
+
+    let init = web_sys::KeyboardEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    init.set_key(&key);
+    init.set_code(&string("code"));
+    init.set_alt_key(flag("altKey"));
+    init.set_ctrl_key(ctrl);
+    init.set_meta_key(meta);
+    init.set_shift_key(flag("shiftKey"));
+    init.set_repeat(flag("repeat"));
+    let event =
+        KeyboardEvent::new_with_keyboard_event_init_dict(&event_type, &init).map_err(js_error)?;
+    canvas.dispatch_event(&event).map(drop).map_err(js_error)
 }
 
 /// The URL of the page in `iframe`.
