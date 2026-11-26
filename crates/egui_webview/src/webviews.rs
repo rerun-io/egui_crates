@@ -63,8 +63,8 @@ struct Page {
     source: Option<Arc<WebViewSource>>,
 
     /// The page, or why it couldn't be created. A failed page is tried again when the source
-    /// changes, and not before.
-    instance: Result<WebViewInstance, String>,
+    /// changes, or when it failed because CEF was missing and CEF is installed now.
+    instance: Result<WebViewInstance, Arc<Error>>,
 }
 
 impl std::fmt::Debug for WebViews {
@@ -160,6 +160,12 @@ impl WebViews {
         let mut is_new_page = false;
 
         let page = if let Some(page) = pages.iter_mut().find(|page| page.id == id) {
+            let cef_arrived =
+                matches!(&page.instance, Err(err) if is_cef_missing(err)) && cef_is_installed();
+            if cef_arrived {
+                is_new_page = true;
+                page.instance = create_page(create, ctx, id, page.source.as_deref());
+            }
             if let Some(new) = &source
                 && page.source.as_ref() != Some(new)
             {
@@ -184,7 +190,7 @@ impl WebViews {
 
         let new_widget = is_new_page.then(|| match &page.instance {
             Ok(instance) => Ok(instance.widget()),
-            Err(failed) => Err(failed.clone()),
+            Err(failed) => Err(Arc::clone(failed)),
         });
 
         let mut pending_focus_change = None;
@@ -235,7 +241,7 @@ fn create_page(
     ctx: &Context,
     id: Id,
     source: Option<&WebViewSource>,
-) -> Result<WebViewInstance, String> {
+) -> Result<WebViewInstance, Arc<Error>> {
     create(
         ctx,
         id,
@@ -243,8 +249,23 @@ fn create_page(
     )
     .map_err(|err| {
         log::warn!("egui_webview: failed to create the page of {id:?}: {err}");
-        err.to_string()
+        Arc::new(err)
     })
+}
+
+/// Whether a page couldn't be created because CEF's files aren't on this machine.
+fn is_cef_missing(err: &Error) -> bool {
+    matches!(err, Error::CefNotInstalled)
+}
+
+/// Whether CEF's files are on this machine now.
+fn cef_is_installed() -> bool {
+    cfg_select! {
+        cef_backend => {
+            crate::cef_status() == crate::CefStatus::Installed
+        }
+        _ => { false }
+    }
 }
 
 /// A web page, shown with one call:
@@ -354,6 +375,11 @@ impl<'a> WebView<'a> {
     /// The page takes part in egui's keyboard focus, as with [`WebViewInstance::ui`].
     ///
     /// If the page can't be created, this shows the error as text in the page's rect.
+    ///
+    /// If it can't be created because CEF isn't installed, this shows that, with a button
+    /// that downloads CEF if the `cef-download` feature is on, and then the progress. The page
+    /// appears when CEF is there. To ask the user in your own way, check `cef_status` before
+    /// you show the page, and call `cef_install` yourself.
     pub fn show(self, ui: &mut Ui) -> WebViewResponse {
         let Self {
             id,
@@ -389,7 +415,15 @@ impl<'a> WebView<'a> {
 
         let widget = match page {
             Some(Ok(widget)) => widget,
-            Some(Err(failed)) => return placeholder(ui, id, size, Some(&failed), events),
+            #[cfg(cef_backend)]
+            Some(Err(failed)) if is_cef_missing(&failed) => {
+                let response = placeholder(ui, id, size, None, events);
+                missing_cef_ui(ui, response.response.rect);
+                return response;
+            }
+            Some(Err(failed)) => {
+                return placeholder(ui, id, size, Some(&failed.to_string()), events);
+            }
             // The page doesn't exist yet. `WebViews::update` creates it after this pass.
             None => return placeholder(ui, id, size, None, events),
         };
@@ -490,6 +524,73 @@ fn placeholder(
         );
     }
     WebViewResponse { events, response }
+}
+
+/// Tells the user in `rect` that CEF is missing, and lets them install it.
+#[cfg(cef_backend)]
+fn missing_cef_ui(ui: &mut Ui, rect: egui::Rect) {
+    use crate::CefStatus;
+
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let layout = egui::Layout::top_down(egui::Align::Center);
+    let mut ui = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink(8.0))
+            .layout(layout),
+    );
+    ui.add_space((rect.height() * 0.4 - 24.0).max(0.0));
+    match crate::cef_status() {
+        CefStatus::Installing { downloaded, total } => {
+            const MB: f32 = 1024.0 * 1024.0;
+            #[expect(clippy::cast_precision_loss)] // Megabytes for a progress text.
+            let (downloaded, total) =
+                (downloaded as f32 / MB, total.map(|total| total as f32 / MB));
+            ui.label("Downloading Chromium…");
+            if let Some(total) = total.filter(|total| 0.0 < *total) {
+                let text = format!("{downloaded:.0} of {total:.0} MB");
+                ui.add(
+                    egui::ProgressBar::new(downloaded / total)
+                        .desired_width(240.0_f32.min(ui.available_width()))
+                        .text(text),
+                );
+            } else {
+                ui.spinner();
+            }
+        }
+        CefStatus::InstallFailed(err) => {
+            ui.colored_label(
+                ui.visuals().error_fg_color,
+                format!("Installing Chromium failed: {err}"),
+            );
+            install_button(&mut ui, "Try again");
+        }
+        // The page is created after this pass.
+        CefStatus::Installed => {
+            ui.spinner();
+        }
+        // `CefStatus` is non-exhaustive for apps, so the fallback arm covers `NotInstalled`.
+        _ => {
+            ui.label("This page needs Chromium (CEF), which isn't installed.");
+            install_button(&mut ui, "Download Chromium");
+        }
+    }
+}
+
+/// A button that starts the CEF download, if this build can download.
+#[cfg(cef_backend)]
+fn install_button(ui: &mut Ui, text: &str) {
+    cfg_select! {
+        feature = "cef-download" => {
+            if ui.button(text).clicked() {
+                crate::cef_install(ui.ctx());
+            }
+        }
+        _ => {
+            _ = (ui, text);
+        }
+    }
 }
 
 #[cfg(test)]

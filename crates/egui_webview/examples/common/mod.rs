@@ -11,7 +11,15 @@ pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
     // Start the webview runtime right after logging, before anything else. With CEF, Chromium
     // runs its helper processes (renderer, GPU, …) from this same executable. In such a
     // process, this call runs the helper and then exits, so nothing below runs there.
+    #[cfg(not(feature = "cef"))]
     let _runtime = egui_webview::Runtime::new();
+    // CEF is loaded when the first page needs it. If it isn't on this machine, the page offers
+    // to download it into this folder. A real app would use a cache folder of its own.
+    #[cfg(feature = "cef")]
+    let _runtime = egui_webview::Runtime::with_cef_options(egui_webview::CefInitOptions {
+        cef_dir: std::env::var_os("EGUI_WEBVIEW_CEF_DIR").map(Into::into),
+        ..Default::default()
+    });
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),

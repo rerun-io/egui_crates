@@ -23,6 +23,7 @@ use egui::Ui;
 use tempfile::TempDir;
 
 use super::context::Context;
+use super::install::{self, CefStatus};
 use crate::{Error, Runtime, runtime::Engine};
 
 /// The name of the process message that brings the text of a page's
@@ -83,12 +84,20 @@ pub struct CefInitOptions {
     /// fails to start.
     pub sandbox: bool,
 
-    /// The folder with CEF's files, such as `libcef.so` and `icudtl.dat` on Linux, or the
-    /// `Chromium Embedded Framework.framework` on macOS.
+    /// A folder of the app's choice for CEF's files, such as a cache folder of the app.
     ///
-    /// CEF is loaded from here when the first webview needs it, so the app starts without
-    /// it. If the folder doesn't have CEF, or with `None`, the default, we look next to the
-    /// executable, and then where the `cef` crate put CEF at build time.
+    /// CEF is loaded when the first webview needs it, so the app starts without it. We look
+    /// for it in these places:
+    ///
+    /// 1. `<cef_dir>/<CEF version>/cef_<os>_<arch>`, such as
+    ///    `<cef_dir>/156.0.26/cef_linux_x86_64`. `cef_install` puts CEF there. It is also the
+    ///    layout that the `cef` crate uses for `CEF_PATH` at build time.
+    /// 2. `cef_dir` itself.
+    /// 3. Next to the executable, or in the app bundle on macOS.
+    /// 4. Where the `cef` crate put CEF at build time.
+    ///
+    /// If CEF is in none of them, creating a webview fails with
+    /// [`Error::CefNotInstalled`], and [`crate::cef_status`] is [`CefStatus::NotInstalled`].
     ///
     /// Windows ignores this. There, the CEF library is linked at build time.
     pub cef_dir: Option<PathBuf>,
@@ -247,10 +256,6 @@ fn lock_state() -> std::sync::MutexGuard<'static, State> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The CEF framework on macOS, in the folder with CEF's files.
-#[cfg(target_os = "macos")]
-const FRAMEWORK: &str = "Chromium Embedded Framework.framework/Chromium Embedded Framework";
-
 /// Why CEF didn't start.
 enum StartError {
     /// CEF's files weren't found. The app can install them and try again.
@@ -284,7 +289,7 @@ fn load_library(options: &CefInitOptions) -> Result<&'static Path, StartError> {
         return Ok(dir);
     }
     let exe = std::env::current_exe().map_err(|err| err.to_string())?;
-    let dir = find_cef(options, &exe).map_err(StartError::NotInstalled)?;
+    let dir = install::find(options, &exe).map_err(StartError::NotInstalled)?;
     cfg_select! {
         target_os = "linux" => { super::loader::load(&dir)?; }
         target_os = "macos" => { load_framework(&dir)?; }
@@ -295,69 +300,12 @@ fn load_library(options: &CefInitOptions) -> Result<&'static Path, StartError> {
     Ok(CEF_DIR.get_or_init(|| dir))
 }
 
-/// Finds the folder with CEF's files. See [`CefInitOptions::cef_dir`] for where we look.
-fn find_cef(options: &CefInitOptions, exe: &Path) -> Result<PathBuf, String> {
-    let exe_dir = exe.parent().ok_or("no executable directory")?;
-    // In an app bundle on macOS, the framework is in `Contents/Frameworks`. That is
-    // `../Frameworks` from the main executable in `Contents/MacOS`, and `../../..` from a
-    // helper's executable in `Contents/Frameworks/<App> Helper.app/Contents/MacOS`.
-    #[cfg(target_os = "macos")]
-    let (library, candidates) = (
-        FRAMEWORK,
-        vec![
-            Some(exe_dir.join("../Frameworks")),
-            Some(exe_dir.join("../../..")),
-            options.cef_dir.clone(),
-            sys::get_cef_dir(),
-        ],
-    );
-    #[cfg(target_os = "linux")]
-    let (library, candidates) = (
-        super::loader::LIBRARY,
-        vec![
-            options.cef_dir.clone(),
-            Some(exe_dir.to_owned()),
-            sys::get_cef_dir(),
-        ],
-    );
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let (library, candidates) = {
-        _ = options;
-        (
-            "libcef.dll",
-            vec![Some(exe_dir.to_owned()), sys::get_cef_dir()],
-        )
-    };
-    // CEF needs absolute paths.
-    let candidates: Vec<PathBuf> = candidates
-        .into_iter()
-        .flatten()
-        .filter_map(|dir| std::path::absolute(dir).ok())
-        .collect();
-    let found = candidates.iter().find(|dir| dir.join(library).exists());
-    if let Some(dir) = found {
-        return Ok(dir.clone());
-    }
-    if cfg!(windows) {
-        // The process wouldn't run without the library, so Windows found it some other way.
-        return Ok(exe_dir.to_owned());
-    }
-    let searched: Vec<String> = candidates
-        .iter()
-        .map(|dir| dir.display().to_string())
-        .collect();
-    Err(format!(
-        "CEF isn't installed. Looked for `{library}` in: {}",
-        searched.join(", ")
-    ))
-}
-
 /// Loads the CEF framework on macOS from `dir`.
 #[cfg(target_os = "macos")]
 fn load_framework(dir: &Path) -> Result<(), String> {
     use std::os::unix::ffi::OsStrExt as _;
 
-    let path = dir.join(FRAMEWORK);
+    let path = dir.join(install::LIBRARY);
     let path =
         std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|err| err.to_string())?;
     // SAFETY: `path` is a NUL-terminated C string that lives until after `cef::load_library`
@@ -400,7 +348,10 @@ pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
                 }
             }
             // Stay ready, so that the next webview tries again after the app installed CEF.
-            Err(StartError::NotInstalled(err)) => return Err(Error::backend(err)),
+            Err(StartError::NotInstalled(err)) => {
+                log::debug!("egui_webview: {err}");
+                return Err(Error::CefNotInstalled);
+            }
             Err(StartError::Failed(err)) => State::Failed(err),
         };
     }
@@ -422,6 +373,57 @@ pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
         }
     };
     Err(Error::backend(format!("CEF: {err}")))
+}
+
+/// Whether CEF's files are on this machine.
+///
+/// CEF isn't loaded before the first webview needs it, and the app starts without it. Use
+/// this to ask the user before you call `cef_install`, or to show its progress.
+pub fn status() -> CefStatus {
+    // A running or failed install says more than whether the files are there.
+    if let Some(status) = install::status()
+        && status != CefStatus::Installed
+    {
+        return status;
+    }
+    let state = lock_state();
+    let default_options = CefInitOptions::default();
+    let options = match &*state {
+        State::Unchecked => &default_options,
+        State::Ready { options, .. } => options,
+        // CEF was found. If it failed to start, the webview shows why.
+        State::Running { .. } | State::Failed(_) | State::ShutDown => return CefStatus::Installed,
+    };
+    let found = std::env::current_exe().is_ok_and(|exe| install::find(options, &exe).is_ok());
+    if found {
+        CefStatus::Installed
+    } else {
+        CefStatus::NotInstalled
+    }
+}
+
+/// Downloads CEF and installs it into [`CefInitOptions::cef_dir`], on a new thread. It does
+/// nothing if CEF is already installed, or while an install is running.
+///
+/// The download is the archive of the CEF build that this crate was built with, from CEF's
+/// build server, or from `CEF_DOWNLOAD_URL` if that is set. For Linux on x86-64, it is about
+/// 330 MB, and 1.5 GB unpacked. Its SHA-1 is checked before anything uses it.
+///
+/// Follow the install with [`status`]. `ctx` is repainted when the status changes. Once it is
+/// [`CefStatus::Installed`], new webviews work, and a [`crate::WebView`] that was waiting for
+/// CEF shows its page.
+///
+/// Only call this after the user agreed to the download.
+#[cfg(feature = "cef-download")]
+pub fn install(ctx: &egui::Context) {
+    if status() == CefStatus::Installed {
+        return;
+    }
+    let cef_dir = match &*lock_state() {
+        State::Ready { options, .. } => options.cef_dir.clone(),
+        _ => None,
+    };
+    install::install(ctx, cef_dir);
 }
 
 /// Initializes CEF with `options`. Returns the cache directory to delete at shutdown, if any.

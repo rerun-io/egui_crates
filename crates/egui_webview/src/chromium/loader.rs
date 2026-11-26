@@ -14,9 +14,6 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 
 use libloading::os::unix::{Library, RTLD_LOCAL, RTLD_NOW};
 
-/// The file name of the CEF library.
-pub const LIBRARY: &str = "libcef.so";
-
 /// `NAMES`, the functions that `libcef.so` exports, and the stub of each one. The stubs are
 /// assembly, which counts as unsafe code.
 #[expect(unsafe_code)]
@@ -53,7 +50,7 @@ extern "C" fn not_loaded() -> ! {
 pub fn load(dir: &Path) -> Result<(), String> {
     std::hint::black_box(&raw const egui_webview_cef_stubs);
 
-    let path = dir.join(LIBRARY);
+    let path = dir.join(super::install::LIBRARY);
     // SAFETY: loading a library runs its initializers. We trust the CEF library that the app
     // points us at as much as one linked at build time.
     #[expect(unsafe_code)]

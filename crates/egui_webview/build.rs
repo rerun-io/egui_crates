@@ -78,6 +78,8 @@ fn main() {
     }
     if is_docs_rs {
         // There is no CEF to read the function names from, and nothing is linked.
+        println!("cargo::rustc-env=EGUI_WEBVIEW_CEF_ARCHIVE=");
+        println!("cargo::rustc-env=EGUI_WEBVIEW_CEF_SHA1=");
         if is_linux {
             write_out_file(
                 "cef_stubs.rs",
@@ -86,22 +88,53 @@ fn main() {
         }
         return;
     }
-    if is_linux {
-        // No build tools needed, but the stubs.
-        write_stubs();
-        return;
-    }
 
-    for tool in TOOLS {
-        if !is_available(tool) {
-            let Tool { name, .. } = tool;
-            let install = install_command(tool);
-            println!(
-                "cargo::error=The `cef` feature of `egui_webview` requires `{name}`, which was \
-                 not found on `PATH`. Install it with `{install}`."
-            );
+    if !is_linux {
+        for tool in TOOLS {
+            if !is_available(tool) {
+                let Tool { name, .. } = tool;
+                let install = install_command(tool);
+                println!(
+                    "cargo::error=The `cef` feature of `egui_webview` requires `{name}`, which \
+                     was not found on `PATH`. Install it with `{install}`."
+                );
+            }
         }
     }
+
+    println!("cargo::rerun-if-env-changed=DEP_CEF_DLL_WRAPPER_CEF_DIR");
+    // `cef-dll-sys` tells us where it put CEF at build time.
+    let Some(cef_dir) = env::var_os("DEP_CEF_DLL_WRAPPER_CEF_DIR") else {
+        println!("cargo::error=`cef-dll-sys` didn't report where it put CEF");
+        return;
+    };
+    let cef_dir = Path::new(&cef_dir);
+    export_archive(cef_dir);
+    if is_linux {
+        write_stubs(cef_dir);
+    }
+}
+
+/// Tells the crate which CEF archive `cef-dll-sys` downloaded, and its SHA-1. The app downloads
+/// the same archive when it installs CEF at run time, so it gets the CEF that the bindings were
+/// made for.
+fn export_archive(cef_dir: &Path) {
+    let path = cef_dir.join("archive.json");
+    println!("cargo::rerun-if-changed={}", path.display());
+    // Without the file, the crate still builds. It just can't install CEF at run time.
+    let json = std::fs::read_to_string(&path).unwrap_or_default();
+    let name = json_string(&json, "name").unwrap_or_default();
+    let sha1 = json_string(&json, "sha1").unwrap_or_default();
+    println!("cargo::rustc-env=EGUI_WEBVIEW_CEF_ARCHIVE={name}");
+    println!("cargo::rustc-env=EGUI_WEBVIEW_CEF_SHA1={sha1}");
+}
+
+/// The string value of `key` in the flat JSON object `json`. It doesn't handle escapes, which
+/// file names and hashes don't have.
+fn json_string<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let (_, after_key) = json.split_once(&format!("\"{key}\""))?;
+    let (_, after_quote) = after_key.split_once(':')?.1.split_once('"')?;
+    Some(after_quote.split_once('"')?.0)
 }
 
 /// Writes `contents` to `name` in the build's output directory.
@@ -121,15 +154,9 @@ fn write_out_file(name: &str, contents: &str) {
 /// `cef-dll-sys` links `libcef.so`, so a binary would need the library just to start. With the
 /// stubs in the binary, nothing refers to the library anymore, and the linker leaves it out.
 /// We load it with `dlopen` when the first webview needs it.
-fn write_stubs() {
-    println!("cargo::rerun-if-env-changed=DEP_CEF_DLL_WRAPPER_CEF_DIR");
-    // `cef-dll-sys` tells us where it downloaded CEF. Its headers declare the exported
-    // functions.
-    let Some(cef_dir) = env::var_os("DEP_CEF_DLL_WRAPPER_CEF_DIR") else {
-        println!("cargo::error=`cef-dll-sys` didn't report where the CEF headers are");
-        return;
-    };
-    let include = Path::new(&cef_dir).join("include");
+fn write_stubs(cef_dir: &Path) {
+    // CEF's headers declare the exported functions.
+    let include = cef_dir.join("include");
     println!("cargo::rerun-if-changed={}", include.display());
     let mut names = Vec::new();
     if let Err(err) = exported_functions(&include, &mut names) {

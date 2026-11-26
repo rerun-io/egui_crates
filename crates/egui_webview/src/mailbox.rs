@@ -86,7 +86,7 @@ pub struct UiState {
     pub pending_focus_change: Option<FocusChange>,
 }
 
-type WidgetResult = Result<Arc<dyn PageWidget>, String>;
+type WidgetResult = Result<Arc<dyn PageWidget>, Arc<crate::Error>>;
 
 impl WebViewState {
     pub fn mark_shown(&mut self, pass: u64) {

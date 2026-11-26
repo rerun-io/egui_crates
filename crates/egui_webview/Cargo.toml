@@ -36,6 +36,10 @@ cef = ["dep:base64", "dep:cef", "dep:cef-dll-sys", "dep:libloading", "dep:tempfi
 ## the app turns the sandbox on with `CefInitOptions::sandbox`.
 cef-sandbox = ["cef", "cef/sandbox"]
 
+## Let the app download CEF at run time, with `cef_install`. Nothing is downloaded unless the
+## app calls it.
+cef-download = ["cef", "dep:bzip2", "dep:sha1_smol", "dep:tar", "dep:ureq"]
+
 
 [build-dependencies]
 cfg_aliases.workspace = true
@@ -83,15 +87,19 @@ web-sys = { workspace = true, features = [
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 base64 = { workspace = true, optional = true }
+bzip2 = { workspace = true, optional = true }
 cef = { workspace = true, optional = true }
+# A direct dependency, so that the build script learns where CEF is at build time.
+cef-dll-sys = { workspace = true, optional = true }
+sha1_smol = { workspace = true, optional = true }
+tar = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
 # Converts egui keys to the platform scancodes that CEF expects, which egui's key events don't
 # carry.
 winit = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# A direct dependency, so that the build script learns where the CEF headers are.
-cef-dll-sys = { workspace = true, optional = true }
 # Loads `libcef.so` at run time.
 libloading = { workspace = true, optional = true }
 # On Linux, winit's scancode conversion (`PhysicalKeyExtScancode`) needs a windowing backend

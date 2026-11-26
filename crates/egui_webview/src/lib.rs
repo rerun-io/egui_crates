@@ -46,8 +46,13 @@ mod web;
 mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
+#[cfg(all(feature = "cef-download", cef_backend))]
+pub use chromium::install as cef_install;
 #[cfg(cef_backend)]
-pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess};
+pub use chromium::{
+    CefInitOptions, CefOptions, CefProcess, CefStatus, run_subprocess as run_cef_subprocess,
+    status as cef_status,
+};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use runtime::Runtime;
 pub use webviews::{WebView, WebViews};
@@ -158,6 +163,12 @@ pub enum Error {
     /// not one the platform's backend can use.
     Unsupported,
 
+    /// CEF's files aren't on this machine. See `CefInitOptions::cef_dir` for where they go,
+    /// and `cef_status`.
+    ///
+    /// Only the CEF backend returns this.
+    CefNotInstalled,
+
     /// The backend reported an error.
     Backend(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -178,6 +189,7 @@ impl std::fmt::Display for Error {
                  first in `main`, and keep it until `eframe::run_native` returns"
             ),
             Self::Unsupported => write!(f, "No webview backend is available on this platform"),
+            Self::CefNotInstalled => write!(f, "CEF (Chromium) isn't installed"),
             Self::Backend(err) => write!(f, "Webview failed: {err}"),
         }
     }
@@ -186,7 +198,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoRuntime | Self::Unsupported => None,
+            Self::NoRuntime | Self::Unsupported | Self::CefNotInstalled => None,
             Self::Backend(err) => Some(err.as_ref()),
         }
     }

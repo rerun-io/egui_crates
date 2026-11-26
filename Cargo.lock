@@ -1722,6 +1722,7 @@ name = "egui_webview"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "bzip2",
  "cef",
  "cef-dll-sys",
  "cfg_aliases",
@@ -1731,7 +1732,10 @@ dependencies = [
  "js-sys",
  "libloading 0.9.0",
  "log",
+ "sha1_smol",
+ "tar",
  "tempfile",
+ "ureq",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",

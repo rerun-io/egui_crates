@@ -19,6 +19,7 @@
 mod context;
 mod handlers;
 mod input;
+mod install;
 mod keys;
 mod layer;
 #[cfg(target_os = "linux")]
@@ -42,7 +43,10 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
-pub use runtime::{CefInitOptions, CefProcess, init, run_subprocess, shutdown};
+pub use install::CefStatus;
+#[cfg(feature = "cef-download")]
+pub use runtime::install;
+pub use runtime::{CefInitOptions, CefProcess, init, run_subprocess, shutdown, status};
 
 /// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
