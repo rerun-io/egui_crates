@@ -197,6 +197,7 @@ cfg_select! {
     }
     _ => {
         fn main() -> eframe::Result {
+            env_logger::init();
             let _runtime = egui_webview::Runtime::new();
             let cef = cfg!(feature = "cef");
 

@@ -185,6 +185,7 @@ impl eframe::App for Test {
 }
 
 pub(super) fn run() -> eframe::Result {
+    env_logger::init();
     let _runtime = egui_webview::Runtime::new();
 
     let options = eframe::NativeOptions {

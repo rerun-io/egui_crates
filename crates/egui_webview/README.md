@@ -24,10 +24,11 @@ Tab and Shift-Tab move the keyboard focus between egui widgets and the page's el
 
 ## Initialization
 
-Create an `egui_webview::Runtime` first in `main`, and keep it until `eframe::run_native` has returned:
+Create an `egui_webview::Runtime` at the start of `main`, right after initializing logging, and keep it until `eframe::run_native` has returned:
 
 ```rust,ignore
 fn main() -> eframe::Result {
+    env_logger::init();
     let _runtime = egui_webview::Runtime::new();
     eframe::run_native(/* … */)
 }
@@ -103,7 +104,7 @@ The [`cef`](https://crates.io/crates/cef) crate downloads CEF (about 1 GB) the f
 On Windows and macOS it also builds a small C++ wrapper library, which requires CMake and Ninja; on Linux it links `libcef.so` directly.
 Set `CEF_PATH` to share one download between projects.
 
-CEF runs its helper processes from the app's own executable, which is why `egui_webview::Runtime::new` must run first in `main`.
+CEF runs its helper processes from the app's own executable, which is why `egui_webview::Runtime::new` must run at the start of `main`, before anything but logging.
 With the `cef` feature, in a helper process it runs CEF and exits, and otherwise it returns the `Runtime`.
 
 `egui_webview::Runtime::with_cef_options` takes `CefInitOptions`, which apply to the whole process; the first call sets them. By default, nothing persists: the browser profile (cookies, `localStorage`, the HTTP cache) lives in memory. Set `CefInitOptions::cache_dir` to keep the profile in a directory across restarts. Only one running process can use a directory at a time.
