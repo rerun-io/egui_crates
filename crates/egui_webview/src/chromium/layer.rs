@@ -38,6 +38,7 @@ impl Layer {
     /// The pixels are converted straight into the image that [`Self::upload`] hands to egui, so
     /// the layer keeps no copy of the frame.
     pub fn paint(&mut self, buffer: &[u8], size: [usize; 2], dirty: &[cef::Rect]) {
+        profiling::function_scope!();
         let [x, y, w, h] = if size == self.size {
             let painted = dirty
                 .iter()
@@ -72,6 +73,7 @@ impl Layer {
     /// exist yet or the size changed. Returns `None` until there is a first frame.
     pub fn upload(&mut self, ctx: &egui::Context, name: &str) -> Option<&TextureHandle> {
         if let Some((pos, image)) = self.pending.take() {
+            profiling::scope!("upload");
             let resized = std::mem::take(&mut self.resized);
             match &mut self.texture {
                 Some(texture) if !resized => {

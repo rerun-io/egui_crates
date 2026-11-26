@@ -119,6 +119,7 @@ impl WebViews {
     /// puts every page where egui put its rect, and closes the pages that were neither shown
     /// nor kept alive.
     pub fn update(&mut self, ctx: &Context, output: &egui::FullOutput) {
+        profiling::function_scope!();
         let views = &output.platform_output.embedded_views;
 
         // Put the mailbox back in every frame. If something reset egui's memory, the mailbox

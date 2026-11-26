@@ -292,6 +292,7 @@ fn load_framework() -> Result<(), String> {
 /// initialize, or if CEF has shut down. The first failure is kept, so later calls fail in the
 /// same way.
 pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
+    profiling::function_scope!();
     let engine = Runtime::engine()?;
     let mut state = lock_state();
     if let State::Ready { thread, .. } | State::Running { thread, .. } = &*state
@@ -425,6 +426,7 @@ fn in_app_bundle(exe: &Path) -> bool {
 /// If closing takes longer than [`SHUTDOWN_TIMEOUT`], a later message pump finishes shutdown.
 /// The temporary cache directory is deleted after shutdown. CEF can't start again in this process.
 pub fn shutdown() {
+    profiling::function_scope!();
     let mut state = lock_state();
     let this_thread = std::thread::current().id();
     // CEF belongs to the thread that created the first `Runtime`. Dropping the runtime of
@@ -541,7 +543,10 @@ impl egui::Plugin for CefPlugin {
 
     fn on_begin_pass(&mut self, _ui: &mut Ui) {
         if RUNNING.load(Ordering::Relaxed) {
-            cef::do_message_loop_work();
+            {
+                profiling::scope!("cef::do_message_loop_work");
+                cef::do_message_loop_work();
+            }
             if SHUTDOWN_PENDING.load(Ordering::Relaxed)
                 && OPEN_BROWSERS.load(Ordering::Relaxed) == 0
             {

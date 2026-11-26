@@ -1729,6 +1729,7 @@ dependencies = [
  "env_logger",
  "js-sys",
  "log",
+ "profiling",
  "tempfile",
  "url",
  "wasm-bindgen",
