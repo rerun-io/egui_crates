@@ -41,7 +41,7 @@ mod chromium;
 mod instance;
 mod mailbox;
 mod runtime;
-#[cfg(target_arch = "wasm32")]
+#[cfg(platform_backend)]
 mod web;
 mod webviews;
 

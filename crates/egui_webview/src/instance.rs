@@ -162,26 +162,24 @@ impl WebViewInstance {
         match DefaultBackend::pick() {
             DefaultBackend::Cef => {
                 _ = embedded_views;
-                #[cfg(cef_backend)]
-                {
-                    Self::new_cef(ctx, id, source)
-                }
-                #[cfg(not(cef_backend))]
-                {
-                    _ = (ctx, id, source);
-                    Err(Error::Unsupported)
+                cfg_select! {
+                    cef_backend => { Self::new_cef(ctx, id, source) }
+                    _ => {
+                        _ = (ctx, id, source);
+                        Err(Error::Unsupported)
+                    }
                 }
             }
             DefaultBackend::Embedded => {
-                #[cfg(platform_backend)]
-                {
-                    let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
-                    Ok(Self::with_backend(id, backend))
-                }
-                #[cfg(not(platform_backend))]
-                {
-                    _ = (ctx, id, source, embedded_views);
-                    Err(Error::Unsupported)
+                cfg_select! {
+                    platform_backend => {
+                        let backend = crate::web::IframeBackend::new(ctx, source, embedded_views)?;
+                        Ok(Self::with_backend(id, backend))
+                    }
+                    _ => {
+                        _ = (ctx, id, source, embedded_views);
+                        Err(Error::Unsupported)
+                    }
                 }
             }
         }
