@@ -164,14 +164,14 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     let _sandbox = match helper_sandbox(&options, &args) {
         Ok(sandbox) => sandbox,
         Err(err) => {
-            log::error!("egui_webview: {err}");
+            report_helper_error(&err);
             return CefProcess::Helper { exit_code: 1 };
         }
     };
 
     if let Err(err) = load_library() {
         if is_helper() {
-            log::error!("egui_webview: {err}");
+            report_helper_error(&err);
             return CefProcess::Helper { exit_code: 1 };
         }
     } else {
@@ -196,6 +196,17 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     CefProcess::App(Runtime::start())
 }
 
+/// Reports why this CEF helper process can't run.
+///
+/// A helper runs before the app's `main` has set up a logger, so this also writes to stderr.
+fn report_helper_error(err: &str) {
+    log::error!("egui_webview: a CEF helper process failed to start: {err}");
+    #[expect(clippy::print_stderr)]
+    {
+        eprintln!("egui_webview: a CEF helper process failed to start: {err}");
+    }
+}
+
 /// Whether Chromium launched this executable as a helper.
 ///
 /// This is the test that `cef::execute_process` does itself: a process with a `--type` switch
@@ -218,7 +229,7 @@ fn helper_sandbox(
         return Ok(None);
     }
     // The path that `cef::sandbox::Sandbox::new` loads, which panics if it is missing.
-    let exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let exe = current_exe()?;
     let library = exe.parent().map(|dir| {
         dir.join("../../../Chromium Embedded Framework.framework/Libraries/libcef_sandbox.dylib")
     });
@@ -258,18 +269,27 @@ fn load_framework() -> Result<(), String> {
     use std::os::unix::ffi::OsStrExt as _;
 
     const FRAMEWORK: &str = "Chromium Embedded Framework.framework/Chromium Embedded Framework";
-    let exe = std::env::current_exe().map_err(|err| err.to_string())?;
-    let exe_dir = exe.parent().ok_or("no executable directory")?;
+    let exe = current_exe()?;
+    let exe_dir = exe
+        .parent()
+        .ok_or_else(|| format!("the executable `{}` has no parent directory", exe.display()))?;
     // The framework is in `Contents/Frameworks`. That is `../Frameworks` from the main
     // executable in `Contents/MacOS`, and `../../..` from a helper's executable in
     // `Contents/Frameworks/<App> Helper.app/Contents/MacOS`.
-    let bundled = [exe_dir.join("../Frameworks"), exe_dir.join("../../..")]
-        .into_iter()
-        .map(|dir| dir.join(FRAMEWORK))
-        .find(|path| path.exists());
+    let bundled =
+        [exe_dir.join("../Frameworks"), exe_dir.join("../../..")].map(|dir| dir.join(FRAMEWORK));
     let path = bundled
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
         .or_else(|| sys::get_cef_dir().map(|dir| dir.join(FRAMEWORK)))
-        .ok_or("CEF framework not found")?;
+        .ok_or_else(|| {
+            format!(
+                "the CEF framework is neither in the app bundle ({bundled:?}) nor in the \
+                 download directory of the `cef` crate. Bundle the framework with the app, or \
+                 set `CEF_PATH` to the directory of a CEF download"
+            )
+        })?;
     let path =
         std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|err| err.to_string())?;
     // SAFETY: `path` is a NUL-terminated C string that lives until after `cef::load_library`
@@ -279,7 +299,7 @@ fn load_framework() -> Result<(), String> {
     if cef::load_library(Some(name)) == 1 {
         Ok(())
     } else {
-        Err(format!("Failed to load the CEF framework from {path:?}"))
+        Err(format!("failed to load the CEF framework from {path:?}"))
     }
 }
 
@@ -336,7 +356,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
 
 /// Initializes CEF with `options`. Returns the cache directory to delete at shutdown, if any.
 fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
-    let exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let exe = current_exe()?;
     check_sandbox(options.sandbox, &exe)?;
     load_library()?;
 
@@ -357,13 +377,20 @@ fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
     }
     let temp_dir = if let Some(dir) = &options.cache_dir {
         // CEF needs an absolute path, and the profile in `cache_path` to persist it.
-        let dir = std::path::absolute(dir).map_err(|err| err.to_string())?;
+        let dir = std::path::absolute(dir).map_err(|err| {
+            format!(
+                "the cache directory `{}` isn't a usable path: {err}",
+                dir.display()
+            )
+        })?;
         settings.root_cache_path = dir.to_string_lossy().as_ref().into();
         settings.cache_path = dir.to_string_lossy().as_ref().into();
         None
     } else {
         // Without a `cache_path`, the profile lives in memory.
-        let dir = temp_cache_dir().map_err(|err| format!("failed to create CEF cache: {err}"))?;
+        let dir = temp_cache_dir().map_err(|err| {
+            format!("failed to create a temporary cache directory for CEF: {err}")
+        })?;
         settings.root_cache_path = dir.path().to_string_lossy().as_ref().into();
         Some(dir)
     };
@@ -381,8 +408,24 @@ fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
     {
         Ok(temp_dir)
     } else {
-        Err("CEF failed to initialize".to_owned())
+        let exit_code = cef::get_exit_code();
+        let hint = match &options.cache_dir {
+            Some(dir) => format!(
+                ". Only one running process can use the cache directory `{}`, so check that \
+                 no other instance of the app is running",
+                dir.display()
+            ),
+            None => String::new(),
+        };
+        Err(format!(
+            "failed to initialize, with CEF's exit code {exit_code}{hint}"
+        ))
     }
+}
+
+/// The path of this process's executable.
+fn current_exe() -> Result<PathBuf, String> {
+    std::env::current_exe().map_err(|err| format!("can't find the path of the executable: {err}"))
 }
 
 /// Fails if `sandbox` asks for the sandbox, and it can't work here.
