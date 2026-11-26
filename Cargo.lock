@@ -1696,6 +1696,7 @@ name = "egui_table"
 version = "0.11.0"
 dependencies = [
  "egui 0.37.0",
+ "egui_kittest 0.37.0",
  "serde",
  "vec1",
 ]

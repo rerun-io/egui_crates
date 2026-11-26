@@ -34,3 +34,7 @@ default = []
 egui = { workspace = true, default-features = false, features = ["serde"] }
 serde.workspace = true
 vec1.workspace = true
+
+[dev-dependencies]
+egui = { workspace = true, features = ["default_fonts"] }
+egui_kittest.workspace = true
