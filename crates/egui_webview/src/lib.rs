@@ -59,11 +59,7 @@ pub use url::{self, Url};
 /// That is the `<iframe>` backend on the web, and CEF natively with the `cef` feature.
 /// Without a backend, [`WebViewInstance::new`] returns an error.
 pub const fn is_supported() -> bool {
-    cfg_select! {
-        target_arch = "wasm32" => { true }
-        feature = "cef" => { true }
-        _ => { false }
-    }
+    cfg!(target_arch = "wasm32") || cfg!(feature = "cef")
 }
 
 /// What should the webview load?
