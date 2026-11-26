@@ -13,8 +13,8 @@ pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
     // process, this call runs the helper and then exits, so nothing below runs there.
     #[cfg(not(feature = "cef"))]
     let _runtime = egui_webview::Runtime::new();
-    // CEF is loaded when the first page needs it. If it isn't on this machine, the page offers
-    // to download it into this folder. A real app would use a cache folder of its own.
+    // CEF is loaded when the first page needs it. If it isn't on this machine, the webview
+    // offers to download it into this folder. A real app would use a cache folder of its own.
     #[cfg(feature = "cef")]
     let _runtime = egui_webview::Runtime::with_cef_options(egui_webview::CefInitOptions {
         cef_dir: std::env::var_os("EGUI_WEBVIEW_CEF_DIR").map(Into::into),
@@ -37,7 +37,7 @@ pub fn run(title: &str, create: eframe::AppCreator<'static>) -> eframe::Result {
 }
 
 /// Downloads CEF without asking, if `EGUI_WEBVIEW_CEF_INSTALL` is set and CEF is missing. This
-/// is for tests that can't click the page's download button. A real app asks the user first.
+/// is for tests that can't click the webview's download button. A real app asks the user first.
 #[cfg(all(feature = "cef-download", not(target_arch = "wasm32")))]
 fn install_cef_if_asked(ctx: &egui::Context) {
     if std::env::var_os("EGUI_WEBVIEW_CEF_INSTALL").is_some()

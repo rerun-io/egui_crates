@@ -121,7 +121,9 @@ On Windows, the CEF library is still linked at build time.
 * `CefInitOptions::cef_dir` is a folder of your choice for CEF, such as your app's cache folder. CEF for this build goes in `<cef_dir>/<CEF version>/cef_<os>_<arch>`. CEF is also found next to the executable, and where the `cef` crate put it at build time.
 * `egui_webview::cef_status` says whether CEF is there.
 * With the `cef-download` feature, `egui_webview::cef_install` downloads the CEF build that the crate was built with into `cef_dir`, on its own thread. For Linux on x86-64, that is about 330 MB, and 1.5 GB unpacked. Nothing is downloaded unless you call it, so ask the user first.
-* A `WebView` whose page can't be created because CEF is missing says so in the page's place, offers the download, shows its progress, and shows the page once CEF is there. `WebViewInstance::new` returns `Error::CefNotInstalled`.
+* `egui_webview::uses_cef` says whether `WebView` and `WebViewInstance::new` use CEF at all. On a platform with a system webview they don't, and `cef_status` alone would report a missing CEF that nothing needs.
+* A `WebView` whose page can't be created because CEF is missing says so in the page's place, offers the download, shows its progress, and shows the page once CEF is there. To show your own UI in its place, turn that off with `WebView::cef_install_ui(false)` and look at `WebViewResponse::error`.
+* `WebViewInstance::new` returns `Error::CefNotInstalled`. Show `egui_webview::cef_install_ui`, which is the UI that `WebView` shows, and create the page once `cef_status` is `CefStatus::Installed`. The `cef_install` example does this.
 
 The helper processes look for CEF in the same places, so pass the same `cef_dir` in every run of `main`.
 

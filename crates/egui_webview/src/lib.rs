@@ -57,8 +57,10 @@ pub use chromium::{
     CefInitOptions, CefOptions, CefProcess, CefStatus, run_subprocess as run_cef_subprocess,
     status as cef_status,
 };
-pub use instance::{WebViewInstance, WebViewResponse};
+pub use instance::{WebViewInstance, WebViewResponse, uses_cef};
 pub use runtime::Runtime;
+#[cfg(cef_backend)]
+pub use webviews::cef_install_ui;
 pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};

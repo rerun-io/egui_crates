@@ -296,6 +296,7 @@ pub struct WebView<'a> {
     id: Id,
     source: Option<SourceRef<'a>>,
     size: Option<Vec2>,
+    cef_install_ui: bool,
 }
 
 /// A [`WebViewSource`] that borrows its content.
@@ -332,7 +333,22 @@ impl<'a> WebView<'a> {
             id: id.into(),
             source: None,
             size: None,
+            cef_install_ui: true,
         }
+    }
+
+    /// Whether to show `egui_webview::cef_install_ui` in place of a page that can't be
+    /// created because CEF isn't installed. The default is `true`.
+    ///
+    /// With `false`, the page's rect stays empty, and [`WebViewResponse::error`] is
+    /// [`Error::CefNotInstalled`]. Show your own UI in the rect, and call `cef_install` when
+    /// the user agrees. The page appears once CEF is there.
+    ///
+    /// This does nothing without the `cef` feature.
+    #[inline]
+    pub fn cef_install_ui(mut self, show: bool) -> Self {
+        self.cef_install_ui = show;
+        self
     }
 
     /// Shows the page at `url`.
@@ -378,13 +394,16 @@ impl<'a> WebView<'a> {
     ///
     /// If it can't be created because CEF isn't installed, this shows that, with a button
     /// that downloads CEF if the `cef-download` feature is on, and then the progress. The page
-    /// appears when CEF is there. To ask the user in your own way, check `cef_status` before
-    /// you show the page, and call `cef_install` yourself.
+    /// appears when CEF is there. To ask the user in your own way, turn that off with
+    /// [`Self::cef_install_ui`].
+    ///
+    /// In both cases, [`WebViewResponse::error`] says why there is no page.
     pub fn show(self, ui: &mut Ui) -> WebViewResponse {
         let Self {
             id,
             source: new_source,
             size,
+            cef_install_ui: show_cef_install_ui,
         } = self;
         let size = size.unwrap_or_else(|| ui.available_size());
 
@@ -417,12 +436,18 @@ impl<'a> WebView<'a> {
             Some(Ok(widget)) => widget,
             #[cfg(cef_backend)]
             Some(Err(failed)) if is_cef_missing(&failed) => {
-                let response = placeholder(ui, id, size, None, events);
-                missing_cef_ui(ui, response.response.rect);
+                let mut response = placeholder(ui, id, size, None, events);
+                if show_cef_install_ui {
+                    missing_cef_ui(ui, response.response.rect);
+                }
+                response.error = Some(failed);
                 return response;
             }
             Some(Err(failed)) => {
-                return placeholder(ui, id, size, Some(&failed.to_string()), events);
+                _ = show_cef_install_ui;
+                let mut response = placeholder(ui, id, size, Some(&failed.to_string()), events);
+                response.error = Some(failed);
+                return response;
             }
             // The page doesn't exist yet. `WebViews::update` creates it after this pass.
             None => return placeholder(ui, id, size, None, events),
@@ -441,6 +466,7 @@ impl<'a> WebView<'a> {
         WebViewResponse {
             events,
             response: shown.response,
+            error: None,
         }
     }
 }
@@ -526,14 +552,16 @@ fn placeholder(
         ui.painter_at(rect)
             .galley(pos, galley, ui.visuals().error_fg_color);
     }
-    WebViewResponse { events, response }
+    WebViewResponse {
+        events,
+        response,
+        error: None,
+    }
 }
 
-/// Tells the user in `rect` that CEF is missing, and lets them install it.
+/// Shows [`cef_install_ui`] in the middle of `rect`, the rect of a page that waits for CEF.
 #[cfg(cef_backend)]
 fn missing_cef_ui(ui: &mut Ui, rect: egui::Rect) {
-    use crate::CefStatus;
-
     if !ui.is_rect_visible(rect) {
         return;
     }
@@ -544,13 +572,55 @@ fn missing_cef_ui(ui: &mut Ui, rect: egui::Rect) {
             .layout(layout),
     );
     ui.add_space((rect.height() * 0.4 - 24.0).max(0.0));
-    match crate::cef_status() {
+    if cef_install_ui(&mut ui) == crate::CefStatus::Installed {
+        // The page is created after this pass.
+        ui.spinner();
+    }
+}
+
+/// Tells the user that CEF is missing, and lets them install it. Returns the status it showed.
+///
+/// - Not installed: a text, and a button that calls `cef_install`. The button needs the
+///   `cef-download` feature.
+/// - Installing: the progress of the download.
+/// - Failed: the error, and a button to try again.
+/// - Installed: nothing.
+///
+/// A [`WebView`] shows this by itself in place of a page that waits for CEF. Use it with a
+/// [`WebViewInstance`], or anywhere else in your app. The `cef_install` example is a whole
+/// app that does this:
+///
+/// ```ignore
+/// // In `eframe::App::ui`:
+/// match &mut self.webview {
+///     Some(webview) => {
+///         webview.ui(ui, ui.available_size());
+///     }
+///     None => {
+///         egui_webview::cef_install_ui(ui);
+///     }
+/// }
+///
+/// // In `eframe::App::output_hook`. `WebViewInstance::new` fails with
+/// // `Error::CefNotInstalled` until CEF is there.
+/// if self.webview.is_none() && egui_webview::cef_status() == CefStatus::Installed {
+///     self.webview = WebViewInstance::new(ctx, id, &source, &embedded_views).ok();
+/// }
+/// ```
+#[cfg(cef_backend)]
+pub fn cef_install_ui(ui: &mut Ui) -> crate::CefStatus {
+    use crate::CefStatus;
+
+    let status = crate::cef_status();
+    match &status {
         CefStatus::Installing { downloaded, total } => {
             const MB: f32 = 1_000_000.0;
             #[expect(clippy::cast_precision_loss)] // Megabytes for a progress text.
-            let (downloaded, total) =
-                (downloaded as f32 / MB, total.map(|total| total as f32 / MB));
-            ui.label("Downloading Chromium…");
+            let (downloaded, total) = (
+                *downloaded as f32 / MB,
+                total.map(|total| total as f32 / MB),
+            );
+            ui.label("Downloading Chromium (CEF)…");
             if let Some(total) = total.filter(|total| 0.0 < *total) {
                 let text = format!("{downloaded:.0} of {total:.0} MB");
                 ui.add(
@@ -565,20 +635,18 @@ fn missing_cef_ui(ui: &mut Ui, rect: egui::Rect) {
         CefStatus::InstallFailed(err) => {
             ui.colored_label(
                 ui.visuals().error_fg_color,
-                format!("Installing Chromium failed: {err}"),
+                format!("Installing Chromium (CEF) failed: {err}"),
             );
-            install_button(&mut ui, "Try again");
+            install_button(ui, "Try again");
         }
-        // The page is created after this pass.
-        CefStatus::Installed => {
-            ui.spinner();
-        }
+        CefStatus::Installed => {}
         // `CefStatus` is non-exhaustive for apps, so the fallback arm covers `NotInstalled`.
         _ => {
-            ui.label("This page needs Chromium (CEF), which isn't installed.");
-            install_button(&mut ui, "Download Chromium");
+            ui.label("The webview needs Chromium (CEF), which isn't installed.");
+            install_button(ui, "Download Chromium");
         }
     }
+    status
 }
 
 /// A button that starts the CEF download, if this build can download.
@@ -994,6 +1062,22 @@ mod tests {
             show(ui, "b");
         });
         assert_eq!(harness.log(), ["create https://b.example/"]);
+    }
+
+    #[test]
+    fn a_page_that_cannot_be_created_says_why() {
+        let mut harness = Harness::new(true);
+        let failed = Cell::new(false);
+        for _ in 0..2 {
+            harness.frame(vec![], |ui| {
+                let response = show(ui, "a");
+                failed.set(matches!(
+                    response.error.as_deref(),
+                    Some(Error::Unsupported)
+                ));
+            });
+        }
+        assert!(failed.get());
     }
 
     #[test]

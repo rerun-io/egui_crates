@@ -87,6 +87,31 @@ pub struct WebViewResponse {
     /// The response for the page's rect. [`Response::has_focus`] is `true` while the page has
     /// the keyboard focus.
     pub response: Response,
+
+    /// Why there is no page, if [`crate::WebView::show`] couldn't create it. The rect is still
+    /// reserved, so you can show something of your own in it.
+    ///
+    /// [`Error::CefNotInstalled`] means CEF's files are missing. Always `None` from
+    /// [`WebViewInstance::ui`], because a [`WebViewInstance`] has its page.
+    pub error: Option<Arc<Error>>,
+}
+
+/// Whether [`WebViewInstance::new`] and [`crate::WebView`] show their pages with CEF.
+///
+/// That depends on the platform and on the `EGUI_WEBVIEW_BACKEND` environment variable. It
+/// is always `false` without the `cef` feature.
+///
+/// Use it with `cef_status` to find out whether webviews need a CEF that isn't installed:
+///
+/// ```ignore
+/// let needs_install =
+///     egui_webview::uses_cef() && egui_webview::cef_status() != CefStatus::Installed;
+/// ```
+///
+/// On a platform with a system webview, `cef_status` alone would say that CEF is missing,
+/// although no webview needs it.
+pub fn uses_cef() -> bool {
+    cfg!(cef_backend) && DefaultBackend::pick() == DefaultBackend::Cef
 }
 
 /// The backends that [`WebViewInstance::new`] chooses from.
@@ -126,8 +151,11 @@ impl DefaultBackend {
     }
 
     /// The backend that [`WebViewInstance::new`] uses.
+    ///
+    /// The environment is read once, so that an app can ask in every frame.
     fn pick() -> Self {
-        Self::from_env().unwrap_or(Self::FOR_TARGET)
+        static PICKED: std::sync::OnceLock<DefaultBackend> = std::sync::OnceLock::new();
+        *PICKED.get_or_init(|| Self::from_env().unwrap_or(Self::FOR_TARGET))
     }
 }
 
@@ -148,8 +176,9 @@ impl WebViewInstance {
     /// `id` must be unique in `ctx`: it is the id of both the widget and its embedded view.
     ///
     /// # Errors
-    /// [`Error::NoRuntime`] natively without a running [`crate::Runtime`], [`Error::Unsupported`] if no
-    /// backend supports this platform or the window of `embedded_views`, and
+    /// [`Error::NoRuntime`] natively without a running [`crate::Runtime`],
+    /// [`Error::Unsupported`] if no backend supports this platform or the window of
+    /// `embedded_views`, [`Error::CefNotInstalled`] as with `Self::new_cef`, and
     /// [`Error::Backend`] if the backend fails to create the page.
     pub fn new(
         ctx: &Context,
@@ -206,8 +235,13 @@ impl WebViewInstance {
     /// `id` must be unique in `ctx`.
     ///
     /// # Errors
-    /// [`Error::NoRuntime`] without a running [`crate::Runtime`], and [`Error::Backend`] if CEF
-    /// fails to initialize or to create the browser.
+    /// [`Error::NoRuntime`] without a running [`crate::Runtime`].
+    ///
+    /// [`Error::CefNotInstalled`] if CEF's files aren't on this machine. Show
+    /// `egui_webview::cef_install_ui` or a UI of your own, and call this again once
+    /// `egui_webview::cef_status` is `CefStatus::Installed`.
+    ///
+    /// [`Error::Backend`] if CEF fails to initialize or to create the browser.
     #[cfg(cef_backend)]
     pub fn new_cef(
         ctx: &Context,
@@ -367,6 +401,7 @@ impl WebViewInstance {
         WebViewResponse {
             events,
             response: shown.response,
+            error: None,
         }
     }
 

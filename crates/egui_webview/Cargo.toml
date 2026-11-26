@@ -113,3 +113,7 @@ required-features = ["cef"]
 [[example]]
 name = "resize_bench"
 required-features = ["cef"]
+
+[[example]]
+name = "cef_install"
+required-features = ["cef"]
