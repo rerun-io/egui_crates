@@ -53,7 +53,7 @@ itertools = "0.15.0"
 js-sys = "0.3.107"
 log = { version = "0.4.35", features = ["std"] }
 parking_lot = "0.12.5"
-ron = "0.12.2"
+ron = "0.12.3"
 rmcp = { version = "3.9", features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
