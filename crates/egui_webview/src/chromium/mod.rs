@@ -132,17 +132,43 @@ pub struct CefBackend {
     /// The view's size in points and the pixels per point that the browser was last told.
     told_size: Option<(Vec2, f32)>,
 
-    /// The fixed rate requested by the caller, if any.
-    frame_rate: Option<u32>,
-
-    /// The frame rate the browser was last told, including the resize boost.
-    told_frame_rate: i32,
-
-    /// When the browser was last resized, while it still paints at [`RESIZE_FRAME_RATE`].
-    resized_at: Option<Instant>,
+    frame_rate: FrameRate,
 
     // Drop after the browser and its callbacks have released their CEF references.
     _runtime: crate::ShutdownGuard,
+}
+
+/// The frame rate of a [`CefBackend`]'s browser.
+#[derive(Debug)]
+struct FrameRate {
+    /// The fixed rate requested by the caller, if any.
+    requested: Option<u32>,
+
+    /// The frame rate the browser was last told, including the resize boost.
+    told: i32,
+
+    /// When the browser was last resized, while it still paints at [`RESIZE_FRAME_RATE`].
+    resized_at: Option<Instant>,
+}
+
+impl FrameRate {
+    /// Tells `host` the frame rate it should have now, if it changed.
+    fn update(&mut self, ctx: &egui::Context, host: &cef::BrowserHost) {
+        let mut frame_rate = page_frame_rate(ctx, self.requested);
+        if let Some(resized_at) = self.resized_at {
+            let left = RESIZE_FRAME_RATE_DURATION.saturating_sub(resized_at.elapsed());
+            if left.is_zero() {
+                self.resized_at = None;
+            } else {
+                frame_rate = frame_rate.max(RESIZE_FRAME_RATE);
+                ctx.request_repaint_after(left);
+            }
+        }
+        if self.told != frame_rate {
+            host.set_windowless_frame_rate(frame_rate);
+            self.told = frame_rate;
+        }
+    }
 }
 
 impl std::fmt::Debug for CefBackend {
@@ -154,8 +180,6 @@ impl std::fmt::Debug for CefBackend {
             .field("hidden", &self.hidden)
             .field("told_size", &self.told_size)
             .field("frame_rate", &self.frame_rate)
-            .field("told_frame_rate", &self.told_frame_rate)
-            .field("resized_at", &self.resized_at)
             .finish_non_exhaustive()
     }
 }
@@ -206,9 +230,11 @@ impl CefBackend {
             input: input::Input::default(),
             hidden: false,
             told_size: None,
-            frame_rate: options.frame_rate,
-            told_frame_rate: frame_rate,
-            resized_at: None,
+            frame_rate: FrameRate {
+                requested: options.frame_rate,
+                told: frame_rate,
+                resized_at: None,
+            },
             _runtime: runtime,
         })
     }
@@ -521,24 +547,11 @@ impl Backend for CefBackend {
                 }
                 host.was_resized();
                 self.told_size = Some(size);
-                self.resized_at = Some(Instant::now());
+                self.frame_rate.resized_at = Some(Instant::now());
             }
         }
 
-        let mut frame_rate = page_frame_rate(ctx, self.frame_rate);
-        if let Some(resized_at) = self.resized_at {
-            let left = RESIZE_FRAME_RATE_DURATION.saturating_sub(resized_at.elapsed());
-            if left.is_zero() {
-                self.resized_at = None;
-            } else {
-                frame_rate = frame_rate.max(RESIZE_FRAME_RATE);
-                ctx.request_repaint_after(left);
-            }
-        }
-        if self.told_frame_rate != frame_rate {
-            host.set_windowless_frame_rate(frame_rate);
-            self.told_frame_rate = frame_rate;
-        }
+        self.frame_rate.update(ctx, &host);
 
         if inbox.release_pointer {
             self.input.release(&host);
