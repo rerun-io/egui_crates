@@ -104,7 +104,7 @@ fn source(url: &str) -> WebViewSource {
     } else {
         url.parse().map_or_else(
             |err| WebViewSource::Html(format!("Invalid URL {url:?}: {err}")),
-            WebViewSource::Url,
+            WebViewSource::url,
         )
     }
 }
@@ -129,7 +129,7 @@ impl Browser {
                 .map_err(|err| format!("No webview: {err}"))?;
         webview.set_page_style(ctx, style);
         let url = match source {
-            WebViewSource::Url(url) => url.to_string(),
+            WebViewSource::Url { url, .. } => url.to_string(),
             WebViewSource::Html(_) => String::new(),
         };
         Ok(Self { name, webview, url })
@@ -227,7 +227,7 @@ impl Browser {
                 WebViewEvent::NewWindowRequested { url, user_gesture } => {
                     // Open the page here, unless it is a popup that no click asked for.
                     if user_gesture {
-                        report(log, self.webview.load(&WebViewSource::Url(url.clone())));
+                        report(log, self.webview.load_url(url.clone()));
                     }
                     format!("New window requested: {}", short_url(&url))
                 }

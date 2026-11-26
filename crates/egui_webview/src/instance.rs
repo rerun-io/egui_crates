@@ -353,12 +353,12 @@ impl WebViewInstance {
         self.backend.load(source)
     }
 
-    /// Loads the page at `url`.
+    /// Loads the page at `url`, with the least trust: [`crate::UrlTrust::Isolated`].
     ///
     /// # Errors
     /// See [`Self::load`].
     pub fn load_url(&mut self, url: Url) -> Result<(), Error> {
-        self.load(&WebViewSource::Url(url))
+        self.load(&WebViewSource::url(url))
     }
 
     /// Runs `script` in the page.
