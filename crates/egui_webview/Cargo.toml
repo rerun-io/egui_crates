@@ -28,7 +28,7 @@ features = ["cef", "cef/dox"]
 default = []
 
 ## Render pages off screen with CEF (Chromium) into egui textures. `WebViewInstance::new` uses it
-## on platforms without a system webview, such as Linux, and when `EGUI_WEBVIEW_BACKEND=cef`.
+## on every native platform.
 ## The build downloads CEF (about 1 GB), and on Windows and macOS requires CMake and Ninja.
 cef = ["dep:base64", "dep:cef", "dep:tempfile", "dep:winit"]
 

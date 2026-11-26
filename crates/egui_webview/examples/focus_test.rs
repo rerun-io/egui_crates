@@ -7,7 +7,7 @@
 //! Prints `PASS` and exits with code 0 if the focus is as expected after every step.
 //!
 //! ```sh
-//! EGUI_WEBVIEW_BACKEND=cef cargo run -p egui_webview --features cef --example focus_test
+//! cargo run -p egui_webview --features cef --example focus_test
 //! ```
 
 #![expect(clippy::print_stdout)] // A test.
@@ -198,9 +198,7 @@ cfg_select! {
     _ => {
         fn main() -> eframe::Result {
             let _guard = egui_webview::init();
-            let cef = cfg!(feature = "cef")
-                && (cfg!(target_os = "linux")
-                    || std::env::var("EGUI_WEBVIEW_BACKEND").is_ok_and(|backend| backend == "cef"));
+            let cef = cfg!(feature = "cef");
 
             let options = eframe::NativeOptions {
                 viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]),

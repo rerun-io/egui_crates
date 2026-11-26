@@ -103,13 +103,9 @@ impl DefaultBackend {
     /// The environment variable that overrides [`Self::FOR_TARGET`] at run time.
     const ENV_VAR: &str = "EGUI_WEBVIEW_BACKEND";
 
-    /// The backend of the target platform, chosen at compile time: CEF where there is no system
-    /// webview.
-    const FOR_TARGET: Self = if cfg!(any(
-        target_arch = "wasm32",
-        target_os = "macos",
-        target_os = "windows"
-    )) {
+    /// The backend of the target platform, chosen at compile time: the `<iframe>` on the web,
+    /// and CEF natively.
+    const FOR_TARGET: Self = if cfg!(target_arch = "wasm32") {
         Self::Embedded
     } else {
         Self::Cef
@@ -141,8 +137,7 @@ impl WebViewInstance {
     ///
     /// The target platform decides the backend at compile time:
     /// - On the web: an `<iframe>` below egui's canvas.
-    /// - On platforms without a system webview, such as Linux: CEF, as with `Self::new_cef`.
-    ///   This requires the `cef` feature.
+    /// - Natively: CEF, as with `Self::new_cef`. This requires the `cef` feature.
     ///
     /// Setting the `EGUI_WEBVIEW_BACKEND` environment variable to `cef` overrides that choice
     /// at run time.
@@ -191,8 +186,8 @@ impl WebViewInstance {
 
     /// The widget of the pages that [`Self::new`] creates, if it is the same for all of them.
     ///
-    /// A page in an embedded view (web, macOS, Windows) needs nothing from the page to reserve
-    /// its rect, so this is known before the page exists. A CEF page has nothing to paint
+    /// A page in an embedded view (the web) needs nothing from the page to reserve its rect, so
+    /// this is known before the page exists. A CEF page has nothing to paint
     /// before it exists.
     pub(crate) fn default_widget() -> Option<Arc<dyn PageWidget>> {
         match DefaultBackend::pick() {
@@ -204,9 +199,8 @@ impl WebViewInstance {
     /// Creates a webview that CEF (Chromium) renders off screen into an egui texture.
     ///
     /// This works with every egui renderer (wgpu on Vulkan, Metal or DX12, or glow) on every
-    /// native platform. [`Self::new`] uses it on platforms without a system webview, such as
-    /// Linux, and when the `EGUI_WEBVIEW_BACKEND` environment variable is `cef`. It requires the
-    /// `cef` feature, and a call to [`crate::init`] first in `main`.
+    /// native platform, and [`Self::new`] uses it there. It requires the `cef` feature, and a
+    /// call to [`crate::init`] first in `main`.
     ///
     /// `id` must be unique in `ctx`.
     ///
