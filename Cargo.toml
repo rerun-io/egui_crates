@@ -36,7 +36,7 @@ egui_inspection = { version = "0.37.0", default-features = false }
 egui_kittest = { version = "0.37.0" }
 
 # `enumn` gives `Role::n`, used to validate a role string against the full AccessKit role set.
-accesskit = { version = "0.25.0", features = ["enumn"] } # Must match the accesskit version egui uses
+accesskit = { version = "0.25.2", features = ["enumn"] } # Must match the accesskit version egui uses
 accesskit_consumer = "0.39.0" # Must match the accesskit version egui uses
 ahash = { version = "0.8.12", default-features = false }
 arboard = { version = "3.6", default-features = false }
