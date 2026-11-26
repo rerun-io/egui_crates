@@ -938,14 +938,11 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
                 ui.set_cursor_icon(egui::CursorIcon::ResizeColumn);
             }
 
-            let stroke = if resize_response.dragged() {
-                ui.style().visuals.widgets.active.bg_stroke
-            } else if resize_hover {
-                ui.style().visuals.widgets.hovered.bg_stroke
-            } else {
-                // ui.visuals().widgets.inactive.bg_stroke
-                ui.visuals().widgets.noninteractive.bg_stroke
-            };
+            let stroke = ui.resize_line_stroke(
+                resize_response.id,
+                egui::HighlightState::new(resize_hover, resize_response.dragged()),
+                ui.visuals().table.resize_stroke,
+            );
 
             ui.painter().vline(x, yrange, stroke);
         }

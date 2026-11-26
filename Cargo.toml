@@ -108,20 +108,22 @@ opt-level = 2
 # `egui_webview` needs egui changes that aren't released yet: `egui::EmbeddedView`,
 # `Response::focused_via`, and a surface that keeps its alpha while a view below egui is shown.
 # Switch to the next egui release once it is out.
-ecolor = { git = "https://github.com/emilk/egui.git", branch = "main" }
-eframe = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui-winit = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_extras = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_glow = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "main" }
-egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "main" }
-emath = { git = "https://github.com/emilk/egui.git", branch = "main" }
-epaint = { git = "https://github.com/emilk/egui.git", branch = "main" }
-epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "main" }
+# `egui_table` needs `egui::style::TableStyle` from https://github.com/emilk/egui/pull/8958.
+# TODO(emilk): switch back to egui `main` once that is merged.
+ecolor = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+eframe = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui-wgpu = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui-winit = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui_demo_lib = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui_extras = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui_glow = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui_inspection = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui_kittest = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+egui_system_font_provider = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+emath = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+epaint = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
+epaint_default_fonts = { git = "https://github.com/emilk/egui.git", branch = "emilk/table-style" }
 
 
 # ----------------------------------------------------------------------------------------
