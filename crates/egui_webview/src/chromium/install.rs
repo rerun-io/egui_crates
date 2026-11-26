@@ -258,22 +258,28 @@ mod download {
             downloaded: 0,
             total,
             reported: 0,
+            ended: false,
             ctx,
         };
 
         let unpacked = unpack(&mut download, dest);
-        // Read what the archive reader left, so that the hash covers the whole file.
-        let rest = std::io::copy(&mut download, &mut std::io::sink());
-        unpacked?;
-        rest.map_err(|err| format!("failed to download CEF from {base}: {err}"))?;
-
-        if total.is_some_and(|total| total != download.downloaded) {
+        if unpacked.is_ok() {
+            // Read what the archive reader left, so that the hash covers the whole file.
+            std::io::copy(&mut download, &mut std::io::sink())
+                .map_err(|err| format!("failed to download CEF from {base}: {err}"))?;
+        }
+        // A download that was cut off also fails to unpack. Say what really happened.
+        if download.ended
+            && let Some(total) = total
+            && download.downloaded < total
+        {
             return Err(format!(
-                "the CEF download from {base} stopped after {} of {} bytes",
-                download.downloaded,
-                total.unwrap_or_default()
+                "the CEF download from {base} stopped after {} of {} MB",
+                download.downloaded / 1_000_000,
+                total / 1_000_000
             ));
         }
+        unpacked?;
         let sha1 = download.sha1.digest().to_string();
         if sha1 != ARCHIVE_SHA1 {
             return Err(format!(
@@ -287,7 +293,7 @@ mod download {
     /// Unpacks the files that CEF needs at run time from the `.tar.bz2` in `archive` into
     /// `dest`.
     fn unpack(archive: &mut impl Read, dest: &Path) -> Result<(), String> {
-        let unpack_error = |err: std::io::Error| format!("failed to unpack CEF: {err}");
+        let unpack_error = |err: std::io::Error| format!("failed to unpack CEF: {}", chain(&err));
         let decoder = bzip2::read::BzDecoder::new(BufReader::new(archive));
         let mut archive = tar::Archive::new(decoder);
         for entry in archive.entries().map_err(unpack_error)? {
@@ -307,14 +313,24 @@ mod download {
                 }
                 // This also sets the file's mode, which CEF's libraries and `chrome-sandbox`
                 // need.
-                entry
-                    .unpack(&path)
-                    .map_err(|err| io_error("unpack", &path, &err))?;
+                entry.unpack(&path).map_err(unpack_error)?;
             }
             // Other kinds of entries, such as links, could point out of `dest`. CEF's
             // archives for Linux and Windows have none.
         }
         Ok(())
+    }
+
+    /// `err` and what caused it. The `tar` crate keeps the cause, such as a full disk, out of
+    /// its own message.
+    fn chain(err: &dyn std::error::Error) -> String {
+        let mut text = err.to_string();
+        let mut source = err.source();
+        while let Some(err) = source {
+            text = format!("{text}: {err}");
+            source = err.source();
+        }
+        text
     }
 
     /// Where the archive's file `path` goes in the folder with CEF's files. `None` for a file
@@ -348,12 +364,16 @@ mod download {
 
         /// The value of `downloaded` when the progress was last reported.
         reported: u64,
+
+        /// Whether the body has ended, or failed.
+        ended: bool,
         ctx: &'a egui::Context,
     }
 
     impl<R: Read> Read for Download<'_, R> {
         fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-            let read = self.body.read(buffer)?;
+            let read = self.body.read(buffer).inspect_err(|_| self.ended = true)?;
+            self.ended |= read == 0 && !buffer.is_empty();
             self.sha1.update(buffer.get(..read).unwrap_or_default());
             self.downloaded += read as u64;
             // Often enough for a smooth progress bar, without a repaint for every packet.

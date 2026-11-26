@@ -546,7 +546,7 @@ fn missing_cef_ui(ui: &mut Ui, rect: egui::Rect) {
     ui.add_space((rect.height() * 0.4 - 24.0).max(0.0));
     match crate::cef_status() {
         CefStatus::Installing { downloaded, total } => {
-            const MB: f32 = 1024.0 * 1024.0;
+            const MB: f32 = 1_000_000.0;
             #[expect(clippy::cast_precision_loss)] // Megabytes for a progress text.
             let (downloaded, total) =
                 (downloaded as f32 / MB, total.map(|total| total as f32 / MB));
