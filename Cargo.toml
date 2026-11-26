@@ -52,7 +52,7 @@ insta = "1.49"
 itertools = "0.15.0"
 js-sys = "0.3.107"
 log = { version = "0.4.35", features = ["std"] }
-parking_lot = "0.12.5"
+parking_lot = "0.12.5" # 0.13 would duplicate the 0.12 that eframe, arboard, and others pull in. Bump once they move.
 ron = "0.12.3"
 rmcp = { version = "3.11", features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2"
