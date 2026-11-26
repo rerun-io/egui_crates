@@ -42,6 +42,7 @@ impl WryPage {
         source: &WebViewSource,
         parent: &impl HasWindowHandle,
     ) -> Result<Self, Error> {
+        profiling::function_scope!();
         let events = Rc::new(RefCell::new(Vec::new()));
         let on_message: ipc::OnMessage = Rc::new({
             let (ctx, events) = (ctx.clone(), Rc::clone(&events));
@@ -66,9 +67,12 @@ impl WryPage {
                     ctx.request_repaint();
                 }
             });
-        let webview = ipc::prepare(builder, &on_message)
-            .build_as_child(parent)
-            .map_err(Error::backend)?;
+        let webview = {
+            profiling::scope!("build_as_child");
+            ipc::prepare(builder, &on_message)
+                .build_as_child(parent)
+                .map_err(Error::backend)?
+        };
         let ipc = ipc::Ipc::new(&webview, on_message);
         let page = Self {
             _ipc: ipc,
@@ -81,6 +85,7 @@ impl WryPage {
     }
 
     pub fn load(&self, source: &WebViewSource) -> Result<(), Error> {
+        profiling::function_scope!();
         check_url(source)?;
         match source {
             // `load_html` makes a history entry that `WebKit` can't go back to.
@@ -93,6 +98,7 @@ impl WryPage {
     }
 
     pub fn evaluate_script(&self, script: &str) -> Result<(), Error> {
+        profiling::function_scope!();
         self.webview.evaluate_script(script).map_err(Error::backend)
     }
 

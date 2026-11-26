@@ -55,6 +55,7 @@ document-features = { workspace = true, optional = true }
 eframe = { workspace = true, default-features = false }
 egui = { workspace = true, default-features = false }
 log.workspace = true
+profiling.workspace = true
 url.workspace = true
 
 [dev-dependencies]

@@ -120,6 +120,7 @@ impl WryBackend {
         source: &WebViewSource,
         window: &impl HasWindowHandle,
     ) -> Result<Self, Error> {
+        profiling::function_scope!();
         let mtm = MainThreadMarker::new()
             .ok_or_else(|| Error::backend("webviews have to be made on the main thread"))?;
         let parent = window_view(window)?;
@@ -246,6 +247,7 @@ impl Backend for WryBackend {
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
+        profiling::function_scope!();
         // `AppKit` places views in window points. One ui point is `zoom` window points.
         let zoom = ctx.zoom_factor();
         self.page.set_zoom(zoom);
@@ -352,6 +354,7 @@ impl Backend for WryBackend {
 
 impl Drop for WryBackend {
     fn drop(&mut self) {
+        profiling::function_scope!();
         // When the first responder is removed from its window, `AppKit` makes the window
         // itself first responder, and winit's view then gets no key events. Give the focus to
         // winit's view first.
