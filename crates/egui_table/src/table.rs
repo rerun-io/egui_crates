@@ -462,35 +462,37 @@ impl Table {
                     }
                 }
 
-                SplitScroll {
-                    scroll_enabled: Vec2b::new(true, true),
-                    fixed_size: sticky_size,
-                    scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
-                    scroll_content_size: Vec2::new(
-                        self.columns[self.num_sticky_cols..]
-                            .iter()
-                            .map(|c| c.current)
-                            .sum(),
-                        self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
-                    ),
-                    stick_to_bottom: self.stick_to_bottom,
-                }
-                .show(
-                    ui,
-                    &mut TableSplitScrollDelegate {
-                        id,
-                        table_delegate,
-                        state: &mut state,
-                        table: &mut self,
-                        col_x,
-                        header_row_y,
-                        max_column_widths: vec![0.0; num_columns],
-                        visible_column_lines: Default::default(),
-                        do_full_sizing_pass,
-                        has_prefetched: false,
-                        egui_ctx: ui.clone(),
-                    },
-                );
+                ui.push_id(id, |ui| {
+                    SplitScroll {
+                        scroll_enabled: Vec2b::new(true, true),
+                        fixed_size: sticky_size,
+                        scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
+                        scroll_content_size: Vec2::new(
+                            self.columns[self.num_sticky_cols..]
+                                .iter()
+                                .map(|c| c.current)
+                                .sum(),
+                            self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
+                        ),
+                        stick_to_bottom: self.stick_to_bottom,
+                    }
+                    .show(
+                        ui,
+                        &mut TableSplitScrollDelegate {
+                            id,
+                            table_delegate,
+                            state: &mut state,
+                            table: &mut self,
+                            col_x,
+                            header_row_y,
+                            max_column_widths: vec![0.0; num_columns],
+                            visible_column_lines: Default::default(),
+                            do_full_sizing_pass,
+                            has_prefetched: false,
+                            egui_ctx: ui.clone(),
+                        },
+                    );
+                });
             })
             .response;
 
