@@ -54,6 +54,18 @@ pub use webviews::{WebView, WebViews};
 
 pub use url::{self, Url};
 
+/// Whether this build has a backend that can show pages.
+///
+/// That is the `<iframe>` backend on the web, and CEF natively with the `cef` feature.
+/// Without a backend, [`WebViewInstance::new`] returns an error.
+pub const fn is_supported() -> bool {
+    cfg_select! {
+        target_arch = "wasm32" => { true }
+        feature = "cef" => { true }
+        _ => { false }
+    }
+}
+
 /// What should the webview load?
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WebViewSource {
