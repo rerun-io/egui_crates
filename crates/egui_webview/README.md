@@ -148,11 +148,15 @@ They are two different things:
 * `CefInitOptions::cef_dir` is your app's folder, set in code. It is searched first, and it is the only place `cef_install` writes to.
 * `CEF_PATH` is an environment variable of the `cef` crate. At build time it says where the build keeps its CEF, instead of in `target`. At run time it is searched last, as a help for development. Without it, the last place searched is the build's own copy in `target`.
 
-So a build on your machine always finds CEF, and nothing is downloaded during normal development. An app on a user's machine has neither, and finds CEF in `cef_dir` or next to the executable.
+When `CEF_PATH` is set, the build's copy in `target` isn't searched. That is how `CEF_PATH=/nonexistent` hides it below.
+
+Both use the same layout: CEF is in `<folder>/<CEF version>/cef_<os>_<arch>`, or directly in the folder. So one folder can be the build's `CEF_PATH` and an app's `cef_dir`.
+
+A build on your machine finds CEF by itself, and nothing is downloaded during normal development. If you built with `CEF_PATH`, set it when you run, too. An app on a user's machine has neither, and finds CEF in `cef_dir` or next to the executable.
 
 #### Trying the download
 
-To see what a user without CEF sees, hide the build's copy:
+To see what a user without CEF sees, hide the build's copy. From the workspace root:
 
 ```sh
 cargo build -p egui_webview --features cef-download --example minimal
@@ -162,8 +166,9 @@ CEF_PATH=/nonexistent target/debug/examples/minimal
 Run the binary itself. With `cargo run`, the `CEF_PATH` would also reach the build of the `cef` crate, which would then try to download CEF to `/nonexistent`.
 
 * Click "Download Chromium", or set `EGUI_WEBVIEW_CEF_INSTALL=1` to start the download without a click. The second is a switch of the examples for tests, not of the library.
-* The files land in the examples' cache folder, such as `~/.cache/egui_webview_examples/cef/156.0.26/cef_linux_x86_64` on Linux. Delete that folder to try again. On Linux, `XDG_CACHE_HOME=/tmp/some_folder` moves the cache folder for one run.
-* `CEF_DOWNLOAD_URL=http://127.0.0.1:9` makes the download fail, to see the error and "Try again". The variable replaces CEF's build server with a mirror of your own, and the `cef` crate reads it at build time too.
+* The files land in the examples' cache folder, such as `~/.cache/egui_webview_examples/cef/156.0.26/cef_linux_x86_64` on Linux. Delete `~/.cache/egui_webview_examples` to try again.
+* On Linux, `XDG_CACHE_HOME=/tmp/some_folder` moves the cache folder for one run. It moves every cache of the process, so fonts and shaders are cached there again, and the first run starts a bit slower.
+* `CEF_DOWNLOAD_URL=http://127.0.0.1:9` makes the download fail, to see the error and "Try again". The variable replaces CEF's build server with a mirror of your own. Only set it when you run the binary. The `cef` crate reads it at build time too.
 * `cargo test -p egui_webview --features cef-download --lib -- --ignored install` runs the download and install into a temporary folder, without a window.
 
 ### Sandbox
