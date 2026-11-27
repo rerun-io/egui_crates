@@ -12,7 +12,6 @@ pub struct TableDemo {
     auto_size_mode: egui_table::AutoSizeMode,
     top_row_height: f32,
     row_height: f32,
-    striped: bool,
     highlight_hovered_row: bool,
     is_row_expanded: BTreeMap<u64, bool>,
     selected_rows: BTreeSet<u64>,
@@ -31,7 +30,6 @@ impl Default for TableDemo {
             auto_size_mode: egui_table::AutoSizeMode::default(),
             top_row_height: 24.0,
             row_height: 18.0,
-            striped: true,
             highlight_hovered_row: true,
             is_row_expanded: Default::default(),
             selected_rows: Default::default(),
@@ -242,7 +240,6 @@ impl TableDemo {
                 egui_table::HeaderRow::new(self.top_row_height),
             ])
             .auto_size_mode(self.auto_size_mode)
-            .striped(self.striped)
             .highlight_hovered_row(self.highlight_hovered_row);
 
         if let Some(column) = scroll_to.column {
@@ -263,7 +260,6 @@ impl TableDemo {
         egui::CollapsingHeader::new("Rows")
             .default_open(true)
             .show(ui, |ui| {
-                ui.checkbox(&mut self.striped, "Striped");
                 ui.checkbox(&mut self.highlight_hovered_row, "Highlight hovered row");
                 ui.horizontal(|ui| {
                     ui.label(format!("{} selected", self.selected_rows.len()));

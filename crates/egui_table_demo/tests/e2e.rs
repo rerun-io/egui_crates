@@ -46,6 +46,7 @@ pub fn table_style_snapshot() {
         .with_pixels_per_point(2.0)
         .build_ui(|ui| {
             let table = &mut ui.visuals_mut().table;
+            table.striped = true;
             table.header_fill = Color32::from_rgb(40, 40, 80);
             table.selected_row_fill = Color32::from_rgb(0, 80, 0);
             table.outer_stroke = Stroke::new(1.0, Color32::RED);
@@ -60,7 +61,6 @@ pub fn table_style_snapshot() {
                     .num_rows(4)
                     .columns(vec![egui_table::Column::new(50.0).resizable(false); 3])
                     .headers([egui_table::HeaderRow::new(20.0)])
-                    .striped(true)
                     .show(ui, &mut Delegate);
             });
         });
