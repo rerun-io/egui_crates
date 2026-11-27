@@ -48,7 +48,7 @@ pub fn table_style_snapshot() {
             let table = &mut ui.visuals_mut().table;
             table.striped = true;
             table.header_fill = Color32::from_rgb(40, 40, 80);
-            table.selected_row_fill = Color32::from_rgb(0, 80, 0);
+            table.selected_row_fill = Some(Color32::from_rgb(0, 80, 0));
             table.outer_stroke = Stroke::new(1.0, Color32::RED);
             table.corner_radius = CornerRadius::same(4);
             table.header_stroke = Stroke::new(1.0, Color32::YELLOW);
@@ -155,4 +155,55 @@ pub fn double_click_resize_line_auto_sizes_column() {
         after < 50.0,
         "double-click should shrink the column to fit: {before} -> {after}"
     );
+}
+
+/// A styled table with a sticky column, scrolled sideways.
+///
+/// The line on the edge of the sticky column stays, and the corners stay rounded.
+#[test]
+pub fn table_style_scrolled_snapshot() {
+    use egui::{Color32, CornerRadius, Stroke};
+
+    struct Delegate;
+
+    impl egui_table::TableDelegate for Delegate {
+        fn header_cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::HeaderCellInfo) {
+            ui.strong(format!("Col {}", cell.group_index));
+        }
+
+        fn cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::CellInfo) {
+            ui.label(format!("{}, {}", cell.row_nr, cell.col_nr));
+        }
+    }
+
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(220.0, 140.0))
+        .with_pixels_per_point(2.0)
+        .build_ui({
+            let mut first_frame = true;
+            move |ui| {
+                let table = &mut ui.visuals_mut().table;
+                table.striped = true;
+                table.header_fill = Color32::from_rgb(40, 40, 80);
+                table.outer_stroke = Stroke::new(1.0, Color32::RED);
+                table.corner_radius = CornerRadius::same(6);
+                table.header_stroke = Stroke::new(1.0, Color32::YELLOW);
+                table.column_stroke = Stroke::new(1.0, Color32::LIGHT_BLUE);
+
+                egui::Frame::new().inner_margin(8).show(ui, |ui| {
+                    let mut table = egui_table::Table::new()
+                        .num_rows(4)
+                        .num_sticky_cols(1)
+                        .columns(vec![egui_table::Column::new(60.0).resizable(false); 6])
+                        .headers([egui_table::HeaderRow::new(20.0)]);
+                    if first_frame {
+                        table = table.scroll_to_column(5, Some(egui::Align::Max));
+                        first_frame = false;
+                    }
+                    table.show(ui, &mut Delegate);
+                });
+            }
+        });
+    harness.run();
+    harness.snapshot("table_style_scrolled");
 }

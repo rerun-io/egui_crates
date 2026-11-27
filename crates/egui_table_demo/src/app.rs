@@ -17,8 +17,7 @@ pub struct DemoApp {
 impl DemoApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        cc.egui_ctx
-            .all_styles_mut(|style| style.visuals.table.striped = true);
+        crate::table_demo::set_table_style(&cc.egui_ctx, crate::table_demo::demo_table_style());
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.

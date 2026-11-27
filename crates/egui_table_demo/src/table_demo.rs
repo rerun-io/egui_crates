@@ -113,52 +113,44 @@ impl egui_table::TableDelegate for TableDemo {
             ..
         } = cell_inf;
 
-        #[expect(clippy::collapsible_else_if)]
         if *row_nr == 0 {
             if 0 < col_range.start {
-                // Our special grouped column.
-                let sticky = true;
+                // Our special grouped column, with its title kept in view while scrolling:
                 let text = format!("This is group {group_index}");
-                if sticky {
-                    let font_id = egui::TextStyle::Heading.resolve(ui.style());
-                    let text_color = ui.visuals().text_color();
-                    let galley = ui
-                        .painter()
-                        .layout(text, font_id, text_color, f32::INFINITY);
+                let font_id = egui::TextStyle::Heading.resolve(ui.style());
+                let text_color = ui.visuals().text_color();
+                let galley = ui
+                    .painter()
+                    .layout(text, font_id, text_color, f32::INFINITY);
 
-                    // Put the text leftmost in the clip rect (so it is always visible)
-                    let mut pos = Align2::LEFT_CENTER
-                        .anchor_size(
-                            (ui.clip_rect() - ui.visuals().table.cell_margin).left_center(),
-                            galley.size(),
-                        )
-                        .min;
+                // Put the text leftmost in the clip rect (so it is always visible)
+                let mut pos = Align2::LEFT_CENTER
+                    .anchor_size(
+                        (ui.clip_rect() - ui.visuals().table.cell_margin).left_center(),
+                        galley.size(),
+                    )
+                    .min;
 
-                    // … but not so far to the right that it doesn't fit.
-                    pos.x = pos.x.at_most(ui.max_rect().right() - galley.size().x);
+                // … but not so far to the right that it doesn't fit.
+                pos.x = pos.x.at_most(ui.max_rect().right() - galley.size().x);
 
-                    ui.put(
-                        egui::Rect::from_min_size(pos, galley.size()),
-                        egui::Label::new(galley),
-                    );
-                } else {
-                    ui.heading(text);
-                }
-            }
-        } else {
-            if col_range.start == 0 {
-                egui::Sides::new().height(ui.available_height()).show(
-                    ui,
-                    |ui| {
-                        ui.heading("Row");
-                    },
-                    |ui| {
-                        ui.label("⬇");
-                    },
+                ui.put(
+                    egui::Rect::from_min_size(pos, galley.size()),
+                    egui::Label::new(galley),
                 );
-            } else {
-                ui.heading(format!("Column {group_index}"));
             }
+        } else if col_range.start == 0 {
+            egui::Sides::new().height(ui.available_height()).show(
+                ui,
+                |ui| {
+                    ui.heading("Row");
+                },
+                |ui| {
+                    ui.label("⬇");
+                },
+            );
+        } else {
+            ui.heading(format!("Column {group_index}"));
         }
     }
 
@@ -265,8 +257,9 @@ impl TableDemo {
             .show(ui, |ui| {
                 let mut table_style = ui.visuals().table;
                 table_style.ui(ui);
-                ui.ctx()
-                    .global_style_mut(|style| style.visuals.table = table_style);
+                if table_style != ui.visuals().table {
+                    set_table_style(ui.ctx(), table_style);
+                }
             });
 
         egui::CollapsingHeader::new("Scroll to")
@@ -278,6 +271,7 @@ impl TableDemo {
         ui.horizontal(|ui| {
             if ui.button("Reset settings").clicked() {
                 *self = Self::default();
+                set_table_style(ui.ctx(), demo_table_style());
             }
             if ui.button("Reset state").clicked() {
                 debug_assert!(
@@ -408,4 +402,17 @@ impl TableDemo {
 struct ScrollTo {
     column: Option<usize>,
     row: Option<u64>,
+}
+
+/// The table style the demo starts with.
+pub fn demo_table_style() -> egui::style::TableStyle {
+    egui::style::TableStyle {
+        striped: true,
+        ..Default::default()
+    }
+}
+
+/// Use this table style in both the dark and the light theme.
+pub fn set_table_style(ctx: &Context, table_style: egui::style::TableStyle) {
+    ctx.all_styles_mut(|style| style.visuals.table = table_style);
 }
