@@ -203,9 +203,15 @@ impl eframe::App for App {
         });
 
         if *still {
-            // Wake up to start and to end the measurement.
+            // Wake up to start and to end the measurement. Nothing else may run a pass until
+            // then.
+            let wait = if measured < 0.0 {
+                -measured
+            } else {
+                DURATION - measured
+            };
             ui.ctx()
-                .request_repaint_after(std::time::Duration::from_secs_f32(WARMUP.max(DURATION)));
+                .request_repaint_after(std::time::Duration::from_secs_f32(wait.max(0.0)));
         } else {
             ui.ctx().request_repaint();
         }
