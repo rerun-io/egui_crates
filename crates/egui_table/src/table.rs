@@ -410,10 +410,10 @@ impl Table {
 
         let table_rect = output.inner.inner;
         ui.painter().rect_stroke(
-            table_rect.expand(border_width),
+            table_rect,
             table_style.corner_radius,
             table_style.outer_stroke,
-            egui::StrokeKind::Inside,
+            egui::StrokeKind::Outside,
         );
 
         output.response
