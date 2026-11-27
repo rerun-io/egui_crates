@@ -1,8 +1,9 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use egui::{Align2, Context, Id, Margin, NumExt as _, Sense, Ui, Vec2};
 
 #[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct TableDemo {
     num_columns: usize,
     num_rows: u64,
@@ -11,7 +12,10 @@ pub struct TableDemo {
     auto_size_mode: egui_table::AutoSizeMode,
     top_row_height: f32,
     row_height: f32,
+    striped: bool,
+    highlight_hovered_row: bool,
     is_row_expanded: BTreeMap<u64, bool>,
+    selected_rows: BTreeSet<u64>,
     prefetched: Vec<egui_table::PrefetchInfo>,
 }
 
@@ -27,7 +31,10 @@ impl Default for TableDemo {
             auto_size_mode: egui_table::AutoSizeMode::default(),
             top_row_height: 24.0,
             row_height: 18.0,
+            striped: true,
+            highlight_hovered_row: true,
             is_row_expanded: Default::default(),
+            selected_rows: Default::default(),
             prefetched: vec![],
         }
     }
@@ -164,10 +171,22 @@ impl egui_table::TableDelegate for TableDemo {
     }
 
     // You can use row_ui to add some style or interaction to the entire row.
-    fn row_ui(&mut self, ui: &mut Ui, _row_nr: u64) {
-        if ui.response().interact(Sense::click()).clicked() {
-            // Handle row clicks
+    fn row_ui(&mut self, ui: &mut Ui, row_nr: u64) {
+        let response = ui.response().interact(Sense::click());
+        if response.clicked() {
+            // Click to select a row, and Cmd/Ctrl-click to select several:
+            if ui.input(|i| i.modifiers.command) {
+                if !self.selected_rows.remove(&row_nr) {
+                    self.selected_rows.insert(row_nr);
+                }
+            } else {
+                self.selected_rows = BTreeSet::from([row_nr]);
+            }
         }
+    }
+
+    fn is_row_selected(&self, row_nr: u64) -> bool {
+        self.selected_rows.contains(&row_nr)
     }
 
     fn cell_ui(&mut self, ui: &mut egui::Ui, cell_info: &egui_table::CellInfo) {
@@ -196,9 +215,114 @@ impl egui_table::TableDelegate for TableDemo {
 
 impl TableDemo {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::Grid::new("settings").show(ui, |ui| {
+        let id_salt = egui::IdSalt::new("table_demo");
+        let state_id = egui_table::Table::new().id_salt(id_salt).get_id(ui); // Note: must be here (in the correct outer `ui` scope) to be correct.
+
+        let mut scroll_to = ScrollTo::default();
+
+        egui::Panel::left("table_demo_settings")
+            .resizable(true)
+            .default_size(300.0)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    self.settings_ui(ui, state_id, &mut scroll_to);
+                });
+            });
+
+        let mut table = egui_table::Table::new()
+            .id_salt(id_salt)
+            .num_rows(self.num_rows)
+            .columns(vec![self.default_column; self.num_columns])
+            .num_sticky_cols(self.num_sticky_cols)
+            .headers([
+                egui_table::HeaderRow {
+                    height: self.top_row_height,
+                    groups: vec![0..1, 1..4, 4..8, 8..12],
+                },
+                egui_table::HeaderRow::new(self.top_row_height),
+            ])
+            .auto_size_mode(self.auto_size_mode)
+            .striped(self.striped)
+            .highlight_hovered_row(self.highlight_hovered_row);
+
+        if let Some(column) = scroll_to.column {
+            table = table.scroll_to_column(column, None);
+        }
+        if let Some(row) = scroll_to.row {
+            table = table.scroll_to_row(row, None);
+        }
+
+        table.show(ui, self);
+    }
+
+    fn settings_ui(&mut self, ui: &mut egui::Ui, state_id: Id, scroll_to: &mut ScrollTo) {
+        egui::CollapsingHeader::new("Layout")
+            .default_open(true)
+            .show(ui, |ui| self.layout_ui(ui));
+
+        egui::CollapsingHeader::new("Rows")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.checkbox(&mut self.striped, "Striped");
+                ui.checkbox(&mut self.highlight_hovered_row, "Highlight hovered row");
+                ui.horizontal(|ui| {
+                    ui.label(format!("{} selected", self.selected_rows.len()));
+                    if ui.button("Clear").clicked() {
+                        self.selected_rows.clear();
+                    }
+                });
+                ui.weak("Click a row to select it, and Cmd/Ctrl-click to select several.");
+            });
+
+        egui::CollapsingHeader::new("Style")
+            .default_open(true)
+            .show(ui, |ui| {
+                let mut table_style = ui.visuals().table;
+                table_style.ui(ui);
+                ui.ctx()
+                    .global_style_mut(|style| style.visuals.table = table_style);
+            });
+
+        egui::CollapsingHeader::new("Scroll to")
+            .default_open(true)
+            .show(ui, |ui| self.scroll_to_ui(ui, scroll_to));
+
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            if ui.button("Reset settings").clicked() {
+                *self = Self::default();
+            }
+            if ui.button("Reset state").clicked() {
+                debug_assert!(
+                    egui_table::TableState::load(ui, state_id).is_some(),
+                    "Wrong state_id"
+                );
+                egui_table::TableState::reset(ui, state_id);
+            }
+        });
+
+        for info in &self.prefetched {
+            ui.weak(format!(
+                "Visible columns {}..{}, rows {}..{}",
+                info.visible_columns.start,
+                info.visible_columns.end,
+                info.visible_rows.start,
+                info.visible_rows.end
+            ));
+        }
+        self.prefetched.clear();
+    }
+
+    fn layout_ui(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("layout").num_columns(2).show(ui, |ui| {
             let label = ui.label("Columns");
             ui.add(egui::DragValue::new(&mut self.num_columns).range(12..=usize::MAX))
+                .labelled_by(label.id);
+            ui.end_row();
+
+            let label = ui.label("Sticky columns");
+            ui.add(egui::DragValue::new(&mut self.num_sticky_cols))
                 .labelled_by(label.id);
             ui.end_row();
 
@@ -212,22 +336,17 @@ impl TableDemo {
             .labelled_by(label.id);
             ui.end_row();
 
-            let label = ui.label("Height of top row");
+            let label = ui.label("Header row height");
             ui.add(egui::DragValue::new(&mut self.top_row_height).range(0.0..=100.0))
                 .labelled_by(label.id);
             ui.end_row();
 
-            let label = ui.label("Height of other rows");
+            let label = ui.label("Row height");
             ui.add(egui::DragValue::new(&mut self.row_height).range(0.0..=100.0))
                 .labelled_by(label.id);
             ui.end_row();
 
-            let label = ui.label("Sticky columns");
-            ui.add(egui::DragValue::new(&mut self.num_sticky_cols))
-                .labelled_by(label.id);
-            ui.end_row();
-
-            let label = ui.label("Default column width");
+            let label = ui.label("Column width");
             ui.add(egui::DragValue::new(&mut self.default_column.current))
                 .labelled_by(label.id);
             ui.end_row();
@@ -243,132 +362,64 @@ impl TableDemo {
             });
             ui.end_row();
 
-            ui.label("Auto-size mode");
+            let label = ui.label("Auto-size columns");
+            egui::ComboBox::from_id_salt("auto_size_mode")
+                .selected_text(format!("{:?}", self.auto_size_mode))
+                .show_ui(ui, |ui| {
+                    for mode in [
+                        egui_table::AutoSizeMode::Never,
+                        egui_table::AutoSizeMode::Always,
+                        egui_table::AutoSizeMode::OnParentResize,
+                    ] {
+                        ui.selectable_value(&mut self.auto_size_mode, mode, format!("{mode:?}"));
+                    }
+                })
+                .response
+                .labelled_by(label.id);
+            ui.end_row();
+        });
+    }
+
+    fn scroll_to_ui(&self, ui: &mut egui::Ui, scroll_to: &mut ScrollTo) {
+        let first_col = self.num_sticky_cols;
+        let last_col = self.num_columns.saturating_sub(1);
+        let last_row = self.num_rows.saturating_sub(1);
+
+        egui::Grid::new("scroll_to").num_columns(2).show(ui, |ui| {
+            ui.label("Column");
             ui.horizontal(|ui| {
-                ui.radio_value(
-                    &mut self.auto_size_mode,
-                    egui_table::AutoSizeMode::Never,
-                    "Never",
-                );
-                ui.radio_value(
-                    &mut self.auto_size_mode,
-                    egui_table::AutoSizeMode::Always,
-                    "Always",
-                );
-                ui.radio_value(
-                    &mut self.auto_size_mode,
-                    egui_table::AutoSizeMode::OnParentResize,
-                    "OnParentResize",
-                );
+                if ui.button("First").clicked() {
+                    scroll_to.column = Some(first_col);
+                }
+                if ui.button("Middle").clicked() {
+                    scroll_to.column = Some(usize::midpoint(first_col, last_col));
+                }
+                if ui.button("Last").clicked() {
+                    scroll_to.column = Some(last_col);
+                }
+            });
+            ui.end_row();
+
+            ui.label("Row");
+            ui.horizontal(|ui| {
+                if ui.button("First").clicked() {
+                    scroll_to.row = Some(0);
+                }
+                if ui.button("Middle").clicked() {
+                    scroll_to.row = Some(last_row / 2);
+                }
+                if ui.button("Last").clicked() {
+                    scroll_to.row = Some(last_row);
+                }
             });
             ui.end_row();
         });
-
-        let id_salt = egui::IdSalt::new("table_demo");
-        let state_id = egui_table::Table::new().id_salt(id_salt).get_id(ui); // Note: must be here (in the correct outer `ui` scope) to be correct.
-
-        ui.horizontal(|ui| {
-            if ui.button("Reset settings").clicked() {
-                *self = Self::default();
-            }
-            if ui.button("Reset state").clicked() {
-                debug_assert!(
-                    egui_table::TableState::load(ui, state_id).is_some(),
-                    "Wrong state_id"
-                );
-                egui_table::TableState::reset(ui, state_id);
-            }
-        });
-
-        ui.separator();
-
-        ui.horizontal(|ui| {
-            for info in &self.prefetched {
-                ui.label("Visible columns:");
-                ui.label(format!(
-                    "{}..{}",
-                    info.visible_columns.start, info.visible_columns.end
-                ));
-
-                ui.label("rows:");
-                ui.label(format!(
-                    "{}..{}",
-                    info.visible_rows.start, info.visible_rows.end
-                ));
-            }
-            self.prefetched.clear();
-        });
-
-        let first_scrollable_col = self.num_sticky_cols;
-        let last_col = self.num_columns.saturating_sub(1);
-        let mid_col = usize::midpoint(first_scrollable_col, last_col);
-        let mut scroll_to_column = None;
-        ui.horizontal(|ui| {
-            ui.label("Scroll horizontally to…");
-            if ui.button("left").clicked() {
-                scroll_to_column = Some(first_scrollable_col);
-            }
-            if ui.button("middle").clicked() {
-                scroll_to_column = Some(mid_col);
-            }
-            if ui.button("right").clicked() {
-                scroll_to_column = Some(last_col);
-            }
-            if ui.button(format!("column {mid_col}")).clicked() {
-                scroll_to_column = Some(mid_col);
-            }
-        });
-
-        let mut scroll_to_row = None;
-        ui.horizontal(|ui| {
-            ui.label("Scroll vertically to…");
-            if ui.button("top").clicked() {
-                scroll_to_row = Some(0);
-            }
-            if ui.button("middle").clicked() {
-                scroll_to_row = Some(self.num_rows / 2);
-            }
-            if ui.button("bottom").clicked() {
-                scroll_to_row = Some(self.num_rows.saturating_sub(1));
-            }
-            let mid_row = self.num_rows / 2;
-            if ui.button(format!("row {mid_row}")).clicked() {
-                scroll_to_row = Some(mid_row);
-            }
-        });
-
-        ui.collapsing("Table style", |ui| {
-            let mut table_style = ui.visuals().table;
-            table_style.ui(ui);
-            ui.ctx()
-                .global_style_mut(|style| style.visuals.table = table_style);
-        });
-
-        ui.separator();
-
-        let mut table = egui_table::Table::new()
-            .id_salt(id_salt)
-            .num_rows(self.num_rows)
-            .columns(vec![self.default_column; self.num_columns])
-            .num_sticky_cols(self.num_sticky_cols)
-            .headers([
-                egui_table::HeaderRow {
-                    height: self.top_row_height,
-                    groups: vec![0..1, 1..4, 4..8, 8..12],
-                },
-                egui_table::HeaderRow::new(self.top_row_height),
-            ])
-            .auto_size_mode(self.auto_size_mode)
-            .striped(true)
-            .highlight_hovered_row(true);
-
-        if let Some(scroll_to_column) = scroll_to_column {
-            table = table.scroll_to_column(scroll_to_column, None);
-        }
-        if let Some(scroll_to_row) = scroll_to_row {
-            table = table.scroll_to_row(scroll_to_row, None);
-        }
-
-        table.show(ui, self);
     }
+}
+
+/// Where the user asked the table to scroll to this frame.
+#[derive(Default)]
+struct ScrollTo {
+    column: Option<usize>,
+    row: Option<u64>,
 }
