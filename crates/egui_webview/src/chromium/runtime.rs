@@ -586,12 +586,27 @@ wrap_app! {
             if cfg!(target_os = "macos") && self.ephemeral_profile {
                 command_line.append_switch(Some(&"use-mock-keychain".into()));
             }
-            // Pick the Ozone platform of the session, unless the command line picks one.
+            // Pick the Ozone platform, unless the command line picks one.
             #[cfg(target_os = "linux")]
             if command_line.has_switch(Some(&"ozone-platform".into())) == 0 {
-                // Like winit, take an empty `WAYLAND_DISPLAY` as not set.
-                let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|name| !name.is_empty());
-                let platform = if wayland {
+                // Like winit, take an empty variable as not set.
+                let is_set =
+                    |name: &str| std::env::var_os(name).is_some_and(|value| !value.is_empty());
+                // Use X11 when there is an X server, also in a Wayland session, where it is
+                // XWayland.
+                //
+                // Wayland only lets the focused app use the clipboard. CEF has its own
+                // connection to the compositor, and without a window it never has focus. So a
+                // copy in a page never reaches other apps, and a paste gets the page's own last
+                // copy. Over X11 both work.
+                //
+                // The page is drawn and gets its input through us, not through that connection.
+                //
+                // TODO(lucasmerlin): use Wayland again when CEF can share the app's Wayland
+                // connection:
+                // https://github.com/chromiumembedded/cef/issues/4341
+                // https://github.com/chromiumembedded/cef/pull/4233
+                let platform = if !is_set("DISPLAY") && is_set("WAYLAND_DISPLAY") {
                     "wayland"
                 } else {
                     "x11"
