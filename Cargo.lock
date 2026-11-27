@@ -1730,6 +1730,7 @@ dependencies = [
  "js-sys",
  "log",
  "tempfile",
+ "thiserror 2.0.21",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",

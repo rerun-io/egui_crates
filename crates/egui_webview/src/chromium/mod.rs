@@ -17,6 +17,7 @@
 #![allow(clippy::transmute_ptr_to_ptr)] // Triggered by what the cef-rs `wrap_*` macros expand to.
 
 mod context;
+mod error;
 mod handlers;
 mod input;
 mod keys;
@@ -40,6 +41,7 @@ use crate::{Backend, Error, PageWidget, WebViewEvent, WebViewSource};
 use context::Context;
 use handlers::MenuItem;
 
+pub use error::CefError;
 pub use runtime::{CefInitOptions, CefProcess, init, run_subprocess, shutdown};
 
 /// How CEF renders a page. Pass it to [`crate::WebViewInstance::new_cef_with_options`].
@@ -216,7 +218,7 @@ impl CefBackend {
             None,
             None,
         )
-        .ok_or_else(|| Error::backend("CEF failed to create a browser"))?;
+        .ok_or(CefError::CreateBrowser)?;
         // A windowless browser starts out focused. Blur it, so that it has the focus only while
         // egui's focus is on the webview.
         if let Some(host) = browser.host() {
@@ -243,7 +245,7 @@ impl CefBackend {
     fn main_frame(&self) -> Result<cef::Frame, Error> {
         self.browser
             .main_frame()
-            .ok_or_else(|| Error::backend("the CEF browser has no main frame"))
+            .ok_or_else(|| CefError::NoMainFrame.into())
     }
 }
 

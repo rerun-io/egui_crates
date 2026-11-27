@@ -229,7 +229,10 @@ impl IframeBackend {
             Closure::<dyn FnMut()>::new(move || {
                 loaded.set(true);
                 for script in pending_scripts.take() {
-                    warn(run_script(&iframe, &script));
+                    warn(
+                        "run a script that waited for the page to load",
+                        run_script(&iframe, &script),
+                    );
                 }
                 if let Some(url) = reported_url(&url(&iframe)) {
                     events.borrow_mut().push(WebViewEvent::Loaded { url });
@@ -405,15 +408,21 @@ impl Backend for IframeBackend {
     fn reload(&mut self) {
         // A cross-origin page doesn't let the app call `location.reload()`, so load the source
         // again. This discards any navigation within the page since the last `load`.
-        warn(self.load(&self.source.clone()));
+        warn("reload the page", self.load(&self.source.clone()));
     }
 
     fn back(&mut self) {
-        warn(self.evaluate_script("history.back()"));
+        warn(
+            "go back in the page's history",
+            self.evaluate_script("history.back()"),
+        );
     }
 
     fn forward(&mut self) {
-        warn(self.evaluate_script("history.forward()"));
+        warn(
+            "go forward in the page's history",
+            self.evaluate_script("history.forward()"),
+        );
     }
 
     fn place(&mut self, ctx: &Context, output: Option<&EmbeddedViewOutput>) {
@@ -443,6 +452,7 @@ impl Backend for IframeBackend {
         // gets it before `place` runs again.
         self.theme = theme;
         warn(
+            "set the color scheme of the page",
             self.iframe
                 .style()
                 .set_property("color-scheme", color_scheme(theme))

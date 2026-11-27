@@ -47,7 +47,9 @@ mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
 #[cfg(cef_backend)]
-pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess};
+pub use chromium::{
+    CefError, CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess,
+};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use runtime::Runtime;
 pub use webviews::{WebView, WebViews};
@@ -106,6 +108,34 @@ pub enum WebViewEvent {
         url: Url,
     },
 
+    /// A page failed to load, for example because its server can't be reached.
+    ///
+    /// No [`Self::Loaded`] follows. A page that the server answers with an HTTP error status,
+    /// such as 404, still counts as loaded.
+    ///
+    /// Only the CEF backend sends this. On the web, the browser doesn't tell the app whether an
+    /// `<iframe>` loaded its page, so a failed load is reported as [`Self::Loaded`]. That includes
+    /// a page that refuses to be shown in an `<iframe>`.
+    LoadFailed {
+        /// The URL that failed to load.
+        url: Url,
+
+        /// The engine's description of the failure, such as `ERR_NAME_NOT_RESOLVED`.
+        error: String,
+    },
+
+    /// The process that runs the page ended, for example because it crashed or ran out of
+    /// memory.
+    ///
+    /// The page is gone, and its rect stays blank until the app loads a page again, such as
+    /// with [`WebViewInstance::reload`].
+    ///
+    /// Only the CEF backend sends this.
+    Crashed {
+        /// The engine's description of why the process ended.
+        reason: String,
+    },
+
     /// The page asked for a new window, with `window.open` or a link with `target="_blank"`.
     ///
     /// The webview opens no window and doesn't navigate. The app decides what to do, for example
@@ -129,9 +159,11 @@ pub enum WebViewEvent {
 }
 
 /// Logs a warning for a failed call whose error isn't returned to the caller.
-pub(crate) fn warn<E: std::fmt::Display>(result: Result<(), E>) {
+///
+/// `action` says what failed, as in "failed to {action}".
+pub(crate) fn warn<E: std::fmt::Display>(action: impl std::fmt::Display, result: Result<(), E>) {
     if let Err(err) = result {
-        log::warn!("egui_webview: {err}");
+        log::warn!("egui_webview: failed to {action}: {err}");
     }
 }
 
@@ -148,17 +180,28 @@ pub(crate) fn reported_url(url: &str) -> Option<Url> {
 }
 
 /// An error from creating or using a [`WebViewInstance`].
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     /// No [`Runtime`] is running on this thread. Never happens on the web.
+    #[error(
+        "No running egui_webview::Runtime. Create one with `egui_webview::Runtime::new()` first \
+         in `main`, and keep it until `eframe::run_native` returns"
+    )]
     NoRuntime,
 
-    /// No backend supports this platform, or the window handle of [`eframe::EmbeddedViews`] is
-    /// not one the platform's backend can use.
+    /// This build has no backend for this platform, or the window handle of
+    /// [`eframe::EmbeddedViews`] is not one the platform's backend can use.
+    ///
+    /// Natively, the backend is CEF, which needs the `cef` feature. See [`is_supported`].
+    #[error(
+        "This build of `egui_webview` has no backend that can show a page here{}",
+        if is_supported() { "" } else { ". Enable its `cef` feature" }
+    )]
     Unsupported,
 
-    /// The backend reported an error.
+    /// The backend reported an error. For the CEF backend, it is a [`CefError`].
+    #[error(transparent)]
     Backend(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -166,28 +209,5 @@ impl Error {
     /// Wraps `err` in [`Self::Backend`].
     pub fn backend(err: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
         Self::Backend(err.into())
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NoRuntime => write!(
-                f,
-                "No running egui_webview::Runtime. Create one with `egui_webview::Runtime::new()` \
-                 first in `main`, and keep it until `eframe::run_native` returns"
-            ),
-            Self::Unsupported => write!(f, "No webview backend is available on this platform"),
-            Self::Backend(err) => write!(f, "Webview failed: {err}"),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::NoRuntime | Self::Unsupported => None,
-            Self::Backend(err) => Some(err.as_ref()),
-        }
     }
 }

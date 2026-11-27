@@ -193,6 +193,10 @@ impl Browser {
                     }
                     format!("Loaded {}", short_url(&url))
                 }
+                WebViewEvent::LoadFailed { url, error } => {
+                    format!("Failed to load {}: {error}", short_url(&url))
+                }
+                WebViewEvent::Crashed { reason } => format!("The page crashed: {reason}"),
                 WebViewEvent::NewWindowRequested { url, user_gesture } => {
                     // Open the page here, unless it is a popup that no click asked for.
                     if user_gesture {
