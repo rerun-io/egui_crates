@@ -95,16 +95,6 @@ trunk serve --example minimal_instance
 
 When a page asks for a new window (`window.open`, or a link with `target="_blank"`), the CEF backend opens nothing and sends `WebViewEvent::NewWindowRequested` instead. The app decides what to do with the URL, for example load it with `load_url` or open it in the system browser. On the web, the browser handles new windows itself.
 
-### When a page fails
-
-The CEF backend sends `WebViewEvent::LoadFailed` when a page can't be loaded, for example because its server can't be reached, and `WebViewEvent::Crashed` when the process that runs the page ends. After a crash the page's rect stays blank until the app loads a page again.
-
-On the web, the browser doesn't tell the app whether an `<iframe>` loaded its page, so the app gets `WebViewEvent::Loaded` even when the load failed. Many sites also refuse to be shown in an `<iframe>` (with `X-Frame-Options` or a `frame-ancestors` policy), and a page served over `http` doesn't load in an app served over `https`. The browser then shows its own error, or nothing, in the page's rect.
-
-If a page can't be created, `WebView::show` shows the reason in the page's rect, and `WebViewInstance::new` returns it.
-
-### Theme
-
 Every backend gives the page egui's theme as its `prefers-color-scheme`, and updates it when the theme changes.
 So pages that follow the OS theme, such as ones built with Pico CSS or Tailwind's `dark:`, follow the app's theme instead.
 
