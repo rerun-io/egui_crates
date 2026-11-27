@@ -595,6 +595,9 @@ impl<Pane> Tree<Pane> {
     ///
     /// If the insertion index is greater than the current number of children, the tile is appended at the end.
     ///
+    /// For a grid, the insertion index counts the children when `reflow_grid` is `true`,
+    /// and the cells (holes included) when it is `false`.
+    ///
     /// The grid layout needs a special treatment because it can have holes. When dragging a tile away from a grid, it
     /// leaves behind it a hole. As a result, if the tile is the dropped in the same grid, it there is no need to account
     /// for an insertion index shift (the hole can still occupy the original place of the dragged tile). However, if the
@@ -614,9 +617,17 @@ impl<Pane> Tree<Pane> {
     ) {
         // find target container
         if let Some(Tile::Container(target_container)) = self.tiles.get(destination_container) {
-            let num_children = target_container.num_children();
-            if insertion_index > num_children {
-                insertion_index = num_children;
+            if let Container::Grid(grid) = target_container {
+                // A grid can have holes, and `ContainerInsertion::Grid` counts them.
+                // Clamping to the number of children would put the tile before the last
+                // child(ren) instead of at the end.
+                if reflow_grid {
+                    // The caller counts children, as in a list, so skip the holes:
+                    insertion_index = grid.slot_of_nth_child(insertion_index);
+                }
+                // else: the caller counts cells, and `Grid` appends if the index is too large.
+            } else {
+                insertion_index = insertion_index.min(target_container.num_children());
             }
 
             let container_insertion = match target_container.kind() {
