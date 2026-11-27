@@ -58,7 +58,7 @@ pub fn table_style_snapshot() {
             egui::Frame::new().inner_margin(8).show(ui, |ui| {
                 egui_table::Table::new()
                     .num_rows(4)
-                    .columns(vec![egui_table::Column::new(50.0); 3])
+                    .columns(vec![egui_table::Column::new(50.0).resizable(false); 3])
                     .headers([egui_table::HeaderRow::new(20.0)])
                     .striped(true)
                     .show(ui, &mut Delegate);
