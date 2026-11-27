@@ -19,16 +19,5 @@ pub use context_menu::{ContextMenu, MenuItem};
 
 /// Creates the CEF client of a browser that renders into `context`.
 pub fn client(context: &Arc<Context>) -> cef::Client {
-    client::EguiClient::new(
-        Arc::clone(context),
-        client::Handlers {
-            render: render::EguiRenderHandler::new(Arc::clone(context)),
-            display: display::EguiDisplayHandler::new(Arc::clone(context)),
-            load: load::EguiLoadHandler::new(Arc::clone(context)),
-            life_span: life_span::EguiLifeSpanHandler::new(Arc::clone(context)),
-            context_menu: context_menu::EguiContextMenuHandler::new(Arc::clone(context)),
-            focus: focus::EguiFocusHandler::new(Arc::clone(context)),
-            request: request::EguiRequestHandler::new(Arc::clone(context)),
-        },
-    )
+    client::EguiClient::new(Arc::clone(context), client::Handlers::new(context))
 }

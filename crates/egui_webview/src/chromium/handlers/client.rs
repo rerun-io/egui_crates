@@ -10,6 +10,7 @@ use cef::{
     RenderHandler, RequestHandler, WrapClient, wrap_client,
 };
 
+use super::{context_menu, display, focus, life_span, load, render, request};
 use crate::WebViewEvent;
 use crate::chromium::context::Context;
 use crate::chromium::runtime::{FOCUSED_NODE_MESSAGE, IPC_MESSAGE};
@@ -24,6 +25,21 @@ pub struct Handlers {
     pub context_menu: ContextMenuHandler,
     pub focus: FocusHandler,
     pub request: RequestHandler,
+}
+
+impl Handlers {
+    /// Creates the handlers of a browser that renders into `context`.
+    pub fn new(context: &Arc<Context>) -> Self {
+        Self {
+            render: render::EguiRenderHandler::new(Arc::clone(context)),
+            display: display::EguiDisplayHandler::new(Arc::clone(context)),
+            load: load::EguiLoadHandler::new(Arc::clone(context)),
+            life_span: life_span::EguiLifeSpanHandler::new(Arc::clone(context)),
+            context_menu: context_menu::EguiContextMenuHandler::new(Arc::clone(context)),
+            focus: focus::EguiFocusHandler::new(Arc::clone(context)),
+            request: request::EguiRequestHandler::new(Arc::clone(context)),
+        }
+    }
 }
 
 wrap_client! {
