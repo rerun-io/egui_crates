@@ -709,7 +709,7 @@ impl TableSplitScrollDelegate<'_> {
                     if 0 < row_nr {
                         paint_hline(painter, rect.x_range(), rect.top(), table_style.row_stroke);
                     }
-                    if 0 < start {
+                    if 0 < start && !self.table.columns[start - 1].resizable {
                         paint_vline(
                             painter,
                             rect.left(),
@@ -883,7 +883,7 @@ impl TableSplitScrollDelegate<'_> {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
                 }
 
-                if 0 < col_nr {
+                if 0 < col_nr && !self.table.columns[col_nr - 1].resizable {
                     paint_vline(
                         row_ui.painter(),
                         clip_rect.left(),
