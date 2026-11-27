@@ -2,6 +2,9 @@
 
 use egui::Rangef;
 
+/// A column of a [`crate::Table`].
+///
+/// The widths include the cell margins and lines (see [`crate::Table`]).
 #[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Column {
     pub current: f32,

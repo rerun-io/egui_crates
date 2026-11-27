@@ -17,6 +17,8 @@ pub struct DemoApp {
 impl DemoApp {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        crate::table_demo::set_table_style(&cc.egui_ctx, crate::table_demo::demo_table_style());
+
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {

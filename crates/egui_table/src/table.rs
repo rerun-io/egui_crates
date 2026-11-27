@@ -55,7 +55,8 @@ impl TableState {
 
 /// Describes one of potentially many header rows.
 ///
-/// Each header row has a fixed height.
+/// Each header row has a fixed height,
+/// which includes the cell margins and lines (see [`Table`]).
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct HeaderRow {
     pub height: f32,
@@ -89,11 +90,22 @@ impl HeaderRow {
 /// table row number or similar.
 /// A sticky column is sometimes called a "gutter".
 ///
+/// ## Style
+/// The table is painted with [`egui::style::TableStyle`] from [`egui::Visuals::table`]:
+/// fills, lines, outline, and cell margins.
+/// To style one table, change the style of its [`Ui`] before showing it.
+///
+/// The cells are padded with [`egui::style::TableStyle::cell_margin`],
+/// so the [`Ui`] given to [`TableDelegate::cell_ui`] is already inside the margin.
+///
+/// ## Sizes
+/// The column widths and row heights are of the whole cells:
+/// they include the cell margins and lines, and the contents get what is left.
+/// This is unlike `egui_extras::Table`, where they are of the contents only.
+///
 /// ## Batteries not included
 /// * You need to specify the `Table` size beforehand
-/// * Does not add any margins to cells. Add it yourself with [`egui::Frame`].
 /// * Does not wrap cells in scroll areas. Do that yourself.
-/// * Doesn't paint any guide-lines for the rows. Paint them yourself.
 pub struct Table {
     /// The columns of the table.
     columns: Vec<Column>,
@@ -123,6 +135,9 @@ pub struct Table {
     ///
     /// Useful for log views or terminal emulation.
     stick_to_bottom: bool,
+
+    /// Give the row under the mouse pointer [`egui::style::TableStyle::hovered_row_fill`]?
+    highlight_hovered_row: bool,
 }
 
 impl Default for Table {
@@ -137,6 +152,7 @@ impl Default for Table {
             scroll_to_columns: None,
             scroll_to_rows: None,
             stick_to_bottom: false,
+            highlight_hovered_row: false,
         }
     }
 }
@@ -196,6 +212,8 @@ pub trait TableDelegate {
     /// The contents of a header cell in the table.
     ///
     /// The [`CellInfo::row_nr`] is which header row (usually 0).
+    ///
+    /// The `ui` is already inside [`egui::style::TableStyle::cell_margin`].
     fn header_cell_ui(&mut self, ui: &mut Ui, cell: &HeaderCellInfo);
 
     /// The contents of a row.
@@ -209,6 +227,8 @@ pub trait TableDelegate {
     /// The contents of a cell in the table.
     ///
     /// The [`CellInfo::row_nr`] is ignoring header rows.
+    ///
+    /// The `ui` is already inside [`egui::style::TableStyle::cell_margin`].
     fn cell_ui(&mut self, ui: &mut Ui, cell: &CellInfo);
 
     /// Compute the offset for the top of the given row.
@@ -221,11 +241,18 @@ pub trait TableDelegate {
         row_nr as f32 * self.default_row_height()
     }
 
-    /// Default row height.
+    /// Default row height, including the cell margins and lines (see [`Table`]).
     ///
     /// This is used by the default implementation of [`Self::row_top_offset`].
     fn default_row_height(&self) -> f32 {
         20.0
+    }
+
+    /// Is this row selected?
+    ///
+    /// Selected rows get [`egui::style::TableStyle::selected_row_fill`].
+    fn is_row_selected(&self, _row_nr: u64) -> bool {
+        false
     }
 }
 
@@ -292,6 +319,15 @@ impl Table {
     #[inline]
     pub fn stick_to_bottom(mut self, stick: bool) -> Self {
         self.stick_to_bottom = stick;
+        self
+    }
+
+    /// Give the row under the mouse pointer [`egui::style::TableStyle::hovered_row_fill`].
+    ///
+    /// Default is `false`.
+    #[inline]
+    pub fn highlight_hovered_row(mut self, highlight_hovered_row: bool) -> Self {
+        self.highlight_hovered_row = highlight_hovered_row;
         self
     }
 
@@ -376,10 +412,50 @@ impl Table {
         .saturating_sub(1)
     }
 
-    pub fn show(mut self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) -> Response {
-        self.num_sticky_cols = self.num_sticky_cols.at_most(self.columns.len());
+    /// Show the table, filling the available space.
+    ///
+    /// [`egui::style::TableStyle::outer_stroke`] takes up space around the table.
+    /// The returned [`Response`] covers all the space the table takes up.
+    pub fn show(self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) -> Response {
+        let table_style = ui.visuals().table;
+        let border_width = table_style.outer_stroke.width;
 
+        // Computed outside the child `Ui`, which has its own scope id, so it matches `Self::get_id`:
         let id = TableState::id(ui, self.id_salt);
+
+        // The outline takes up space around the table:
+        let mut table_ui = ui.new_child(
+            UiBuilder::new()
+                .max_rect(ui.available_rect_before_wrap().shrink(border_width))
+                .layout(*ui.layout()),
+        );
+        let table_rect = self
+            .show_inside_border(&mut table_ui, id, table_delegate)
+            .inner;
+
+        ui.painter().rect_stroke(
+            table_rect,
+            table_style.corner_radius,
+            table_style.outer_stroke,
+            egui::StrokeKind::Outside,
+        );
+
+        ui.allocate_rect(
+            table_ui.min_rect().expand(border_width),
+            egui::Sense::hover(),
+        )
+    }
+
+    /// Show the table without its outline.
+    ///
+    /// Returns the visible table rect, which may be smaller than the space it was given.
+    fn show_inside_border(
+        mut self,
+        ui: &mut Ui,
+        id: Id,
+        table_delegate: &mut dyn TableDelegate,
+    ) -> egui::InnerResponse<Rect> {
+        self.num_sticky_cols = self.num_sticky_cols.at_most(self.columns.len());
         let state = TableState::load(ui, id);
         let is_new = state.is_none();
         let do_full_sizing_pass = is_new;
@@ -436,63 +512,78 @@ impl Table {
             self.headers.iter().map(|h| h.height).sum(),
         );
 
+        let striped = ui.visuals().striped();
+
         let mut ui_builder = UiBuilder::new().layout(Layout::top_down(Align::Min));
         if do_full_sizing_pass {
             ui_builder = ui_builder.sizing_pass().invisible();
             ui.request_discard("Full egui_table sizing");
         }
-        let response = ui
-            .scope_builder(ui_builder, |ui| {
-                // Don't wrap text in the table cells.
-                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // TODO: I think this is default for horizontal layouts anyway?
+        let response = ui.scope_builder(ui_builder, |ui| {
+            // Don't wrap text in the table cells.
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // TODO: I think this is default for horizontal layouts anyway?
 
-                let num_columns = self.columns.len();
+            let num_columns = self.columns.len();
 
-                for (col_nr, column) in self.columns.iter_mut().enumerate() {
-                    if column.resizable {
-                        let column_resize_id = id.with(column.id_for(col_nr)).with("resize");
-                        if let Some(response) = ui.read_response(column_resize_id)
-                            && response.double_clicked()
-                        {
-                            column.auto_size_this_frame = true;
-                        }
-                    }
-                    if column.auto_size_this_frame {
-                        ui.request_discard("egui_table column sizing");
+            for (col_nr, column) in self.columns.iter_mut().enumerate() {
+                if column.resizable {
+                    let column_resize_id = id.with(column.id_for(col_nr)).with("resize");
+                    if let Some(response) = ui.read_response(column_resize_id)
+                        && response.double_clicked()
+                    {
+                        column.auto_size_this_frame = true;
                     }
                 }
-
-                SplitScroll {
-                    scroll_enabled: Vec2b::new(true, true),
-                    fixed_size: sticky_size,
-                    scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
-                    scroll_content_size: Vec2::new(
-                        self.columns[self.num_sticky_cols..]
-                            .iter()
-                            .map(|c| c.current)
-                            .sum(),
-                        self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
-                    ),
-                    stick_to_bottom: self.stick_to_bottom,
+                if column.auto_size_this_frame {
+                    ui.request_discard("egui_table column sizing");
                 }
-                .show(
-                    ui,
-                    &mut TableSplitScrollDelegate {
-                        id,
-                        table_delegate,
-                        state: &mut state,
-                        table: &mut self,
-                        col_x,
-                        header_row_y,
-                        max_column_widths: vec![0.0; num_columns],
-                        visible_column_lines: Default::default(),
-                        do_full_sizing_pass,
-                        has_prefetched: false,
-                        egui_ctx: ui.clone(),
-                    },
-                );
-            })
-            .response;
+            }
+
+            // The table is anchored at the top left of the space it is given,
+            // and is at most as large as that space:
+            let table_rect = Rect::from_min_size(
+                egui::pos2(*col_x.first(), *header_row_y.first()),
+                Vec2::new(
+                    col_x.last() - col_x.first(),
+                    header_row_y.last() - header_row_y.first()
+                        + self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
+                )
+                .min(ui.available_size()),
+            );
+
+            let split_scroll = SplitScroll {
+                scroll_enabled: Vec2b::new(true, true),
+                fixed_size: sticky_size,
+                scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
+                scroll_content_size: Vec2::new(
+                    self.columns[self.num_sticky_cols..]
+                        .iter()
+                        .map(|c| c.current)
+                        .sum(),
+                    self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
+                ),
+                stick_to_bottom: self.stick_to_bottom,
+            };
+            let mut delegate = TableSplitScrollDelegate {
+                id,
+                table_delegate,
+                state: &mut state,
+                table: &mut self,
+                col_x,
+                header_row_y,
+                max_column_widths: vec![0.0; num_columns],
+                visible_column_lines: Default::default(),
+                do_full_sizing_pass,
+                striped,
+                viewport: Rect::from_min_size(ui.cursor().min, ui.available_size())
+                    .intersect(ui.clip_rect()),
+                table_rect,
+                has_prefetched: false,
+                egui_ctx: ui.clone(),
+            };
+            split_scroll.show(ui, &mut delegate);
+            delegate.visible_table_rect()
+        });
 
         state.store(ui, id);
         response
@@ -536,6 +627,16 @@ struct TableSplitScrollDelegate<'a> {
     visible_column_lines: BTreeMap<usize, ColumnResizer>,
 
     do_full_sizing_pass: bool,
+
+    /// Give every other row [`egui::style::TableStyle::stripe_fill`]?
+    striped: bool,
+
+    /// The visible part of the space given to the table, including the header.
+    viewport: Rect,
+
+    /// The visible part of the table, including the header.
+    /// Smaller than the space given to it, if the table is smaller.
+    table_rect: Rect,
 
     has_prefetched: bool,
 
@@ -642,8 +743,27 @@ impl TableSplitScrollDelegate<'_> {
                             .sum::<f32>();
                 }
 
+                // The lines take up space inside the cell:
+                let table_style = ui.visuals().table;
+                let left_line = if self.has_column_line(start) {
+                    table_style.column_stroke
+                } else {
+                    egui::Stroke::NONE
+                };
+                let bottom_line = if row_nr + 1 == self.table.headers.len() {
+                    table_style.header_stroke.width
+                } else {
+                    0.0
+                };
+                let lines = egui::vec2(left_line.width, 0.0);
+                let cell_margin = table_style.cell_margin;
                 let mut ui_builder = UiBuilder::new()
-                    .max_rect(header_rect)
+                    .max_rect(cell_content_rect(
+                        header_rect,
+                        lines,
+                        bottom_line,
+                        cell_margin,
+                    ))
                     .id_salt(("header", row_nr, group_index))
                     .layout(egui::Layout::left_to_right(egui::Align::Center));
                 if auto_size_this_frame {
@@ -651,6 +771,15 @@ impl TableSplitScrollDelegate<'_> {
                 }
                 let mut cell_ui = ui.new_child(ui_builder);
                 cell_ui.shrink_clip_rect(clip_rect);
+
+                {
+                    let rect = Rect::from_x_y_ranges(left..=right, y_range);
+                    self.paint_fill(&cell_ui, rect, table_style.header_fill);
+                    if start != self.table.num_sticky_cols {
+                        // The line on the sticky edge is painted in `finish`.
+                        paint_left_line(cell_ui.painter(), rect, left_line);
+                    }
+                }
 
                 self.table_delegate.header_cell_ui(
                     &mut cell_ui,
@@ -667,7 +796,7 @@ impl TableSplitScrollDelegate<'_> {
                     let col_nr = start;
                     let column = &self.table.columns[start];
                     let width = &mut self.max_column_widths[col_nr];
-                    *width = width.max(cell_ui.min_size().x);
+                    *width = width.max(cell_ui.min_size().x + cell_margin.sum().x + lines.x);
 
                     // Save column lines for later interaction:
                     if column.resizable && visible_rect.x_range().contains(header_rect.right()) {
@@ -684,6 +813,48 @@ impl TableSplitScrollDelegate<'_> {
                 }
             }
         }
+    }
+
+    /// Paint the fill of a body row, and the line above it.
+    fn paint_row_background(&self, row_ui: &Ui, row_nr: u64, row_rect: Rect) {
+        let table_style = &row_ui.visuals().table;
+        let painter = row_ui.painter();
+
+        let visuals = row_ui.visuals();
+        if self.striped && row_nr % 2 == 1 {
+            self.paint_fill(row_ui, row_rect, visuals.table_stripe_fill());
+        }
+
+        if self.table_delegate.is_row_selected(row_nr) {
+            self.paint_fill(row_ui, row_rect, visuals.table_selected_row_fill());
+        } else if self.table.highlight_hovered_row && self.is_row_hovered(row_ui, row_rect) {
+            self.paint_fill(row_ui, row_rect, visuals.table_hovered_row_fill());
+        }
+
+        if 0 < row_nr {
+            paint_top_line(painter, row_rect, table_style.row_stroke);
+        }
+    }
+
+    /// Is the mouse pointer over the visible part of this row, in any of the regions?
+    ///
+    /// Not while something is dragged, e.g. a scroll bar or a resize line.
+    fn is_row_hovered(&self, row_ui: &Ui, row_rect: Rect) -> bool {
+        let ctx = row_ui.ctx();
+        if ctx.dragged_id().is_some() {
+            return false;
+        }
+        let mut body_rect = self.table_rect.intersect(self.viewport);
+        body_rect.min.y = body_rect.min.y.at_least(*self.header_row_y.last());
+        let hover_rect = Rect::from_x_y_ranges(body_rect.x_range(), row_rect.y_range());
+        ctx.rect_contains_pointer(row_ui.layer_id(), hover_rect.intersect(body_rect))
+    }
+
+    /// Does the column have [`egui::style::TableStyle::column_stroke`] on its left?
+    ///
+    /// Not the first column, nor after a resizable column, which has a resize line there.
+    fn has_column_line(&self, col_nr: usize) -> bool {
+        0 < col_nr && !self.table.columns[col_nr - 1].resizable
     }
 
     /// Show the cells of the visible rows in `region_cols`.
@@ -766,6 +937,8 @@ impl TableSplitScrollDelegate<'_> {
             );
             row_ui.set_min_size(row_rect.size());
 
+            self.paint_row_background(&row_ui, row_nr, row_rect);
+
             self.table_delegate.row_ui(&mut row_ui, row_nr);
 
             for col_nr in col_range.clone() {
@@ -779,8 +952,27 @@ impl TableSplitScrollDelegate<'_> {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
                 }
 
+                // The lines take up space inside the cell:
+                let table_style = row_ui.visuals().table;
+                let left_line = if self.has_column_line(col_nr) {
+                    table_style.column_stroke
+                } else {
+                    egui::Stroke::NONE
+                };
+                if col_nr != self.table.num_sticky_cols {
+                    // The line on the sticky edge is painted in `finish`.
+                    paint_left_line(row_ui.painter(), clip_rect, left_line);
+                }
+                let top_line = if 0 < row_nr {
+                    table_style.row_stroke.width
+                } else {
+                    0.0
+                };
+                let lines = egui::vec2(left_line.width, top_line);
+
+                let cell_margin = table_style.cell_margin;
                 let mut ui_builder = UiBuilder::new()
-                    .max_rect(cell_rect)
+                    .max_rect(cell_content_rect(cell_rect, lines, 0.0, cell_margin))
                     .id_salt((row_nr, col_nr))
                     .layout(egui::Layout::left_to_right(egui::Align::Center));
                 if column.auto_size_this_frame {
@@ -799,7 +991,7 @@ impl TableSplitScrollDelegate<'_> {
                 );
 
                 let width = &mut self.max_column_widths[col_nr];
-                *width = width.max(cell_ui.min_size().x);
+                *width = width.max(cell_ui.min_size().x + cell_margin.sum().x + lines.x);
             }
         }
 
@@ -818,6 +1010,101 @@ impl TableSplitScrollDelegate<'_> {
             }
         }
     }
+}
+
+impl TableSplitScrollDelegate<'_> {
+    /// The visible part of the table, which may be smaller than the viewport.
+    fn visible_table_rect(&self) -> Rect {
+        self.table_rect
+    }
+
+    /// The corner radius of a fill of `rect` inside [`Self::visible_table_rect`].
+    ///
+    /// Rounds the corners of the fill that are at the corners of the table, inside the outline.
+    fn fill_corner_radius(&self, rect: Rect, radius: egui::CornerRadius) -> egui::CornerRadius {
+        let table = self.table_rect;
+        let left = rect.left() <= table.left();
+        let right = table.right() <= rect.right();
+        let top = rect.top() <= table.top();
+        let bottom = table.bottom() <= rect.bottom();
+        let corner = |is_corner: bool, r: u8| if is_corner { r } else { 0 };
+        egui::CornerRadius {
+            nw: corner(top && left, radius.nw),
+            ne: corner(top && right, radius.ne),
+            sw: corner(bottom && left, radius.sw),
+            se: corner(bottom && right, radius.se),
+        }
+    }
+
+    /// Fill the part of `rect` that is in the table, with rounded corners at the table corners.
+    fn paint_fill(&self, ui: &Ui, rect: Rect, fill: egui::Color32) {
+        let rect = rect.intersect(self.table_rect);
+        if rect.is_positive() {
+            let corner_radius = self.fill_corner_radius(rect, ui.visuals().table.corner_radius);
+            ui.painter().rect_filled(rect, corner_radius, fill);
+        }
+    }
+
+    /// Paint the line on the edge of the sticky columns, which doesn't scroll.
+    fn paint_sticky_line(&self, ui: &Ui) {
+        let num_sticky_cols = self.table.num_sticky_cols;
+        if 0 < num_sticky_cols && self.has_column_line(num_sticky_cols) {
+            let stroke = ui.visuals().table.column_stroke;
+            let x = self.col_x[num_sticky_cols];
+            let rect = Rect::from_x_y_ranges(x..=x + stroke.width, self.table_rect.y_range());
+            paint_left_line(ui.painter(), rect, stroke);
+        }
+    }
+
+    /// Paint the line at the bottom of the header.
+    fn paint_header_line(&self, ui: &Ui) {
+        let table_style = &ui.visuals().table;
+        let painter = ui.painter();
+        let table_rect = self.visible_table_rect();
+
+        if !self.table.headers.is_empty() {
+            // At the bottom of the header, inside it:
+            let header_rect = Rect::from_x_y_ranges(
+                table_rect.x_range(),
+                table_rect.top()..=*self.header_row_y.last(),
+            );
+            paint_bottom_line(painter, header_rect, table_style.header_stroke);
+        }
+    }
+}
+
+/// Paint a line along the inside of the top edge of `rect`.
+fn paint_top_line(painter: &egui::Painter, rect: Rect, stroke: egui::Stroke) {
+    if 0.0 < stroke.width {
+        painter.hline(rect.x_range(), rect.top() + 0.5 * stroke.width, stroke);
+    }
+}
+
+/// Paint a line along the inside of the bottom edge of `rect`.
+fn paint_bottom_line(painter: &egui::Painter, rect: Rect, stroke: egui::Stroke) {
+    if 0.0 < stroke.width {
+        painter.hline(rect.x_range(), rect.bottom() - 0.5 * stroke.width, stroke);
+    }
+}
+
+/// Paint a line along the inside of the left edge of `rect`.
+fn paint_left_line(painter: &egui::Painter, rect: Rect, stroke: egui::Stroke) {
+    if 0.0 < stroke.width {
+        painter.vline(rect.left() + 0.5 * stroke.width, rect.y_range(), stroke);
+    }
+}
+
+/// The part of a cell inside its lines and margin.
+fn cell_content_rect(
+    cell_rect: Rect,
+    lines: egui::Vec2,
+    bottom_line: f32,
+    margin: egui::Margin,
+) -> Rect {
+    Rect::from_min_max(
+        cell_rect.min + lines,
+        cell_rect.max - egui::vec2(0.0, bottom_line),
+    ) - margin
 }
 
 impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
@@ -877,6 +1164,10 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
     }
 
     fn finish(&mut self, ui: &mut Ui) {
+        self.paint_header_line(ui);
+        self.paint_sticky_line(ui);
+        let table_bottom = self.visible_table_rect().bottom();
+
         // Paint column resize lines
 
         for (col_nr, ColumnResizer { scroll_offset, top }) in &self.visible_column_lines {
@@ -911,7 +1202,7 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
 
             // Right side of the column, adjusted for any width change since layout:
             let mut x = self.col_x[col_nr + 1] - scroll_offset.x + (*column_width - layout_width);
-            let yrange = Rangef::new(*top, ui.clip_rect().bottom());
+            let yrange = Rangef::new(*top, table_bottom);
             let line_rect = egui::Rect::from_x_y_ranges(x..=x, yrange)
                 .expand(ui.style().interaction.resize_grab_radius_side);
 
@@ -934,18 +1225,18 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
                 ui.input(|i| i.pointer.any_down() || i.pointer.any_pressed());
             let resize_hover = resize_response.hovered() && !dragging_something_else;
 
-            if resize_hover || resize_response.dragged() {
+            if resize_hover || resize_response.is_pointer_button_down_on() {
                 ui.set_cursor_icon(egui::CursorIcon::ResizeColumn);
             }
 
-            let stroke = if resize_response.dragged() {
-                ui.style().visuals.widgets.active.bg_stroke
-            } else if resize_hover {
-                ui.style().visuals.widgets.hovered.bg_stroke
-            } else {
-                // ui.visuals().widgets.inactive.bg_stroke
-                ui.visuals().widgets.noninteractive.bg_stroke
-            };
+            let stroke = ui.resize_line_stroke(
+                resize_response.id,
+                egui::HighlightState::new(
+                    resize_hover,
+                    resize_response.is_pointer_button_down_on(),
+                ),
+                ui.visuals().table_resize_stroke(),
+            );
 
             ui.painter().vline(x, yrange, stroke);
         }
