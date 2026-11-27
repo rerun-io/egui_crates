@@ -67,3 +67,92 @@ pub fn table_style_snapshot() {
     harness.run();
     harness.snapshot("table_style");
 }
+
+/// Double-clicking the resize line of a column sizes the column to fit its contents.
+#[test]
+pub fn double_click_resize_line_auto_sizes_column() {
+    use std::{cell::Cell, rc::Rc};
+
+    struct Delegate {
+        wide_cell: bool,
+    }
+
+    impl egui_table::TableDelegate for Delegate {
+        fn header_cell_ui(&mut self, ui: &mut egui::Ui, _cell: &egui_table::HeaderCellInfo) {
+            ui.label("H");
+        }
+
+        fn cell_ui(&mut self, ui: &mut egui::Ui, cell: &egui_table::CellInfo) {
+            if self.wide_cell && cell.col_nr == 0 && cell.row_nr == 1 {
+                ui.label("A cell that is much wider than the column");
+            } else {
+                ui.label("x");
+            }
+        }
+    }
+
+    let wide_cell = Rc::new(Cell::new(true));
+    let width = Rc::new(Cell::new(0.0));
+    let line_pos = Rc::new(Cell::new(egui::Pos2::ZERO));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(600.0, 200.0))
+        .with_step_dt(1.0 / 60.0) // Fast enough for a double-click
+        .build_ui({
+            let wide_cell = Rc::clone(&wide_cell);
+            let width = Rc::clone(&width);
+            let line_pos = Rc::clone(&line_pos);
+            move |ui| {
+                let table = egui_table::Table::new()
+                    .num_rows(3)
+                    .columns(vec![egui_table::Column::new(60.0).range(10.0..=500.0); 2])
+                    .headers([egui_table::HeaderRow::new(20.0)]);
+                let id = table.get_id(ui);
+                let top_left = ui.cursor().min;
+                table.show(
+                    ui,
+                    &mut Delegate {
+                        wide_cell: wide_cell.get(),
+                    },
+                );
+
+                let state = egui_table::TableState::load(ui.ctx(), id).expect("table state");
+                let column_width = state
+                    .col_widths
+                    .get(&egui_table::Column::default().id_for(0))
+                    .copied()
+                    .unwrap_or_default();
+                width.set(column_width);
+                line_pos.set(top_left + egui::vec2(column_width, 30.0));
+            }
+        });
+    harness.run();
+
+    // Columns don't shrink by themselves when their contents get narrower:
+    wide_cell.set(false);
+    harness.run();
+    let before = width.get();
+    assert!(
+        150.0 < before,
+        "the wide cell should widen the column, but it is {before}"
+    );
+
+    harness.hover_at(line_pos.get());
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            harness.event(egui::Event::PointerButton {
+                pos: line_pos.get(),
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            });
+            harness.step();
+        }
+    }
+    harness.run();
+
+    let after = width.get();
+    assert!(
+        after < 50.0,
+        "double-click should shrink the column to fit: {before} -> {after}"
+    );
+}
