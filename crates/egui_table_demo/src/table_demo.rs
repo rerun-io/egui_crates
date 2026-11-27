@@ -165,11 +165,6 @@ impl egui_table::TableDelegate for TableDemo {
 
     // You can use row_ui to add some style or interaction to the entire row.
     fn row_ui(&mut self, ui: &mut Ui, _row_nr: u64) {
-        if ui.rect_contains_pointer(ui.max_rect()) {
-            ui.painter()
-                .rect_filled(ui.max_rect(), 0.0, ui.visuals().code.bg_color);
-        }
-
         if ui.response().interact(Sense::click()).clicked() {
             // Handle row clicks
         }
@@ -177,11 +172,6 @@ impl egui_table::TableDelegate for TableDemo {
 
     fn cell_ui(&mut self, ui: &mut egui::Ui, cell_info: &egui_table::CellInfo) {
         let egui_table::CellInfo { row_nr, col_nr, .. } = *cell_info;
-
-        if row_nr % 2 == 1 {
-            ui.painter()
-                .rect_filled(ui.max_rect(), 0.0, ui.visuals().faint_bg_color);
-        }
 
         egui::Frame::NONE
             .inner_margin(Margin::symmetric(4, 0))
@@ -361,7 +351,9 @@ impl TableDemo {
                 },
                 egui_table::HeaderRow::new(self.top_row_height),
             ])
-            .auto_size_mode(self.auto_size_mode);
+            .auto_size_mode(self.auto_size_mode)
+            .striped(true)
+            .highlight_hovered_row(true);
 
         if let Some(scroll_to_column) = scroll_to_column {
             table = table.scroll_to_column(scroll_to_column, None);
