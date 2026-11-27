@@ -126,11 +126,6 @@ pub struct Table {
     /// Useful for log views or terminal emulation.
     stick_to_bottom: bool,
 
-    /// Give every other row [`egui::style::TableStyle::stripe_fill`]?
-    ///
-    /// `None` means [`egui::Visuals::striped`].
-    striped: Option<bool>,
-
     /// Give the row under the mouse pointer [`egui::style::TableStyle::hovered_row_fill`]?
     highlight_hovered_row: bool,
 }
@@ -147,7 +142,6 @@ impl Default for Table {
             scroll_to_columns: None,
             scroll_to_rows: None,
             stick_to_bottom: false,
-            striped: None,
             highlight_hovered_row: false,
         }
     }
@@ -311,15 +305,6 @@ impl Table {
     #[inline]
     pub fn stick_to_bottom(mut self, stick: bool) -> Self {
         self.stick_to_bottom = stick;
-        self
-    }
-
-    /// Give every other row [`egui::style::TableStyle::stripe_fill`].
-    ///
-    /// Default is [`egui::Visuals::striped`].
-    #[inline]
-    pub fn striped(mut self, striped: bool) -> Self {
-        self.striped = Some(striped);
         self
     }
 
@@ -500,7 +485,7 @@ impl Table {
             self.headers.iter().map(|h| h.height).sum(),
         );
 
-        let striped = self.striped.unwrap_or_else(|| ui.visuals().striped());
+        let striped = ui.visuals().striped();
 
         let mut ui_builder = UiBuilder::new().layout(Layout::top_down(Align::Min));
         if do_full_sizing_pass {
@@ -603,7 +588,7 @@ struct TableSplitScrollDelegate<'a> {
 
     do_full_sizing_pass: bool,
 
-    /// Resolved [`Table::striped`].
+    /// Give every other row [`egui::style::TableStyle::stripe_fill`]?
     striped: bool,
 
     /// The visible part of the whole table, including the header.
