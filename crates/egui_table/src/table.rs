@@ -699,9 +699,33 @@ impl TableSplitScrollDelegate<'_> {
                             .sum::<f32>();
                 }
 
-                let cell_margin = ui.visuals().table.cell_margin;
+                // The lines take up space inside the cell:
+                let table_style = ui.visuals().table;
+                let column_line = 0 < start && !self.table.columns[start - 1].resizable;
+                let top_line = if 0 < row_nr {
+                    table_style.row_stroke
+                } else {
+                    egui::Stroke::NONE
+                };
+                let left_line = if column_line {
+                    table_style.column_stroke
+                } else {
+                    egui::Stroke::NONE
+                };
+                let bottom_line = if row_nr + 1 == self.table.headers.len() {
+                    table_style.header_stroke.width
+                } else {
+                    0.0
+                };
+                let lines = egui::vec2(left_line.width, top_line.width);
+                let cell_margin = table_style.cell_margin;
                 let mut ui_builder = UiBuilder::new()
-                    .max_rect(header_rect - cell_margin)
+                    .max_rect(cell_content_rect(
+                        header_rect,
+                        lines,
+                        bottom_line,
+                        cell_margin,
+                    ))
                     .id_salt(("header", row_nr, group_index))
                     .layout(egui::Layout::left_to_right(egui::Align::Center));
                 if auto_size_this_frame {
@@ -731,17 +755,8 @@ impl TableSplitScrollDelegate<'_> {
                         se: 0,
                     };
                     painter.rect_filled(rect, corner_radius, table_style.header_fill);
-                    if 0 < row_nr {
-                        paint_hline(painter, rect.x_range(), rect.top(), table_style.row_stroke);
-                    }
-                    if 0 < start && !self.table.columns[start - 1].resizable {
-                        paint_vline(
-                            painter,
-                            rect.left(),
-                            rect.y_range(),
-                            table_style.column_stroke,
-                        );
-                    }
+                    paint_top_line(painter, rect, top_line);
+                    paint_left_line(painter, rect, left_line);
                 }
 
                 self.table_delegate.header_cell_ui(
@@ -759,7 +774,7 @@ impl TableSplitScrollDelegate<'_> {
                     let col_nr = start;
                     let column = &self.table.columns[start];
                     let width = &mut self.max_column_widths[col_nr];
-                    *width = width.max(cell_ui.min_size().x + cell_margin.sum().x);
+                    *width = width.max(cell_ui.min_size().x + cell_margin.sum().x + lines.x);
 
                     // Save column lines for later interaction:
                     if column.resizable && visible_rect.x_range().contains(header_rect.right()) {
@@ -794,12 +809,7 @@ impl TableSplitScrollDelegate<'_> {
         }
 
         if 0 < row_nr {
-            paint_hline(
-                painter,
-                row_rect.x_range(),
-                row_rect.top(),
-                table_style.row_stroke,
-            );
+            paint_top_line(painter, row_rect, table_style.row_stroke);
         }
     }
 
@@ -908,18 +918,24 @@ impl TableSplitScrollDelegate<'_> {
                     cell_rect.max.x = cell_rect.min.x + column.range.min;
                 }
 
-                if 0 < col_nr && !self.table.columns[col_nr - 1].resizable {
-                    paint_vline(
-                        row_ui.painter(),
-                        clip_rect.left(),
-                        clip_rect.y_range(),
-                        row_ui.visuals().table.column_stroke,
-                    );
-                }
+                // The lines take up space inside the cell:
+                let table_style = row_ui.visuals().table;
+                let left_line = if 0 < col_nr && !self.table.columns[col_nr - 1].resizable {
+                    table_style.column_stroke
+                } else {
+                    egui::Stroke::NONE
+                };
+                paint_left_line(row_ui.painter(), clip_rect, left_line);
+                let top_line = if 0 < row_nr {
+                    table_style.row_stroke.width
+                } else {
+                    0.0
+                };
+                let lines = egui::vec2(left_line.width, top_line);
 
-                let cell_margin = row_ui.visuals().table.cell_margin;
+                let cell_margin = table_style.cell_margin;
                 let mut ui_builder = UiBuilder::new()
-                    .max_rect(cell_rect - cell_margin)
+                    .max_rect(cell_content_rect(cell_rect, lines, 0.0, cell_margin))
                     .id_salt((row_nr, col_nr))
                     .layout(egui::Layout::left_to_right(egui::Align::Center));
                 if column.auto_size_this_frame {
@@ -938,7 +954,7 @@ impl TableSplitScrollDelegate<'_> {
                 );
 
                 let width = &mut self.max_column_widths[col_nr];
-                *width = width.max(cell_ui.min_size().x + cell_margin.sum().x);
+                *width = width.max(cell_ui.min_size().x + cell_margin.sum().x + lines.x);
             }
         }
 
@@ -973,35 +989,55 @@ impl TableSplitScrollDelegate<'_> {
         )
     }
 
-    /// Paint the line under the header.
+    /// Paint the line at the bottom of the header.
     fn paint_header_line(&self, ui: &Ui) {
         let table_style = &ui.visuals().table;
         let painter = ui.painter();
         let table_rect = self.visible_table_rect();
 
         if !self.table.headers.is_empty() {
-            paint_hline(
-                painter,
+            // At the bottom of the header, inside it:
+            let header_rect = Rect::from_x_y_ranges(
                 table_rect.x_range(),
-                *self.header_row_y.last(),
-                table_style.header_stroke,
+                table_rect.top()..=*self.header_row_y.last(),
             );
+            paint_bottom_line(painter, header_rect, table_style.header_stroke);
         }
     }
 }
 
-/// Paint a horizontal line, sharp on the pixel grid.
-fn paint_hline(painter: &egui::Painter, x: Rangef, y: f32, stroke: egui::Stroke) {
+/// Paint a line along the inside of the top edge of `rect`.
+fn paint_top_line(painter: &egui::Painter, rect: Rect, stroke: egui::Stroke) {
     if 0.0 < stroke.width {
-        painter.hline(x, painter.round_to_pixel_center(y), stroke);
+        painter.hline(rect.x_range(), rect.top() + 0.5 * stroke.width, stroke);
     }
 }
 
-/// Paint a vertical line, sharp on the pixel grid.
-fn paint_vline(painter: &egui::Painter, x: f32, y: Rangef, stroke: egui::Stroke) {
+/// Paint a line along the inside of the bottom edge of `rect`.
+fn paint_bottom_line(painter: &egui::Painter, rect: Rect, stroke: egui::Stroke) {
     if 0.0 < stroke.width {
-        painter.vline(painter.round_to_pixel_center(x), y, stroke);
+        painter.hline(rect.x_range(), rect.bottom() - 0.5 * stroke.width, stroke);
     }
+}
+
+/// Paint a line along the inside of the left edge of `rect`.
+fn paint_left_line(painter: &egui::Painter, rect: Rect, stroke: egui::Stroke) {
+    if 0.0 < stroke.width {
+        painter.vline(rect.left() + 0.5 * stroke.width, rect.y_range(), stroke);
+    }
+}
+
+/// The part of a cell inside its lines and margin.
+fn cell_content_rect(
+    cell_rect: Rect,
+    lines: egui::Vec2,
+    bottom_line: f32,
+    margin: egui::Margin,
+) -> Rect {
+    Rect::from_min_max(
+        cell_rect.min + lines,
+        cell_rect.max - egui::vec2(0.0, bottom_line),
+    ) - margin
 }
 
 impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
