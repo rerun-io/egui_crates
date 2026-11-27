@@ -714,7 +714,23 @@ impl TableSplitScrollDelegate<'_> {
                     let table_style = &cell_ui.visuals().table;
                     let painter = cell_ui.painter();
                     let rect = Rect::from_x_y_ranges(left..=right, y_range);
-                    painter.rect_filled(rect, 0.0, table_style.header_fill);
+                    // Round the top corners of the table, inside the outline:
+                    let radius = table_style.corner_radius;
+                    let corner_radius = egui::CornerRadius {
+                        nw: if row_nr == 0 && start == 0 {
+                            radius.nw
+                        } else {
+                            0
+                        },
+                        ne: if row_nr == 0 && end == self.table.columns.len() {
+                            radius.ne
+                        } else {
+                            0
+                        },
+                        sw: 0,
+                        se: 0,
+                    };
+                    painter.rect_filled(rect, corner_radius, table_style.header_fill);
                     if 0 < row_nr {
                         paint_hline(painter, rect.x_range(), rect.top(), table_style.row_stroke);
                     }
