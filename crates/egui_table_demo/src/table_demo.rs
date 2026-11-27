@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use egui::{Align2, Context, Id, Margin, NumExt as _, Sense, Ui, Vec2};
+use egui::{Align2, Context, Id, NumExt as _, Sense, Ui, Vec2};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -113,59 +113,53 @@ impl egui_table::TableDelegate for TableDemo {
             ..
         } = cell_inf;
 
-        let margin = 4;
+        #[expect(clippy::collapsible_else_if)]
+        if *row_nr == 0 {
+            if 0 < col_range.start {
+                // Our special grouped column.
+                let sticky = true;
+                let text = format!("This is group {group_index}");
+                if sticky {
+                    let font_id = egui::TextStyle::Heading.resolve(ui.style());
+                    let text_color = ui.visuals().text_color();
+                    let galley = ui
+                        .painter()
+                        .layout(text, font_id, text_color, f32::INFINITY);
 
-        egui::Frame::NONE
-            .inner_margin(Margin::symmetric(margin, 0))
-            .show(ui, |ui| {
-                #[expect(clippy::collapsible_else_if)]
-                if *row_nr == 0 {
-                    if 0 < col_range.start {
-                        // Our special grouped column.
-                        let sticky = true;
-                        let text = format!("This is group {group_index}");
-                        if sticky {
-                            let font_id = egui::TextStyle::Heading.resolve(ui.style());
-                            let text_color = ui.visuals().text_color();
-                            let galley =
-                                ui.painter()
-                                    .layout(text, font_id, text_color, f32::INFINITY);
+                    // Put the text leftmost in the clip rect (so it is always visible)
+                    let mut pos = Align2::LEFT_CENTER
+                        .anchor_size(
+                            (ui.clip_rect() - ui.visuals().table.cell_margin).left_center(),
+                            galley.size(),
+                        )
+                        .min;
 
-                            // Put the text leftmost in the clip rect (so it is always visible)
-                            let mut pos = Align2::LEFT_CENTER
-                                .anchor_size(
-                                    ui.clip_rect().shrink(margin as _).left_center(),
-                                    galley.size(),
-                                )
-                                .min;
+                    // … but not so far to the right that it doesn't fit.
+                    pos.x = pos.x.at_most(ui.max_rect().right() - galley.size().x);
 
-                            // … but not so far to the right that it doesn't fit.
-                            pos.x = pos.x.at_most(ui.max_rect().right() - galley.size().x);
-
-                            ui.put(
-                                egui::Rect::from_min_size(pos, galley.size()),
-                                egui::Label::new(galley),
-                            );
-                        } else {
-                            ui.heading(text);
-                        }
-                    }
+                    ui.put(
+                        egui::Rect::from_min_size(pos, galley.size()),
+                        egui::Label::new(galley),
+                    );
                 } else {
-                    if col_range.start == 0 {
-                        egui::Sides::new().height(ui.available_height()).show(
-                            ui,
-                            |ui| {
-                                ui.heading("Row");
-                            },
-                            |ui| {
-                                ui.label("⬇");
-                            },
-                        );
-                    } else {
-                        ui.heading(format!("Column {group_index}"));
-                    }
+                    ui.heading(text);
                 }
-            });
+            }
+        } else {
+            if col_range.start == 0 {
+                egui::Sides::new().height(ui.available_height()).show(
+                    ui,
+                    |ui| {
+                        ui.heading("Row");
+                    },
+                    |ui| {
+                        ui.label("⬇");
+                    },
+                );
+            } else {
+                ui.heading(format!("Column {group_index}"));
+            }
+        }
     }
 
     // You can use row_ui to add some style or interaction to the entire row.
@@ -190,11 +184,7 @@ impl egui_table::TableDelegate for TableDemo {
     fn cell_ui(&mut self, ui: &mut egui::Ui, cell_info: &egui_table::CellInfo) {
         let egui_table::CellInfo { row_nr, col_nr, .. } = *cell_info;
 
-        egui::Frame::NONE
-            .inner_margin(Margin::symmetric(4, 0))
-            .show(ui, |ui| {
-                self.cell_content_ui(row_nr, col_nr, ui);
-            });
+        self.cell_content_ui(row_nr, col_nr, ui);
     }
 
     fn row_top_offset(&self, ctx: &Context, _table_id: Id, row_nr: u64) -> f32 {
