@@ -47,7 +47,9 @@ mod webviews;
 
 pub use backend::{Backend, EmbeddedWidget, PageWidget};
 #[cfg(cef_backend)]
-pub use chromium::{CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess};
+pub use chromium::{
+    CefError, CefInitOptions, CefOptions, CefProcess, run_subprocess as run_cef_subprocess,
+};
 pub use instance::{WebViewInstance, WebViewResponse};
 pub use runtime::Runtime;
 pub use webviews::{WebView, WebViews};
@@ -178,19 +180,28 @@ pub(crate) fn reported_url(url: &str) -> Option<Url> {
 }
 
 /// An error from creating or using a [`WebViewInstance`].
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     /// No [`Runtime`] is running on this thread. Never happens on the web.
+    #[error(
+        "No running egui_webview::Runtime. Create one with `egui_webview::Runtime::new()` first \
+         in `main`, and keep it until `eframe::run_native` returns"
+    )]
     NoRuntime,
 
     /// This build has no backend for this platform, or the window handle of
     /// [`eframe::EmbeddedViews`] is not one the platform's backend can use.
     ///
     /// Natively, the backend is CEF, which needs the `cef` feature. See [`is_supported`].
+    #[error(
+        "This build of `egui_webview` has no backend that can show a page here{}",
+        if is_supported() { "" } else { ". Enable its `cef` feature" }
+    )]
     Unsupported,
 
-    /// The backend reported an error.
+    /// The backend reported an error. For the CEF backend, it is a [`CefError`].
+    #[error(transparent)]
     Backend(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -198,39 +209,5 @@ impl Error {
     /// Wraps `err` in [`Self::Backend`].
     pub fn backend(err: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
         Self::Backend(err.into())
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NoRuntime => write!(
-                f,
-                "No running egui_webview::Runtime. Create one with `egui_webview::Runtime::new()` \
-                 first in `main`, and keep it until `eframe::run_native` returns"
-            ),
-            Self::Unsupported => {
-                let hint = if is_supported() {
-                    ""
-                } else {
-                    ". Enable its `cef` feature"
-                };
-                write!(
-                    f,
-                    "This build of `egui_webview` has no backend that can show a page here{hint}"
-                )
-            }
-            Self::Backend(err) => err.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::NoRuntime | Self::Unsupported => None,
-            // `Display` already shows `err`, so don't report it a second time as the source.
-            Self::Backend(err) => err.source(),
-        }
     }
 }

@@ -23,6 +23,7 @@ use egui::Ui;
 use tempfile::TempDir;
 
 use super::context::Context;
+use super::error::CefError;
 use crate::{Error, Runtime, runtime::Engine};
 
 /// The name of the process message that brings the text of a page's
@@ -122,7 +123,7 @@ enum State {
     },
 
     /// CEF failed to start, and can't be started again.
-    Failed(String),
+    Failed(CefError),
 
     /// CEF has shut down, and can't be started again.
     ShutDown,
@@ -213,7 +214,7 @@ fn is_helper() -> bool {
 fn helper_sandbox(
     options: &CefInitOptions,
     args: &cef::args::Args,
-) -> Result<Option<cef::sandbox::Sandbox>, String> {
+) -> Result<Option<cef::sandbox::Sandbox>, CefError> {
     if !options.sandbox || !is_helper() {
         return Ok(None);
     }
@@ -223,9 +224,7 @@ fn helper_sandbox(
         dir.join("../../../Chromium Embedded Framework.framework/Libraries/libcef_sandbox.dylib")
     });
     if !library.is_some_and(|library| library.exists()) {
-        return Err(
-            "the CEF sandbox needs the helper to run from a helper app in an app bundle".to_owned(),
-        );
+        return Err(CefError::SandboxedHelperOutsideBundle);
     }
     let mut sandbox = cef::sandbox::Sandbox::new();
     sandbox.initialize(args.as_main_args());
@@ -240,8 +239,8 @@ fn lock_state() -> std::sync::MutexGuard<'static, State> {
 
 /// Loads the CEF library, and selects the CEF API version that these bindings were generated
 /// for. Both come before every other CEF call, and happen once per process.
-fn load_library() -> Result<(), String> {
-    static LOADED: LazyLock<Result<(), String>> = LazyLock::new(|| {
+fn load_library() -> Result<(), CefError> {
+    static LOADED: LazyLock<Result<(), CefError>> = LazyLock::new(|| {
         // On other platforms, the CEF library is linked at build time.
         #[cfg(target_os = "macos")]
         load_framework()?;
@@ -254,14 +253,14 @@ fn load_library() -> Result<(), String> {
 /// Loads the CEF framework on macOS, from the app bundle if there is one, and otherwise from where
 /// the `cef` crate downloaded it at build time.
 #[cfg(target_os = "macos")]
-fn load_framework() -> Result<(), String> {
+fn load_framework() -> Result<(), CefError> {
     use std::os::unix::ffi::OsStrExt as _;
 
     const FRAMEWORK: &str = "Chromium Embedded Framework.framework/Chromium Embedded Framework";
     let exe = current_exe()?;
     let exe_dir = exe
         .parent()
-        .ok_or_else(|| format!("the executable `{}` has no parent directory", exe.display()))?;
+        .ok_or_else(|| CefError::NoExeDir { exe: exe.clone() })?;
     // The framework is in `Contents/Frameworks`. That is `../Frameworks` from the main
     // executable in `Contents/MacOS`, and `../../..` from a helper's executable in
     // `Contents/Frameworks/<App> Helper.app/Contents/MacOS`.
@@ -272,23 +271,20 @@ fn load_framework() -> Result<(), String> {
         .find(|path| path.exists())
         .cloned()
         .or_else(|| sys::get_cef_dir().map(|dir| dir.join(FRAMEWORK)))
-        .ok_or_else(|| {
-            format!(
-                "the CEF framework is neither in the app bundle ({bundled:?}) nor in the \
-                 download directory of the `cef` crate. Bundle the framework with the app, or \
-                 set `CEF_PATH` to the directory of a CEF download"
-            )
+        .ok_or_else(|| CefError::FrameworkNotFound {
+            bundled: bundled.to_vec(),
         })?;
-    let path =
-        std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|err| err.to_string())?;
+    // A path with a NUL byte names no file.
+    let c_path = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_err| CefError::LoadFramework { path: path.clone() })?;
     // SAFETY: `path` is a NUL-terminated C string that lives until after `cef::load_library`
     // returns.
     #[expect(unsafe_code)]
-    let name = unsafe { &*path.as_ptr() };
+    let name = unsafe { &*c_path.as_ptr() };
     if cef::load_library(Some(name)) == 1 {
         Ok(())
     } else {
-        Err(format!("failed to load the CEF framework from {path:?}"))
+        Err(CefError::LoadFramework { path })
     }
 }
 
@@ -306,9 +302,7 @@ pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
     if let State::Ready { thread, .. } | State::Running { thread, .. } = &*state
         && *thread != std::thread::current().id()
     {
-        return Err(Error::backend(
-            "CEF: create webviews on the thread that created the `egui_webview::Runtime`",
-        ));
+        return Err(CefError::WrongThread.into());
     }
     if let State::Ready { options, .. } = &*state {
         let options = options.clone();
@@ -331,20 +325,15 @@ pub fn initialize(ctx: &egui::Context) -> Result<Engine, Error> {
         }
         // CEF starts its helper processes from this executable. Refuse to start them before the
         // app has shown that its `main` handles being one.
-        State::Unchecked | State::Ready { .. } => {
-            "create the `egui_webview::Runtime` with `Runtime::new` first in `main`"
-        }
-        State::Failed(err) => err.as_str(),
-        State::ShutDown => {
-            "CEF has shut down, because the `egui_webview::Runtime` was dropped. \
-             Keep it until `eframe::run_native` returns"
-        }
+        State::Unchecked | State::Ready { .. } => CefError::NoRuntimeInMain,
+        State::Failed(err) => err.clone(),
+        State::ShutDown => CefError::ShutDown,
     };
-    Err(Error::backend(format!("CEF: {err}")))
+    Err(err.into())
 }
 
 /// Initializes CEF with `options`. Returns the cache directory to delete at shutdown, if any.
-fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
+fn start(options: &CefInitOptions) -> Result<Option<TempDir>, CefError> {
     let exe = current_exe()?;
     check_sandbox(options.sandbox, &exe)?;
     load_library()?;
@@ -366,20 +355,16 @@ fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
     }
     let temp_dir = if let Some(dir) = &options.cache_dir {
         // CEF needs an absolute path, and the profile in `cache_path` to persist it.
-        let dir = std::path::absolute(dir).map_err(|err| {
-            format!(
-                "the cache directory `{}` isn't a usable path: {err}",
-                dir.display()
-            )
+        let dir = std::path::absolute(dir).map_err(|err| CefError::CacheDir {
+            dir: dir.clone(),
+            err: Arc::new(err),
         })?;
         settings.root_cache_path = dir.to_string_lossy().as_ref().into();
         settings.cache_path = dir.to_string_lossy().as_ref().into();
         None
     } else {
         // Without a `cache_path`, the profile lives in memory.
-        let dir = temp_cache_dir().map_err(|err| {
-            format!("failed to create a temporary cache directory for CEF: {err}")
-        })?;
+        let dir = temp_cache_dir().map_err(|err| CefError::TempCacheDir(Arc::new(err)))?;
         settings.root_cache_path = dir.path().to_string_lossy().as_ref().into();
         Some(dir)
     };
@@ -397,45 +382,36 @@ fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
     {
         Ok(temp_dir)
     } else {
-        let exit_code = cef::get_exit_code();
-        let hint = match &options.cache_dir {
-            Some(dir) => format!(
-                ". Only one running process can use the cache directory `{}`, so check that \
-                 no other instance of the app is running",
-                dir.display()
-            ),
-            None => String::new(),
-        };
-        Err(format!(
-            "failed to initialize, with CEF's exit code {exit_code}{hint}"
-        ))
+        Err(CefError::Initialize {
+            exit_code: cef::get_exit_code(),
+            cache_dir: options.cache_dir.clone(),
+        })
     }
 }
 
 /// The path of this process's executable.
-fn current_exe() -> Result<PathBuf, String> {
-    std::env::current_exe().map_err(|err| format!("can't find the path of the executable: {err}"))
+fn current_exe() -> Result<PathBuf, CefError> {
+    std::env::current_exe().map_err(|err| CefError::CurrentExe(Arc::new(err)))
 }
 
 /// Fails if `sandbox` asks for the sandbox, and it can't work here.
-fn check_sandbox(sandbox: bool, exe: &Path) -> Result<(), String> {
+fn check_sandbox(sandbox: bool, exe: &Path) -> Result<(), CefError> {
     if !sandbox {
         return Ok(());
     }
     if !cfg!(feature = "cef-sandbox") {
-        return Err("`CefInitOptions::sandbox` needs the `cef-sandbox` feature".to_owned());
+        return Err(CefError::SandboxNeedsFeature);
     }
     cfg_select! {
         windows => {
             _ = exe;
-            Err("the CEF sandbox isn't supported on Windows".to_owned())
+            Err(CefError::SandboxOnWindows)
         }
         target_os = "macos" => {
             if in_app_bundle(exe) {
                 Ok(())
             } else {
-                Err("the CEF sandbox needs an app bundle with CEF's helper apps on macOS"
-                    .to_owned())
+                Err(CefError::SandboxNeedsAppBundle)
             }
         }
         _ => {
