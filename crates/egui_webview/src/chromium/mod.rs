@@ -198,24 +198,32 @@ impl CefBackend {
         let engine = runtime::initialize(ctx)?;
 
         let (context, events) = Context::new(ctx);
-        let window_info = WindowInfo {
-            windowless_rendering_enabled: 1,
-            ..Default::default()
-        };
         let frame_rate = page_frame_rate(ctx, options.frame_rate);
-        let settings = BrowserSettings {
-            windowless_frame_rate: frame_rate,
-            background_color: cef_color(options.background_color),
-            ..Default::default()
-        };
-        let browser = cef::browser_host_create_browser_sync(
-            Some(&window_info),
-            Some(&mut handlers::client(&context)),
-            Some(&source_url(source).as_str().into()),
-            Some(&settings),
-            None,
-            None,
-        )
+        let background_color = cef_color(options.background_color);
+        let url = source_url(source);
+        let for_client = Arc::clone(&context);
+        // CEF creates a browser on its UI thread. That can be another thread than this one, so
+        // only plain values go over, and CEF's structs are made there.
+        let browser = runtime::wait_on_ui_thread(move || {
+            let window_info = WindowInfo {
+                windowless_rendering_enabled: 1,
+                ..Default::default()
+            };
+            let settings = BrowserSettings {
+                windowless_frame_rate: frame_rate,
+                background_color,
+                ..Default::default()
+            };
+            cef::browser_host_create_browser_sync(
+                Some(&window_info),
+                Some(&mut handlers::client(&for_client)),
+                Some(&url.as_str().into()),
+                Some(&settings),
+                None,
+                None,
+            )
+        })
+        .flatten()
         .ok_or_else(|| Error::backend("CEF failed to create a browser"))?;
         // A windowless browser starts out focused. Blur it, so that it has the focus only while
         // egui's focus is on the webview.
@@ -506,23 +514,27 @@ impl Backend for CefBackend {
         let message = format!(
             r#"{{"id":1,"method":"Emulation.setEmulatedMedia","params":{{"features":[{{"name":"prefers-color-scheme","value":"{scheme}"}}]}}}}"#
         );
-        if let Some(host) = self.browser.host()
-            && host.send_dev_tools_message(Some(message.as_bytes())) == 0
-        {
-            log::warn!("egui_webview: CEF didn't take the color scheme");
+        if let Some(host) = self.browser.host() {
+            // CEF only takes DevTools messages on its UI thread.
+            runtime::on_ui_thread(move || {
+                if host.send_dev_tools_message(Some(message.as_bytes())) == 0 {
+                    log::warn!("egui_webview: CEF didn't take the color scheme");
+                }
+            });
         }
     }
 
     /// Tells the browser what its widget saw in the pass that just ended.
     fn place(&mut self, ctx: &egui::Context, _output: Option<&EmbeddedViewOutput>) {
-        // Shown or not, the browser needs CEF's message loop work, so egui must keep running
-        // passes.
-        ctx.request_repaint_after(runtime::MAX_PUMP_DELAY);
+        // Where egui pumps CEF, the browser needs passes to make progress, shown or not.
+        if !runtime::THREADED {
+            ctx.request_repaint_after(runtime::MAX_PUMP_DELAY);
+        }
 
         let Some(host) = self.browser.host() else {
             return;
         };
-        // CEF runs the handlers from the calls below, so the state can't stay locked.
+        // CEF can run the handlers from inside the calls below, so the state can't stay locked.
         let (inbox, shown_pass, size) = {
             let mut state = self.context.state.lock();
             (

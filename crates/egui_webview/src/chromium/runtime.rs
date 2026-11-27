@@ -1,9 +1,12 @@
-//! CEF's process-wide initialization, the entry point of its helper processes, and the external
-//! message pump that egui's passes drive.
+//! CEF's process-wide initialization, the entry point of its helper processes, and its message
+//! loop.
+//!
+//! On Linux and Windows, CEF runs its message loop on a thread of its own. See [`THREADED`]. On
+//! macOS it can't, so egui's passes pump it there.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, LazyLock, Weak};
+use std::sync::{Arc, LazyLock, Weak, mpsc};
 use std::thread::ThreadId;
 use std::time::{Duration, Instant};
 
@@ -11,9 +14,9 @@ use std::time::{Duration, Instant};
 use cef::rc::Rc as _;
 use cef::{
     App, Browser, BrowserProcessHandler, CefString, ImplApp, ImplBrowserProcessHandler,
-    ImplCommandLine as _, ImplFrame as _, ImplRenderProcessHandler, RenderProcessHandler, WrapApp,
-    WrapBrowserProcessHandler, WrapRenderProcessHandler, sys, wrap_app,
-    wrap_browser_process_handler, wrap_render_process_handler,
+    ImplCommandLine as _, ImplFrame as _, ImplRenderProcessHandler, ImplTask, RenderProcessHandler,
+    Task, WrapApp, WrapBrowserProcessHandler, WrapRenderProcessHandler, WrapTask, sys, wrap_app,
+    wrap_browser_process_handler, wrap_render_process_handler, wrap_task,
 };
 use cef::{
     ImplDomnode as _, ImplListValue as _, ImplProcessMessage as _, ImplV8Context as _,
@@ -33,7 +36,21 @@ pub const IPC_MESSAGE: &str = "egui_webview_ipc";
 /// gained focus in a frame is editable. Its one argument is that bool.
 pub const FOCUSED_NODE_MESSAGE: &str = "egui_webview_focused_node";
 
-/// The longest time between two calls to `cef::do_message_loop_work` while a webview exists.
+/// Whether CEF runs its message loop on a thread of its own, its UI thread.
+///
+/// CEF can do that on Linux and Windows. Then nothing has to pump CEF, and a page keeps running
+/// while egui's thread is busy. CEF's handlers run on that thread, at the same time as egui's
+/// pass. Calls into CEF from egui's thread come back at once, and take effect later.
+///
+/// On Linux, CEF's thread also runs `GLib`'s main loop, which Chromium needs to talk to the X11
+/// or Wayland server. So a page can share the clipboard without help from us.
+///
+/// On macOS, CEF must run on the main thread, which is egui's. So egui's passes pump it. See
+/// [`CefPlugin`].
+pub const THREADED: bool = cfg!(any(target_os = "linux", target_os = "windows"));
+
+/// The longest time between two calls to `cef::do_message_loop_work` while a webview exists and
+/// egui pumps CEF.
 ///
 /// With an external message pump, CEF schedules its work through
 /// `on_schedule_message_pump_work`, but it can also have work pending that it didn't schedule.
@@ -342,7 +359,8 @@ fn start(options: &CefInitOptions) -> Result<Option<TempDir>, String> {
 
     let mut settings = cef::Settings {
         windowless_rendering_enabled: 1,
-        external_message_pump: 1,
+        multi_threaded_message_loop: i32::from(THREADED),
+        external_message_pump: i32::from(!THREADED),
         // CEF's SIGINT and SIGTERM handlers terminate `NSApp` from inside
         // `cef::do_message_loop_work`, which makes winit panic on its re-entered event handler.
         // Signals belong to the app.
@@ -422,7 +440,7 @@ fn in_app_bundle(exe: &Path) -> bool {
 
 /// Shuts CEF down, if it runs. Called when the [`Runtime`] and the last webview are dropped.
 ///
-/// If closing takes longer than [`SHUTDOWN_TIMEOUT`], a later message pump finishes shutdown.
+/// If closing takes longer than [`SHUTDOWN_TIMEOUT`], a later pass of egui finishes shutdown.
 /// The temporary cache directory is deleted after shutdown. CEF can't start again in this process.
 pub fn shutdown() {
     let mut state = lock_state();
@@ -440,7 +458,8 @@ pub fn shutdown() {
         return;
     };
 
-    // Closing a browser takes a few turns of the message loop.
+    // Closing a browser takes a few turns of the message loop. CEF's own thread runs them, or we
+    // do.
     let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
     while 0 < OPEN_BROWSERS.load(Ordering::Relaxed) {
         if deadline < Instant::now() {
@@ -451,7 +470,9 @@ pub fn shutdown() {
             SHUTDOWN_PENDING.store(true, Ordering::Relaxed);
             return;
         }
-        cef::do_message_loop_work();
+        if !THREADED {
+            cef::do_message_loop_work();
+        }
         std::thread::sleep(Duration::from_millis(5));
     }
     RUNNING.store(false, Ordering::Relaxed);
@@ -531,7 +552,8 @@ fn resource_paths(exe: &Path, settings: &mut cef::Settings) {
     }
 }
 
-/// An egui plugin that runs CEF's message loop work at the start of every pass.
+/// An egui plugin that runs CEF's message loop work at the start of every pass, unless CEF
+/// runs it on its own thread.
 struct CefPlugin;
 
 impl egui::Plugin for CefPlugin {
@@ -541,7 +563,9 @@ impl egui::Plugin for CefPlugin {
 
     fn on_begin_pass(&mut self, _ui: &mut Ui) {
         if RUNNING.load(Ordering::Relaxed) {
-            cef::do_message_loop_work();
+            if !THREADED {
+                cef::do_message_loop_work();
+            }
             if SHUTDOWN_PENDING.load(Ordering::Relaxed)
                 && OPEN_BROWSERS.load(Ordering::Relaxed) == 0
             {
@@ -550,6 +574,52 @@ impl egui::Plugin for CefPlugin {
             }
         }
     }
+}
+
+/// What [`on_ui_thread`] runs.
+type Job = Box<dyn FnOnce() + Send>;
+
+wrap_task! {
+    struct JobTask {
+        // The macro clones the task, and CEF runs a task through `&self`.
+        job: Arc<egui::mutex::Mutex<Option<Job>>>,
+    }
+
+    impl Task {
+        fn execute(&self) {
+            if let Some(job) = self.job.lock().take() {
+                job();
+            }
+        }
+    }
+}
+
+/// Runs `job` on CEF's UI thread, and doesn't wait for it.
+///
+/// Use it for the few CEF calls that only work on that thread. Most calls work on any thread.
+/// Where egui's passes pump CEF, egui's thread is the UI thread, and `job` runs right away.
+///
+/// If CEF isn't running, `job` is dropped.
+pub fn on_ui_thread(job: impl FnOnce() + Send + 'static) {
+    let ui_thread = sys::cef_thread_id_t::TID_UI.into();
+    if cef::currently_on(ui_thread) == 1 {
+        job();
+    } else {
+        let job: Job = Box::new(job);
+        let mut task = JobTask::new(Arc::new(egui::mutex::Mutex::new(Some(job))));
+        cef::post_task(ui_thread, Some(&mut task));
+    }
+}
+
+/// Runs `job` on CEF's UI thread, and waits for what it returns. `None` if CEF didn't run it.
+///
+/// Don't hold a lock that a CEF handler takes while you call this. The handlers run on the
+/// thread this waits for.
+pub fn wait_on_ui_thread<T: Send + 'static>(job: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (sender, receiver) = mpsc::channel();
+    on_ui_thread(move || _ = sender.send(job()));
+    // If CEF drops the job, it drops the sender with it, and this returns.
+    receiver.recv().ok()
 }
 
 /// Requests a repaint of the egui context of every page in [`PAGES`] after `delay`, so that its
@@ -629,7 +699,8 @@ wrap_browser_process_handler! {
     struct EguiBrowserProcessHandler {}
 
     impl BrowserProcessHandler {
-        /// Called by CEF, on any thread, to schedule message loop work after `delay_ms`.
+        /// Called by CEF, on any thread, to schedule message loop work after `delay_ms`. CEF
+        /// only calls it while egui pumps it.
         fn on_schedule_message_pump_work(&self, delay_ms: i64) {
             wake(Duration::from_millis(delay_ms.max(0).unsigned_abs()));
         }
