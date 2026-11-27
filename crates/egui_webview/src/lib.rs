@@ -32,8 +32,8 @@
 //!   trust.
 //! - A page that asks for a new window sends [`WebViewEvent::NewWindowRequested`] and opens
 //!   nothing.
-//! - While a CEF webview exists, egui repaints at least every 100 ms, because CEF's message loop
-//!   runs in egui's passes.
+//! - On Linux, CEF runs its message loop on a thread of its own. On macOS it runs in egui's
+//!   passes, so egui repaints at least every 100 ms there while a CEF webview exists.
 
 mod backend;
 #[cfg(cef_backend)]

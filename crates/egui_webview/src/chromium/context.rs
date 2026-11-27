@@ -20,7 +20,8 @@ pub struct Context {
     events: mpsc::Sender<WebViewEvent>,
 
     /// Never keep this locked across a call into CEF. CEF can run a handler before it returns,
-    /// and the handler locks the state too.
+    /// and the handler locks the state too. Where CEF has its own thread, the handlers also
+    /// lock it there, at any time.
     pub state: Mutex<State>,
 }
 
@@ -185,8 +186,8 @@ impl Context {
 
     /// Requests a repaint of the root viewport, which is the one that shows the page.
     ///
-    /// CEF calls the handlers during a pass of whichever viewport runs the message loop work,
-    /// which isn't necessarily the root.
+    /// CEF calls the handlers on its own thread, or during a pass of whichever viewport runs
+    /// the message loop work. Neither is necessarily a pass of the root.
     pub fn request_repaint(&self) {
         self.egui_ctx.request_repaint_of(ViewportId::ROOT);
     }
