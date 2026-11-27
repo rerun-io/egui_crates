@@ -419,7 +419,9 @@ impl Table {
 
         // The outline takes up space around the table:
         let frame = egui::Frame::new().inner_margin(border_width.ceil());
-        let output = frame.show(ui, |ui| self.show_inside_border(ui, table_delegate));
+        // Computed outside the frame, which has its own scope id, so it matches `Self::get_id`:
+        let id = TableState::id(ui, self.id_salt);
+        let output = frame.show(ui, |ui| self.show_inside_border(ui, id, table_delegate));
 
         let table_rect = output.inner.inner;
         ui.painter().rect_stroke(
@@ -438,11 +440,10 @@ impl Table {
     fn show_inside_border(
         mut self,
         ui: &mut Ui,
+        id: Id,
         table_delegate: &mut dyn TableDelegate,
     ) -> egui::InnerResponse<Rect> {
         self.num_sticky_cols = self.num_sticky_cols.at_most(self.columns.len());
-
-        let id = TableState::id(ui, self.id_salt);
         let state = TableState::load(ui, id);
         let is_new = state.is_none();
         let do_full_sizing_pass = is_new;
