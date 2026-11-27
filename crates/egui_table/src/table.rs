@@ -413,7 +413,33 @@ impl Table {
         .saturating_sub(1)
     }
 
-    pub fn show(mut self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) -> Response {
+    pub fn show(self, ui: &mut Ui, table_delegate: &mut dyn TableDelegate) -> Response {
+        let table_style = ui.visuals().table;
+        let border_width = table_style.outer_stroke.width;
+
+        // The outline takes up space around the table:
+        let frame = egui::Frame::new().inner_margin(border_width.ceil());
+        let output = frame.show(ui, |ui| self.show_inside_border(ui, table_delegate));
+
+        let table_rect = output.inner.inner;
+        ui.painter().rect_stroke(
+            table_rect.expand(border_width),
+            table_style.corner_radius,
+            table_style.outer_stroke,
+            egui::StrokeKind::Inside,
+        );
+
+        output.response
+    }
+
+    /// Show the table without its outline.
+    ///
+    /// Returns the visible table rect, which may be smaller than the space it was given.
+    fn show_inside_border(
+        mut self,
+        ui: &mut Ui,
+        table_delegate: &mut dyn TableDelegate,
+    ) -> egui::InnerResponse<Rect> {
         self.num_sticky_cols = self.num_sticky_cols.at_most(self.columns.len());
 
         let id = TableState::id(ui, self.id_salt);
@@ -480,61 +506,58 @@ impl Table {
             ui_builder = ui_builder.sizing_pass().invisible();
             ui.request_discard("Full egui_table sizing");
         }
-        let response = ui
-            .scope_builder(ui_builder, |ui| {
-                // Don't wrap text in the table cells.
-                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // TODO: I think this is default for horizontal layouts anyway?
+        let response = ui.scope_builder(ui_builder, |ui| {
+            // Don't wrap text in the table cells.
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // TODO: I think this is default for horizontal layouts anyway?
 
-                let num_columns = self.columns.len();
+            let num_columns = self.columns.len();
 
-                for (col_nr, column) in self.columns.iter_mut().enumerate() {
-                    if column.resizable {
-                        let column_resize_id = id.with(column.id_for(col_nr)).with("resize");
-                        if let Some(response) = ui.read_response(column_resize_id)
-                            && response.double_clicked()
-                        {
-                            column.auto_size_this_frame = true;
-                        }
-                    }
-                    if column.auto_size_this_frame {
-                        ui.request_discard("egui_table column sizing");
+            for (col_nr, column) in self.columns.iter_mut().enumerate() {
+                if column.resizable {
+                    let column_resize_id = id.with(column.id_for(col_nr)).with("resize");
+                    if let Some(response) = ui.read_response(column_resize_id)
+                        && response.double_clicked()
+                    {
+                        column.auto_size_this_frame = true;
                     }
                 }
-
-                SplitScroll {
-                    scroll_enabled: Vec2b::new(true, true),
-                    fixed_size: sticky_size,
-                    scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
-                    scroll_content_size: Vec2::new(
-                        self.columns[self.num_sticky_cols..]
-                            .iter()
-                            .map(|c| c.current)
-                            .sum(),
-                        self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
-                    ),
-                    stick_to_bottom: self.stick_to_bottom,
+                if column.auto_size_this_frame {
+                    ui.request_discard("egui_table column sizing");
                 }
-                .show(
-                    ui,
-                    &mut TableSplitScrollDelegate {
-                        id,
-                        table_delegate,
-                        state: &mut state,
-                        table: &mut self,
-                        col_x,
-                        header_row_y,
-                        max_column_widths: vec![0.0; num_columns],
-                        visible_column_lines: Default::default(),
-                        do_full_sizing_pass,
-                        striped,
-                        viewport: Rect::from_min_size(ui.cursor().min, ui.available_size())
-                            .intersect(ui.clip_rect()),
-                        has_prefetched: false,
-                        egui_ctx: ui.clone(),
-                    },
-                );
-            })
-            .response;
+            }
+
+            let split_scroll = SplitScroll {
+                scroll_enabled: Vec2b::new(true, true),
+                fixed_size: sticky_size,
+                scroll_outer_size: (ui.available_size() - sticky_size).at_least(Vec2::ZERO),
+                scroll_content_size: Vec2::new(
+                    self.columns[self.num_sticky_cols..]
+                        .iter()
+                        .map(|c| c.current)
+                        .sum(),
+                    self.get_row_top_offset(ui, id, table_delegate, self.num_rows),
+                ),
+                stick_to_bottom: self.stick_to_bottom,
+            };
+            let mut delegate = TableSplitScrollDelegate {
+                id,
+                table_delegate,
+                state: &mut state,
+                table: &mut self,
+                col_x,
+                header_row_y,
+                max_column_widths: vec![0.0; num_columns],
+                visible_column_lines: Default::default(),
+                do_full_sizing_pass,
+                striped,
+                viewport: Rect::from_min_size(ui.cursor().min, ui.available_size())
+                    .intersect(ui.clip_rect()),
+                has_prefetched: false,
+                egui_ctx: ui.clone(),
+            };
+            split_scroll.show(ui, &mut delegate);
+            delegate.visible_table_rect()
+        });
 
         state.store(ui, id);
         response
@@ -948,8 +971,8 @@ impl TableSplitScrollDelegate<'_> {
         )
     }
 
-    /// Paint the line under the header, and the line around the visible table.
-    fn paint_outline(&self, ui: &Ui) {
+    /// Paint the line under the header.
+    fn paint_header_line(&self, ui: &Ui) {
         let table_style = &ui.visuals().table;
         let painter = ui.painter();
         let table_rect = self.visible_table_rect();
@@ -962,13 +985,6 @@ impl TableSplitScrollDelegate<'_> {
                 table_style.header_stroke,
             );
         }
-
-        painter.rect_stroke(
-            table_rect,
-            table_style.corner_radius,
-            table_style.outer_stroke,
-            egui::StrokeKind::Inside,
-        );
     }
 }
 
@@ -1043,7 +1059,7 @@ impl SplitScrollDelegate for TableSplitScrollDelegate<'_> {
     }
 
     fn finish(&mut self, ui: &mut Ui) {
-        self.paint_outline(ui);
+        self.paint_header_line(ui);
         let table_bottom = self.visible_table_rect().bottom();
 
         // Paint column resize lines
