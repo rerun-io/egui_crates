@@ -337,6 +337,13 @@ impl TableDemo {
             }
         });
 
+        ui.collapsing("Table style", |ui| {
+            let mut table_style = ui.visuals().table;
+            table_style.ui(ui);
+            ui.ctx()
+                .global_style_mut(|style| style.visuals.table = table_style);
+        });
+
         ui.separator();
 
         let mut table = egui_table::Table::new()
