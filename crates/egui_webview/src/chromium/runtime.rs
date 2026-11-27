@@ -164,14 +164,14 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     let _sandbox = match helper_sandbox(&options, &args) {
         Ok(sandbox) => sandbox,
         Err(err) => {
-            report_helper_error(&err);
+            log::error!("egui_webview: a CEF helper process failed to start: {err}");
             return CefProcess::Helper { exit_code: 1 };
         }
     };
 
     if let Err(err) = load_library() {
         if is_helper() {
-            report_helper_error(&err);
+            log::error!("egui_webview: a CEF helper process failed to start: {err}");
             return CefProcess::Helper { exit_code: 1 };
         }
     } else {
@@ -194,17 +194,6 @@ pub fn run_subprocess(options: CefInitOptions) -> CefProcess {
     };
     drop(state); // `Runtime::start` may panic.
     CefProcess::App(Runtime::start())
-}
-
-/// Reports why this CEF helper process can't run.
-///
-/// A helper runs before the app's `main` has set up a logger, so this also writes to stderr.
-fn report_helper_error(err: &str) {
-    log::error!("egui_webview: a CEF helper process failed to start: {err}");
-    #[expect(clippy::print_stderr)]
-    {
-        eprintln!("egui_webview: a CEF helper process failed to start: {err}");
-    }
 }
 
 /// Whether Chromium launched this executable as a helper.
