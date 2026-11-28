@@ -569,6 +569,9 @@ impl<Pane> Tiles<Pane> {
                             }
                             new_children.extend(child_tabs.children.iter().copied());
                             found = true;
+
+                            // Its tabs now belong to this container, so the child itself is gone.
+                            self.tiles.remove(&child_id);
                         } else {
                             if was_active == Some(child_id) {
                                 new_active = Some(child_id);
@@ -994,6 +997,31 @@ mod tests {
             Some(vec![a, b, c]),
             "the inner container's tabs should have been folded into the outer one"
         );
+    }
+
+    /// The flattened-away container must be removed, or it would still claim `a` and `b` as its
+    /// children, and [`Tiles::parent_of`] would return either container depending on hash order.
+    #[test]
+    fn flattening_tabs_in_tabs_removes_the_inner_container() {
+        let mut tiles = Tiles::default();
+        let a = tiles.insert_pane("a");
+        let b = tiles.insert_pane("b");
+        let inner = tiles.insert_tab_tile(vec![a, b]);
+        let c = tiles.insert_pane("c");
+        let outer = tiles.insert_tab_tile(vec![inner, c]);
+        let mut tree = Tree::new(egui::Id::unique("test"), outer, tiles);
+
+        tree.simplify(&SimplificationOptions {
+            flatten_tabs_in_tabs: true,
+            ..SimplificationOptions::OFF
+        });
+
+        assert_eq!(
+            tree.tiles.get(inner),
+            None,
+            "the flattened-away inner container should be gone"
+        );
+        assert_eq!(tree.tiles.len(), 4, "`outer`, `a`, `b` and `c` are left");
     }
 
     /// Flattening keeps the container's id, so it should also keep showing whatever tab the user
