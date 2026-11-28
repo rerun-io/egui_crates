@@ -579,6 +579,12 @@ impl<Pane> Tree<Pane> {
             let kind = container.kind();
             container.simplify_children(|child| self.tiles.simplify(options, child, Some(kind)));
             self.tiles.insert(tile_id, Tile::Container(container));
+
+            if options.all_panes_must_have_tabs {
+                // Only panes get wrapped, so `tile_id` (a container) keeps its place in its parent:
+                let wrapper = self.tiles.make_all_panes_children_of_tabs(false, tile_id);
+                debug_assert_eq!(wrapper, None, "a container should never be wrapped");
+            }
         }
     }
 
@@ -979,5 +985,44 @@ mod tests {
             tree.tiles.get(pane).is_some(),
             "the pane must still be in the tree after gc+simplify"
         );
+    }
+
+    /// Simplifying a subtree has to give its panes tab containers, just like [`Tree::simplify`]
+    /// does for the whole tree.
+    #[test]
+    fn simplify_children_of_tile_respects_all_panes_must_have_tabs() {
+        let options = SimplificationOptions {
+            all_panes_must_have_tabs: true,
+            ..Default::default()
+        };
+
+        let mut tiles = Tiles::default();
+        let a = tiles.insert_pane("a");
+        let b = tiles.insert_pane("b");
+        let side = tiles.insert_vertical_tile(vec![a, b]);
+        let workspace = tiles.insert_pane("workspace");
+        let root = tiles.insert_horizontal_tile(vec![workspace, side]);
+        let mut tree = Tree::new(egui::Id::unique("test"), root, tiles);
+
+        tree.simplify_children_of_tile(side, &options);
+
+        for pane in [a, b] {
+            let parent = tree.tiles.parent_of(pane).expect("the pane needs a parent");
+            assert_eq!(
+                tree.tiles.get_container(parent).map(Container::kind),
+                Some(ContainerKind::Tabs),
+                "pane {pane:?} should have gained a tab container as its parent"
+            );
+        }
+        assert_eq!(
+            tree.tiles.parent_of(workspace),
+            Some(root),
+            "panes outside the simplified subtree are left alone"
+        );
+
+        // Running it again must be a no-op — otherwise it would wrap forever.
+        let before = tree.clone();
+        tree.simplify_children_of_tile(side, &options);
+        assert_eq!(before, tree, "simplifying twice should change nothing");
     }
 }
